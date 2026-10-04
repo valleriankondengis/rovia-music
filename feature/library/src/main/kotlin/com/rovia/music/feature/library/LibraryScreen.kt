@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -342,18 +344,50 @@ private fun LibraryContent(
             }
         }
 
-        if (uiState.currentFolderPath != null) {
-            FolderBreadcrumb(
-                relativePath = uiState.currentFolderPath,
-                onFolderClick = onFolderClick,
+        /*
+         * Folder breadcrumb and sort control share one row.
+         *
+         * The breadcrumb receives the flexible space.
+         * The sort control keeps its own fixed area.
+         * VerticalDivider creates a visual boundary so
+         * scrolling folder labels never cover the sort button.
+         */
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 12.dp,
+                    )
+                    .padding(
+                        bottom = 8.dp,
+                    ),
+            verticalAlignment =
+                Alignment.CenterVertically,
+        ) {
+            if (uiState.currentFolderPath != null) {
+                FolderBreadcrumb(
+                    modifier =
+                        Modifier.weight(1f),
+                    relativePath =
+                        uiState.currentFolderPath,
+                    onFolderClick =
+                        onFolderClick,
+                )
+
+            } else {
+                Spacer(
+                    modifier =
+                        Modifier.weight(1f),
+                )
+            }
+
+            SortControlRow(
+                onOpenSortSheet = {
+                    isSortSheetVisible = true
+                },
             )
         }
-
-        SortControlRow(
-            onOpenSortSheet = {
-                isSortSheetVisible = true
-            },
-        )
 
         LazyColumn(
             modifier =
@@ -422,16 +456,13 @@ private fun SortControlRow(
 ) {
     Row(
         modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = 12.dp,
-                    top = 0.dp,
-                    end = 12.dp,
-                    bottom = 6.dp,
-                ),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
+            Modifier.padding(
+                start = 8.dp,
+            ),
+        horizontalArrangement =
+            Arrangement.End,
+        verticalAlignment =
+            Alignment.CenterVertically,
     ) {
         FilledIconButton(
             onClick = onOpenSortSheet,
@@ -465,6 +496,7 @@ private fun SortControlRow(
 
 @Composable
 private fun FolderBreadcrumb(
+    modifier: Modifier = Modifier,
     relativePath: String,
     onFolderClick: (String) -> Unit,
 ) {
@@ -494,16 +526,12 @@ private fun FolderBreadcrumb(
 
     Row(
         modifier =
-            Modifier
-                .fillMaxWidth()
+            modifier
                 .horizontalScroll(
                     rememberScrollState(),
                 )
                 .padding(
-                    start = 12.dp,
-                    top = 0.dp,
-                    end = 12.dp,
-                    bottom = 8.dp,
+                    end = 8.dp,
                 ),
         verticalAlignment =
             Alignment.CenterVertically,
