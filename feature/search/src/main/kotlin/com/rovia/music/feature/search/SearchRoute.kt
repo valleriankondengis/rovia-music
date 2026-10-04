@@ -39,6 +39,9 @@ fun SearchRoute(
     val hasMiniPlayer =
         playbackState.currentTrack != null
 
+    val currentTrackId =
+        playbackState.currentTrack?.id
+
     LaunchedEffect(textFieldState) {
         snapshotFlow {
             textFieldState.text.toString()
@@ -56,6 +59,10 @@ fun SearchRoute(
                 startIndex = startIndex,
             )
         },
+        onRestartCurrentTrack = {
+            playbackController.restartCurrentTrack()
+        },
+        currentTrackId = currentTrackId,
         onOpenSettings = onOpenSettings,
         hasMiniPlayer = hasMiniPlayer,
     )

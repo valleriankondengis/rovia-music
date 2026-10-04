@@ -5,9 +5,9 @@
 package com.rovia.music.feature.library
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +52,8 @@ import com.rovia.music.core.ui.component.TrackRow
 fun LibraryScreen(
     uiState: LibraryUiState,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     onFolderClick: (String) -> Unit = {},
     onBackFromFolder: () -> Unit = {},
     onOpenSettings: () -> Unit,
@@ -73,6 +75,8 @@ fun LibraryScreen(
                 folderTracks = uiState.folderTracks,
                 currentFolderPath = uiState.currentFolderPath,
                 onTrackClick = onTrackClick,
+                onRestartCurrentTrack = onRestartCurrentTrack,
+                currentTrackId = currentTrackId,
                 onFolderClick = onFolderClick,
                 onBackFromFolder = onBackFromFolder,
                 onOpenSettings = onOpenSettings,
@@ -109,6 +113,8 @@ private fun LibraryContent(
     folderTracks: List<Track>,
     currentFolderPath: String?,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     onFolderClick: (String) -> Unit,
     onBackFromFolder: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -359,15 +365,23 @@ private fun LibraryContent(
                             track.id
                         },
                     ) { index, track ->
+                        val isCurrentTrack =
+                            track.id == currentTrackId
+
                         TrackRow(
                             track = track,
                             onClick = {
-                                onTrackClick(
-                                    tracks,
-                                    index,
-                                )
+                                if (isCurrentTrack) {
+                                    onRestartCurrentTrack()
+                                } else {
+                                    onTrackClick(
+                                        tracks,
+                                        index,
+                                    )
+                                }
                             },
                             showAlbum = true,
+                            isCurrentTrack = isCurrentTrack,
                         )
                     }
                 }
@@ -386,6 +400,10 @@ private fun LibraryContent(
                             onFolderClick,
                         onTrackClick =
                             onTrackClick,
+                        onRestartCurrentTrack =
+                            onRestartCurrentTrack,
+                        currentTrackId =
+                            currentTrackId,
                     )
                 }
             }
@@ -523,6 +541,8 @@ private fun LazyListScope.folderContent(
     tracks: List<Track>,
     onFolderClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
 ) {
     if (folders.isNotEmpty()) {
         items(
@@ -549,15 +569,23 @@ private fun LazyListScope.folderContent(
                 track.id
             },
         ) { index, track ->
+            val isCurrentTrack =
+                track.id == currentTrackId
+
             TrackRow(
                 track = track,
                 onClick = {
-                    onTrackClick(
-                        tracks,
-                        index,
-                    )
+                    if (isCurrentTrack) {
+                        onRestartCurrentTrack()
+                    } else {
+                        onTrackClick(
+                            tracks,
+                            index,
+                        )
+                    }
                 },
                 showAlbum = true,
+                isCurrentTrack = isCurrentTrack,
             )
         }
     }

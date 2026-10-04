@@ -337,6 +337,30 @@ class Media3PlaybackController(
         updatePlaybackState()
     }
 
+    override fun restartCurrentTrack() {
+        val mediaController =
+            controller ?: return
+
+        val currentIndex =
+            mediaController.currentMediaItemIndex
+
+        if (
+            queue.isEmpty() ||
+            currentIndex !in queue.indices
+        ) {
+            return
+        }
+
+        mediaController.seekTo(
+            0L,
+        )
+
+        mediaController.play()
+
+        updatePlaybackState()
+        startPositionUpdates()
+    }
+
     override fun skipToNext() {
         controller?.seekToNext()
 

@@ -33,6 +33,9 @@ fun HomeRoute(
     val hasMiniPlayer =
         playbackState.currentTrack != null
 
+    val currentTrackId =
+        playbackState.currentTrack?.id
+
     HomeScreen(
         uiState = uiState,
         onTrackClick = { tracks, startIndex ->
@@ -41,6 +44,10 @@ fun HomeRoute(
                 startIndex = startIndex,
             )
         },
+        onRestartCurrentTrack = {
+            playbackController.restartCurrentTrack()
+        },
+        currentTrackId = currentTrackId,
         onOpenSettings = onOpenSettings,
         hasMiniPlayer = hasMiniPlayer,
     )

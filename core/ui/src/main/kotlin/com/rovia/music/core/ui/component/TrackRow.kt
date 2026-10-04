@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.Track
@@ -17,6 +18,7 @@ fun TrackRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     showAlbum: Boolean = true,
+    isCurrentTrack: Boolean = false,
 ) {
     val supportingText =
         if (showAlbum) {
@@ -29,40 +31,88 @@ fun TrackRow(
         }
 
     ListItem(
-        onClick = onClick,
-        modifier = modifier,
-        shapes = ListItemDefaults.shapes(),
+        selected =
+            isCurrentTrack,
+        onClick =
+            onClick,
+        modifier =
+            modifier,
+        shapes =
+            ListItemDefaults.shapes(
+                shape =
+                    RectangleShape,
+                selectedShape =
+                    RectangleShape,
+                pressedShape =
+                    RectangleShape,
+                focusedShape =
+                    RectangleShape,
+                hoveredShape =
+                    RectangleShape,
+                draggedShape =
+                    RectangleShape,
+            ),
+        colors =
+            ListItemDefaults.colors(
+                selectedContainerColor =
+                    MaterialTheme
+                        .colorScheme
+                        .surfaceContainerLow,
+            ),
         leadingContent = {
             AlbumArtwork(
-                artworkUri = track.artworkUri,
-                fallbackText = track.title,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                size = 56.dp,
-                shape = MaterialTheme.shapes.large,
+                artworkUri =
+                    track.artworkUri,
+                fallbackText =
+                    track.title,
+                contentDescription =
+                    null,
+                modifier =
+                    Modifier.size(
+                        56.dp,
+                    ),
+                size =
+                    56.dp,
+                shape =
+                    MaterialTheme
+                        .shapes
+                        .large,
             )
         },
         supportingContent = {
             if (supportingText.isNotBlank()) {
                 Text(
-                    text = supportingText,
+                    text =
+                        supportingText,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    overflow =
+                        TextOverflow.Ellipsis,
                 )
             }
         },
         trailingContent = {
             Text(
-                text = formatDuration(track.durationMs),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text =
+                    formatDuration(
+                        track.durationMs,
+                    ),
+                style =
+                    MaterialTheme
+                        .typography
+                        .bodyMedium,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurfaceVariant,
             )
         },
     ) {
         Text(
-            text = track.title,
+            text =
+                track.title,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            overflow =
+                TextOverflow.Ellipsis,
         )
     }
 }
@@ -74,9 +124,14 @@ private fun formatDuration(
         return "--:--"
     }
 
-    val totalSeconds = durationMs / 1_000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
+    val totalSeconds =
+        durationMs / 1_000
+
+    val minutes =
+        totalSeconds / 60
+
+    val seconds =
+        totalSeconds % 60
 
     return "%d:%02d".format(
         minutes,

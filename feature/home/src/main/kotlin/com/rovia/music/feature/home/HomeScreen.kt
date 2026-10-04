@@ -60,6 +60,8 @@ import com.rovia.music.core.ui.component.TrackRow
 fun HomeScreen(
     uiState: HomeUiState,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     onOpenSettings: () -> Unit,
     hasMiniPlayer: Boolean = false,
     modifier: Modifier = Modifier,
@@ -79,6 +81,10 @@ fun HomeScreen(
                     uiState.recentPlays,
                 onTrackClick =
                     onTrackClick,
+                onRestartCurrentTrack =
+                    onRestartCurrentTrack,
+                currentTrackId =
+                    currentTrackId,
                 onOpenSettings =
                     onOpenSettings,
                 hasMiniPlayer =
@@ -117,18 +123,17 @@ private fun HomeContent(
     recentlyAdded: List<Track>,
     recentPlays: List<Track>,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     onOpenSettings: () -> Unit,
     hasMiniPlayer: Boolean,
     modifier: Modifier = Modifier,
 ) {
     /*
-     * MainNavigation now keeps NavDisplay full-height.
+     * MainNavigation keeps NavDisplay full-height.
      *
-     * NavigationBar is an overlay layer, so the
-     * LazyColumn needs its own bottom clearance.
-     *
-     * The larger values ensure the final TrackRow
-     * can be scrolled completely above the NavigationBar.
+     * NavigationBar is an overlay layer, so the LazyColumn
+     * needs its own bottom clearance.
      */
     val bottomContentPadding =
         if (hasMiniPlayer) {
@@ -221,6 +226,10 @@ private fun HomeContent(
                         recentlyAdded,
                     onTrackClick =
                         onTrackClick,
+                    onRestartCurrentTrack =
+                        onRestartCurrentTrack,
+                    currentTrackId =
+                        currentTrackId,
                 )
             }
         }
@@ -436,6 +445,8 @@ private fun RecentPlaySection(
 private fun RecentlyAddedSection(
     tracks: List<Track>,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
 ) {
     Column(
         modifier =
@@ -478,15 +489,25 @@ private fun RecentlyAddedSection(
                     Modifier.fillMaxWidth(),
             ) {
                 tracks.forEachIndexed { index, track ->
+                    val isCurrentTrack =
+                        track.id ==
+                            currentTrackId
+
                     TrackRow(
                         track = track,
                         onClick = {
-                            onTrackClick(
-                                tracks,
-                                index,
-                            )
+                            if (isCurrentTrack) {
+                                onRestartCurrentTrack()
+                            } else {
+                                onTrackClick(
+                                    tracks,
+                                    index,
+                                )
+                            }
                         },
                         showAlbum = true,
+                        isCurrentTrack =
+                            isCurrentTrack,
                     )
                 }
             }

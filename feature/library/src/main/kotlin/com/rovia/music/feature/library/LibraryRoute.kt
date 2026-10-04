@@ -39,6 +39,9 @@ fun LibraryRoute(
     val hasMiniPlayer =
         playbackState.currentTrack != null
 
+    val currentTrackId =
+        playbackState.currentTrack?.id
+
     val isInsideFolder =
         (uiState as? LibraryUiState.Content)
             ?.currentFolderPath != null
@@ -59,6 +62,10 @@ fun LibraryRoute(
                 startIndex = startIndex,
             )
         },
+        onRestartCurrentTrack = {
+            playbackController.restartCurrentTrack()
+        },
+        currentTrackId = currentTrackId,
         onFolderClick = { relativePath ->
             viewModel.openFolder(
                 relativePath = relativePath,
@@ -69,17 +76,11 @@ fun LibraryRoute(
         },
         onOpenSettings = onOpenSettings,
         onShowAllSongs = {
-
             viewModel.showAllSongs()
-
         },
-
         onShowRootFolders = {
-
             viewModel.showRootFolders()
-
         },
-
         hasMiniPlayer = hasMiniPlayer,
     )
 }

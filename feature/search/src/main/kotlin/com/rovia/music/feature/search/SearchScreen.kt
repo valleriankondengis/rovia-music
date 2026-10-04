@@ -38,6 +38,8 @@ fun SearchScreen(
     uiState: SearchUiState,
     textFieldState: androidx.compose.foundation.text.input.TextFieldState,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     onOpenSettings: () -> Unit,
     hasMiniPlayer: Boolean = false,
     modifier: Modifier = Modifier,
@@ -53,6 +55,8 @@ fun SearchScreen(
         SearchResults(
             uiState = uiState,
             onTrackClick = onTrackClick,
+            onRestartCurrentTrack = onRestartCurrentTrack,
+            currentTrackId = currentTrackId,
             hasMiniPlayer = hasMiniPlayer,
             modifier = Modifier.weight(1f),
         )
@@ -232,6 +236,8 @@ private fun ClearSearchIcon(
 private fun SearchResults(
     uiState: SearchUiState,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
     hasMiniPlayer: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -273,15 +279,23 @@ private fun SearchResults(
                 track.id
             },
         ) { index, track ->
+            val isCurrentTrack =
+                track.id == currentTrackId
+
             TrackRow(
                 track = track,
                 onClick = {
-                    onTrackClick(
-                        results,
-                        index,
-                    )
+                    if (isCurrentTrack) {
+                        onRestartCurrentTrack()
+                    } else {
+                        onTrackClick(
+                            results,
+                            index,
+                        )
+                    }
                 },
                 showAlbum = true,
+                isCurrentTrack = isCurrentTrack,
             )
         }
     }
