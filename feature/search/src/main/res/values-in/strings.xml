@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_title">Cari</string>
+    <string name="search_content_description">Cari</string>
+    <string name="search_section_songs">Lagu</string>
+    <string name="search_hint">Cari lagu, artis, atau album.</string>
+    <string name="search_no_results">Tidak ditemukan lagu.</string>
+    <string name="search_error">Tidak dapat membaca koleksi musik.</string>
+    <string name="action_settings">Pengaturan</string>
+</resources>

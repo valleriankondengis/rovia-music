@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="player_close">Tutup pemutar</string>
+    <string name="player_no_track">Tidak ada lagu</string>
+    <string name="player_unknown_artist">Artis tidak diketahui</string>
+
+    <string name="player_previous">Sebelumnya</string>
+    <string name="player_play">Putar</string>
+    <string name="player_pause">Jeda</string>
+    <string name="player_next">Berikutnya</string>
+
+    <string name="player_show_lyrics">Tampilkan lirik</string>
+    <string name="player_hide_lyrics">Sembunyikan lirik</string>
+
+    <string name="player_repeat_off">Ulangi mati</string>
+    <string name="player_repeat_all">Ulangi semua</string>
+    <string name="player_repeat_one">Ulangi satu</string>
+
+    <string name="player_shuffle_on">Acak aktif</string>
+    <string name="player_shuffle_off">Acak mati</string>
+
+</resources>

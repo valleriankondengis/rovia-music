@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_back">Kembali</string>
+
+    <string name="about_menu_title">Tentang</string>
+    <string name="about_title">Tentang</string>
+    <string name="about_back">Kembali</string>
+    <string name="about_app_name">Rovia</string>
+    <string name="about_version">Versi 0.1.0</string>
+</resources>

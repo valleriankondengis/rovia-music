@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Pustaka</string>
+    <string name="library_all_songs">Semua Lagu</string>
+    <string name="library_folders">Folder</string>
+    <string name="library_empty">Belum ada musik.</string>
+    <string name="library_error">Tidak dapat membaca koleksi musik.</string>
+    <string name="action_settings">Pengaturan</string>
+    <string name="library_back">Kembali</string>
+</resources>

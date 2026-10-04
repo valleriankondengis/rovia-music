@@ -1,0 +1,139 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "f50de0d87586c51f08e4386f79f7e287",
+    "entities": [
+      {
+        "tableName": "recent_plays",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`track_id` INTEGER NOT NULL, `uri` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT, `album` TEXT, `duration_ms` INTEGER NOT NULL, `date_added_epoch_seconds` INTEGER NOT NULL, `mime_type` TEXT, `sample_rate_hz` INTEGER, `bitrate_bps` INTEGER, `artwork_uri` TEXT, `last_played_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`track_id`))",
+        "fields": [
+          {
+            "fieldPath": "trackId",
+            "columnName": "track_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uri",
+            "columnName": "uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "album",
+            "columnName": "album",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "duration_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateAddedEpochSeconds",
+            "columnName": "date_added_epoch_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sampleRateHz",
+            "columnName": "sample_rate_hz",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bitrateBps",
+            "columnName": "bitrate_bps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "artworkUri",
+            "columnName": "artwork_uri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastPlayedAtEpochMillis",
+            "columnName": "last_played_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "track_id"
+          ]
+        }
+      },
+      {
+        "tableName": "excluded_folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`relative_path` TEXT NOT NULL, PRIMARY KEY(`relative_path`))",
+        "fields": [
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "relative_path"
+          ]
+        }
+      },
+      {
+        "tableName": "playback_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `repeat_mode` INTEGER NOT NULL, `shuffle_enabled` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "repeatMode",
+            "columnName": "repeat_mode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shuffleEnabled",
+            "columnName": "shuffle_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f50de0d87586c51f08e4386f79f7e287')"
+    ]
+  }
+}

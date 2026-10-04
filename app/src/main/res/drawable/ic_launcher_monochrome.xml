@@ -1,0 +1,43 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rovia Audio logo:
+         three rounded waveform bars forming a simple audio mark. -->
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M27,45
+            C27,42.239 29.239,40 32,40
+            C34.761,40 37,42.239 37,45
+            L37,63
+            C37,65.761 34.761,68 32,68
+            C29.239,68 27,65.761 27,63
+            Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M49,32
+            C49,29.239 51.239,27 54,27
+            C56.761,27 59,29.239 59,32
+            L59,76
+            C59,78.761 56.761,81 54,81
+            C51.239,81 49,78.761 49,76
+            Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M71,45
+            C71,42.239 73.239,40 76,40
+            C78.761,40 81,42.239 81,45
+            L81,63
+            C81,65.761 78.761,68 76,68
+            C73.239,68 71,65.761 71,63
+            Z" />
+
+</vector>

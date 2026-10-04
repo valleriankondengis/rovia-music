@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="section_recent_play">Baru Diputar</string>
+    <string name="section_recently_added">Baru Ditambahkan</string>
+    <string name="recently_added_empty">Belum ada musik.</string>
+    <string name="home_error">Tidak dapat membaca koleksi musik.</string>
+    <string name="action_play_track">Putar %1$s</string>
+    <string name="action_settings">Pengaturan</string>
+</resources>

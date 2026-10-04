@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="player_close">Close player</string>
+    <string name="player_no_track">No track</string>
+    <string name="player_unknown_artist">Unknown artist</string>
+
+    <string name="player_previous">Previous</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_next">Next</string>
+
+    <string name="player_show_lyrics">Show lyrics</string>
+    <string name="player_hide_lyrics">Hide lyrics</string>
+
+    <string name="player_repeat_off">Repeat off</string>
+    <string name="player_repeat_all">Repeat all</string>
+    <string name="player_repeat_one">Repeat one</string>
+
+    <string name="player_shuffle_on">Shuffle on</string>
+    <string name="player_shuffle_off">Shuffle off</string>
+
+</resources>

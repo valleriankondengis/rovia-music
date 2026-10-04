@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="section_recent_play">Recent Play</string>
+    <string name="section_recently_added">Recently Added</string>
+    <string name="recently_added_empty">No music found.</string>
+    <string name="home_error">Unable to load music.</string>
+    <string name="action_play_track">Play %1$s</string>
+    <string name="action_settings">Settings</string>
+</resources>

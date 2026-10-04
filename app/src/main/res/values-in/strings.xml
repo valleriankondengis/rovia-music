@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rovia</string>
+    <string name="permission_music_message">Rovia membutuhkan akses ke musik di perangkat ini.</string>
+    <string name="permission_allow_music">Izinkan akses musik</string>
+    <string name="nav_home">Beranda</string>
+    <string name="nav_search">Cari</string>
+    <string name="nav_library">Pustaka</string>
+</resources>

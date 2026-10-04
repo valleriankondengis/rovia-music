@@ -1,0 +1,14 @@
+<resources>
+    <string name="folder_filter_title">Folder Filter</string>
+    <string name="folder_filter_back">Back</string>
+    <string name="folder_filter_add">Add folder filter</string>
+
+    <string name="folder_filter_picker_title">Select folders</string>
+    <string name="folder_filter_loading">Loading folders…</string>
+    <string name="folder_filter_empty">No folders found.</string>
+    <string name="folder_filter_cancel">Cancel</string>
+    <string name="folder_filter_done">Done</string>
+
+    <string name="folder_filter_count_one">%d folder filtered</string>
+    <string name="folder_filter_count_other">%d folders filtered</string>
+</resources>
