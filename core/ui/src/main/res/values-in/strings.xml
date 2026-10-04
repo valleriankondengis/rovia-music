@@ -4,4 +4,15 @@
     <string name="action_play">Putar</string>
     <string name="action_pause">Jeda</string>
     <string name="action_next">Berikutnya</string>
+
+    <string name="track_action_more">Opsi lainnya</string>
+    <string name="track_action_info">Info</string>
+
+    <string name="track_info_album">Album</string>
+    <string name="track_info_genre">Genre</string>
+    <string name="track_info_duration">Durasi</string>
+    <string name="track_info_format">Format</string>
+    <string name="track_info_sample_rate">Sample rate</string>
+    <string name="track_info_bitrate">Bitrate</string>
+    <string name="track_info_path">Path</string>
 </resources>
