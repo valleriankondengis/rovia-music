@@ -1,18 +1,42 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Track actions -->
     <string name="action_previous">Previous</string>
     <string name="action_play">Play</string>
     <string name="action_pause">Pause</string>
     <string name="action_next">Next</string>
-
     <string name="track_action_more">More options</string>
     <string name="track_action_info">Info</string>
 
+    <!-- Basic track metadata -->
     <string name="track_info_album">Album</string>
+    <string name="track_info_album_artist">Album artist</string>
     <string name="track_info_genre">Genre</string>
+    <string name="track_info_year">Year</string>
+    <string name="track_info_track">Track</string>
+    <string name="track_info_disc">Disc</string>
+    <string name="track_info_cd_track">CD track</string>
+    <string name="track_info_compilation">Compilation</string>
+    <string name="track_info_composer">Composer</string>
+    <string name="track_info_author">Author</string>
+    <string name="track_info_writer">Writer</string>
+
+    <!-- Audio metadata -->
     <string name="track_info_duration">Duration</string>
     <string name="track_info_format">Format</string>
     <string name="track_info_sample_rate">Sample rate</string>
+    <string name="track_info_bit_depth">Bit depth</string>
     <string name="track_info_bitrate">Bitrate</string>
+
+    <!-- File metadata -->
+    <string name="track_info_file_name">File name</string>
+    <string name="track_info_file_size">File size</string>
     <string name="track_info_path">Path</string>
+    <string name="track_info_volume">Volume</string>
+
+    <!-- Date metadata -->
+    <string name="track_info_added">Added</string>
+    <string name="track_info_modified">Modified</string>
+    <string name="track_info_created_inferred">Created (inferred)</string>
+    <string name="track_info_metadata_date">Metadata date</string>
 </resources>

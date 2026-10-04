@@ -1,18 +1,42 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Aksi track -->
     <string name="action_previous">Sebelumnya</string>
     <string name="action_play">Putar</string>
     <string name="action_pause">Jeda</string>
     <string name="action_next">Berikutnya</string>
-
     <string name="track_action_more">Opsi lainnya</string>
     <string name="track_action_info">Info</string>
 
+    <!-- Metadata dasar track -->
     <string name="track_info_album">Album</string>
+    <string name="track_info_album_artist">Artis album</string>
     <string name="track_info_genre">Genre</string>
+    <string name="track_info_year">Tahun</string>
+    <string name="track_info_track">Track</string>
+    <string name="track_info_disc">Disc</string>
+    <string name="track_info_cd_track">Track CD</string>
+    <string name="track_info_compilation">Kompilasi</string>
+    <string name="track_info_composer">Komposer</string>
+    <string name="track_info_author">Penulis</string>
+    <string name="track_info_writer">Pencipta</string>
+
+    <!-- Metadata audio -->
     <string name="track_info_duration">Durasi</string>
     <string name="track_info_format">Format</string>
     <string name="track_info_sample_rate">Sample rate</string>
+    <string name="track_info_bit_depth">Bit depth</string>
     <string name="track_info_bitrate">Bitrate</string>
+
+    <!-- Metadata file -->
+    <string name="track_info_file_name">Nama file</string>
+    <string name="track_info_file_size">Ukuran file</string>
     <string name="track_info_path">Path</string>
+    <string name="track_info_volume">Volume</string>
+
+    <!-- Metadata tanggal -->
+    <string name="track_info_added">Ditambahkan</string>
+    <string name="track_info_modified">Diubah</string>
+    <string name="track_info_created_inferred">Dibuat (perkiraan)</string>
+    <string name="track_info_metadata_date">Tanggal metadata</string>
 </resources>

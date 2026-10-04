@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 @Composable
@@ -137,6 +139,18 @@ fun TrackInfoBottomSheet(
                     )
                 }
 
+            track.albumArtist
+                ?.takeIf(String::isNotBlank)
+                ?.let { albumArtist ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_album_artist,
+                            ),
+                        value = albumArtist,
+                    )
+                }
+
             track.genre
                 ?.takeIf(String::isNotBlank)
                 ?.let { genre ->
@@ -146,6 +160,103 @@ fun TrackInfoBottomSheet(
                                 R.string.track_info_genre,
                             ),
                         value = genre,
+                    )
+                }
+
+            track.year
+                ?.takeIf { it > 0 }
+                ?.let { year ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_year,
+                            ),
+                        value = year.toString(),
+                    )
+                }
+
+            track.trackNumber
+                ?.takeIf { it > 0 }
+                ?.let { trackNumber ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_track,
+                            ),
+                        value = trackNumber.toString(),
+                    )
+                }
+
+            track.discNumber
+                ?.takeIf(String::isNotBlank)
+                ?.let { discNumber ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_disc,
+                            ),
+                        value = discNumber,
+                    )
+                }
+
+            track.cdTrackNumber
+                ?.takeIf(String::isNotBlank)
+                ?.takeIf { it != track.trackNumber?.toString() }
+                ?.let { cdTrackNumber ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_cd_track,
+                            ),
+                        value = cdTrackNumber,
+                    )
+                }
+
+            track.compilation
+                ?.takeIf(String::isNotBlank)
+                ?.let { compilation ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_compilation,
+                            ),
+                        value = compilation,
+                    )
+                }
+
+            track.composer
+                ?.takeIf(String::isNotBlank)
+                ?.let { composer ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_composer,
+                            ),
+                        value = composer,
+                    )
+                }
+
+            track.author
+                ?.takeIf(String::isNotBlank)
+                ?.let { author ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_author,
+                            ),
+                        value = author,
+                    )
+                }
+
+            track.writer
+                ?.takeIf(String::isNotBlank)
+                ?.let { writer ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_writer,
+                            ),
+                        value = writer,
                     )
                 }
 
@@ -190,6 +301,19 @@ fun TrackInfoBottomSheet(
                     )
                 }
 
+            track.bitsPerSample
+                ?.takeIf { it > 0 }
+                ?.let { bitsPerSample ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_bit_depth,
+                            ),
+                        value =
+                            "$bitsPerSample-bit",
+                    )
+                }
+
             track.bitrateBps
                 ?.takeIf { it > 0 }
                 ?.let { bitrateBps ->
@@ -205,6 +329,33 @@ fun TrackInfoBottomSheet(
                     )
                 }
 
+            track.displayName
+                ?.takeIf(String::isNotBlank)
+                ?.let { displayName ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_file_name,
+                            ),
+                        value = displayName,
+                    )
+                }
+
+            track.fileSizeBytes
+                ?.takeIf { it > 0L }
+                ?.let { fileSizeBytes ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_file_size,
+                            ),
+                        value =
+                            formatFileSize(
+                                fileSizeBytes,
+                            ),
+                    )
+                }
+
             track.relativePath
                 ?.takeIf(String::isNotBlank)
                 ?.let { relativePath ->
@@ -214,6 +365,78 @@ fun TrackInfoBottomSheet(
                                 R.string.track_info_path,
                             ),
                         value = relativePath,
+                    )
+                }
+
+            track.volumeName
+                ?.takeIf(String::isNotBlank)
+                ?.let { volumeName ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_volume,
+                            ),
+                        value = volumeName,
+                    )
+                }
+
+            track.dateAddedEpochSeconds
+                .takeIf { it > 0L }
+                ?.let { dateAddedEpochSeconds ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_added,
+                            ),
+                        value =
+                            formatEpochSeconds(
+                                dateAddedEpochSeconds,
+                            ),
+                    )
+                }
+
+            track.dateModifiedEpochSeconds
+                ?.takeIf { it > 0L }
+                ?.let { dateModifiedEpochSeconds ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_modified,
+                            ),
+                        value =
+                            formatEpochSeconds(
+                                dateModifiedEpochSeconds,
+                            ),
+                    )
+                }
+
+            track.inferredDateEpochMillis
+                ?.takeIf { it > 0L }
+                ?.let { inferredDateEpochMillis ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_created_inferred,
+                            ),
+                        value =
+                            formatEpochMillis(
+                                inferredDateEpochMillis,
+                            ),
+                    )
+                }
+
+            track.metadataDateEpochMillis
+                ?.takeIf { it > 0L }
+                ?.let { metadataDateEpochMillis ->
+                    TrackInfoRow(
+                        label =
+                            stringResource(
+                                R.string.track_info_metadata_date,
+                            ),
+                        value =
+                            formatEpochMillis(
+                                metadataDateEpochMillis,
+                            ),
                     )
                 }
 
@@ -296,6 +519,7 @@ private fun formatAudioType(
             delimiter = "/",
             missingDelimiterValue = mimeType,
         )
+        .removePrefix("x-")
         .uppercase(
             Locale.ROOT,
         )
@@ -317,8 +541,85 @@ private fun formatSampleRate(
 private fun formatBitrate(
     bitrateBps: Int,
 ): String {
-    val bitrateKbps =
-        (bitrateBps + 500) / 1_000
+    return when {
+        bitrateBps >= 1_000_000 ->
+            "%.2f Mbps".format(
+                Locale.ROOT,
+                bitrateBps / 1_000_000.0,
+            )
 
-    return "$bitrateKbps kbps"
+        bitrateBps >= 1_000 ->
+            "%.0f kbps".format(
+                Locale.ROOT,
+                bitrateBps / 1_000.0,
+            )
+
+        else ->
+            "$bitrateBps bps"
+    }
+}
+
+private fun formatFileSize(
+    fileSizeBytes: Long,
+): String {
+    if (fileSizeBytes <= 0L) {
+        return "—"
+    }
+
+    val units =
+        arrayOf(
+            "B",
+            "KiB",
+            "MiB",
+            "GiB",
+            "TiB",
+        )
+
+    var value =
+        fileSizeBytes.toDouble()
+
+    var unitIndex = 0
+
+    while (
+        value >= 1024.0 &&
+        unitIndex < units.lastIndex
+    ) {
+        value /= 1024.0
+        unitIndex++
+    }
+
+    return if (unitIndex == 0) {
+        "$fileSizeBytes ${units[unitIndex]}"
+    } else {
+        "%.2f %s".format(
+            Locale.ROOT,
+            value,
+            units[unitIndex],
+        )
+    }
+}
+
+private fun formatEpochSeconds(
+    epochSeconds: Long,
+): String {
+    return formatEpochMillis(
+        epochSeconds * 1_000L,
+    )
+}
+
+private fun formatEpochMillis(
+    epochMillis: Long,
+): String {
+    if (epochMillis <= 0L) {
+        return "—"
+    }
+
+    return DateFormat
+        .getDateTimeInstance(
+            DateFormat.MEDIUM,
+            DateFormat.SHORT,
+        )
+        .format(
+            Date(epochMillis),
+        )
 }
