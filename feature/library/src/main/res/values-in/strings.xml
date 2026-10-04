@@ -7,4 +7,16 @@
     <string name="library_error">Tidak dapat membaca koleksi musik.</string>
     <string name="action_settings">Pengaturan</string>
     <string name="library_back">Kembali</string>
+
+    <string name="library_sort">Urutkan</string>
+    <string name="library_sort_order_ascending">Urutkan naik</string>
+    <string name="library_sort_order_descending">Urutkan turun</string>
+    <string name="library_sort_title">Urutkan lagu</string>
+    <string name="library_sort_default">Default</string>
+    <string name="library_sort_title_name">Judul</string>
+    <string name="library_sort_artist">Artis</string>
+    <string name="library_sort_album">Album</string>
+    <string name="library_sort_date_added">Tanggal ditambahkan</string>
+    <string name="library_sort_date_modified">Tanggal diubah</string>
+    <string name="library_sort_duration">Durasi</string>
 </resources>

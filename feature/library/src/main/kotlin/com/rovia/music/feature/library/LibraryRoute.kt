@@ -81,6 +81,14 @@ fun LibraryRoute(
         onShowRootFolders = {
             viewModel.showRootFolders()
         },
+        onSortOptionChange = { option ->
+            viewModel.setSortOption(
+                option = option,
+            )
+        },
+        onToggleSortOrder = {
+            viewModel.toggleSortOrder()
+        },
         hasMiniPlayer = hasMiniPlayer,
     )
 }

@@ -12,6 +12,10 @@ sealed interface LibraryUiState {
         val folders: List<MusicFolder> = emptyList(),
         val folderTracks: List<Track> = emptyList(),
         val currentFolderPath: String? = null,
+        val sortOption: LibrarySortOption =
+            LibrarySortOption.DEFAULT,
+        val sortOrder: LibrarySortOrder =
+            LibrarySortOrder.ASCENDING,
     ) : LibraryUiState
 
     data class Error(

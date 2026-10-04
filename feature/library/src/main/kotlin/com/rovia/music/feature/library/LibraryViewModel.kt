@@ -162,6 +162,46 @@ class LibraryViewModel(
         }
     }
 
+    fun setSortOption(
+        option: LibrarySortOption,
+    ) {
+        val currentState =
+            _uiState.value as? LibraryUiState.Content
+                ?: return
+
+        _uiState.value =
+            currentState.copy(
+                sortOption = option,
+            )
+    }
+
+    fun toggleSortOrder() {
+        val currentState =
+            _uiState.value as? LibraryUiState.Content
+                ?: return
+
+        if (
+            currentState.sortOption ==
+                LibrarySortOption.DEFAULT
+        ) {
+            return
+        }
+
+        val nextOrder =
+            when (currentState.sortOrder) {
+                LibrarySortOrder.ASCENDING ->
+                    LibrarySortOrder.DESCENDING
+
+                LibrarySortOrder.DESCENDING ->
+                    LibrarySortOrder.ASCENDING
+            }
+
+        _uiState.value =
+            currentState.copy(
+                sortOrder = nextOrder,
+            )
+    }
+
     private fun loadRootContent() {
         viewModelScope.launch {
             try {

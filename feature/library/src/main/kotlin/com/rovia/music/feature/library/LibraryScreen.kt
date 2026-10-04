@@ -1,4 +1,5 @@
 ﻿@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
 
@@ -36,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +61,8 @@ fun LibraryScreen(
     onOpenSettings: () -> Unit,
     onShowAllSongs: () -> Unit = {},
     onShowRootFolders: () -> Unit = {},
+    onSortOptionChange: (LibrarySortOption) -> Unit = {},
+    onToggleSortOrder: () -> Unit = {},
     hasMiniPlayer: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -70,10 +74,7 @@ fun LibraryScreen(
 
         is LibraryUiState.Content ->
             LibraryContent(
-                tracks = uiState.tracks,
-                folders = uiState.folders,
-                folderTracks = uiState.folderTracks,
-                currentFolderPath = uiState.currentFolderPath,
+                uiState = uiState,
                 onTrackClick = onTrackClick,
                 onRestartCurrentTrack = onRestartCurrentTrack,
                 currentTrackId = currentTrackId,
@@ -82,6 +83,8 @@ fun LibraryScreen(
                 onOpenSettings = onOpenSettings,
                 onShowAllSongs = onShowAllSongs,
                 onShowRootFolders = onShowRootFolders,
+                onSortOptionChange = onSortOptionChange,
+                onToggleSortOrder = onToggleSortOrder,
                 hasMiniPlayer = hasMiniPlayer,
                 modifier = modifier,
             )
@@ -108,10 +111,7 @@ private fun LoadingContent(
 
 @Composable
 private fun LibraryContent(
-    tracks: List<Track>,
-    folders: List<MusicFolder>,
-    folderTracks: List<Track>,
-    currentFolderPath: String?,
+    uiState: LibraryUiState.Content,
     onTrackClick: (List<Track>, Int) -> Unit,
     onRestartCurrentTrack: () -> Unit,
     currentTrackId: Long?,
@@ -120,17 +120,23 @@ private fun LibraryContent(
     onOpenSettings: () -> Unit,
     onShowAllSongs: () -> Unit,
     onShowRootFolders: () -> Unit,
+    onSortOptionChange: (LibrarySortOption) -> Unit,
+    onToggleSortOrder: () -> Unit,
     hasMiniPlayer: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    var selectedMode by remember(currentFolderPath) {
+    var selectedMode by remember(uiState.currentFolderPath) {
         mutableIntStateOf(
-            if (currentFolderPath != null) {
+            if (uiState.currentFolderPath != null) {
                 1
             } else {
                 0
             },
         )
+    }
+
+    var isSortSheetVisible by remember {
+        mutableStateOf(false)
     }
 
     val allSongsLabel =
@@ -163,6 +169,18 @@ private fun LibraryContent(
     val motionScheme =
         MaterialTheme.motionScheme
 
+    val sortedTracks =
+        uiState.tracks.sortedForLibrary(
+            option = uiState.sortOption,
+            order = uiState.sortOrder,
+        )
+
+    val sortedFolderTracks =
+        uiState.folderTracks.sortedForLibrary(
+            option = uiState.sortOption,
+            order = uiState.sortOrder,
+        )
+
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
@@ -182,11 +200,10 @@ private fun LibraryContent(
             navigationIcon = {
                 AnimatedVisibility(
                     visible =
-                        currentFolderPath != null,
+                        uiState.currentFolderPath != null,
                     enter =
                         expandHorizontally(
-                            expandFrom =
-                                Alignment.Start,
+                            expandFrom = Alignment.Start,
                             animationSpec =
                                 motionScheme
                                     .defaultSpatialSpec(),
@@ -198,8 +215,7 @@ private fun LibraryContent(
                             ),
                     exit =
                         shrinkHorizontally(
-                            shrinkTowards =
-                                Alignment.Start,
+                            shrinkTowards = Alignment.Start,
                             animationSpec =
                                 motionScheme
                                     .defaultSpatialSpec(),
@@ -211,21 +227,20 @@ private fun LibraryContent(
                             ),
                 ) {
                     FilledIconButton(
-                        onClick =
-                            onBackFromFolder,
-                        shapes =
-                            IconButtonDefaults.shapes(),
+                        onClick = onBackFromFolder,
+                        shapes = IconButtonDefaults.shapes(),
                         colors =
-                            IconButtonDefaults.filledIconButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-                            ),
+                            IconButtonDefaults
+                                .filledIconButtonColors(
+                                    containerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceContainerHigh,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                ),
                     ) {
                         Icon(
                             painter =
@@ -242,21 +257,20 @@ private fun LibraryContent(
             },
             actions = {
                 FilledIconButton(
-                    onClick =
-                        onOpenSettings,
-                    shapes =
-                        IconButtonDefaults.shapes(),
+                    onClick = onOpenSettings,
+                    shapes = IconButtonDefaults.shapes(),
                     colors =
-                        IconButtonDefaults.filledIconButtonColors(
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surfaceContainerHigh,
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
-                        ),
+                        IconButtonDefaults
+                            .filledIconButtonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceContainerHigh,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                            ),
                 ) {
                     Icon(
                         painter =
@@ -285,8 +299,7 @@ private fun LibraryContent(
                         end = 12.dp,
                         bottom = 6.dp,
                     ),
-            verticalAlignment =
-                Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             MaterialTheme(
                 colorScheme =
@@ -305,10 +318,8 @@ private fun LibraryContent(
                         ),
                 ) {
                     toggleableItem(
-                        checked =
-                            selectedMode == 0,
-                        label =
-                            allSongsLabel,
+                        checked = selectedMode == 0,
+                        label = allSongsLabel,
                         onCheckedChange = { checked ->
                             if (checked) {
                                 selectedMode = 0
@@ -318,10 +329,8 @@ private fun LibraryContent(
                     )
 
                     toggleableItem(
-                        checked =
-                            selectedMode == 1,
-                        label =
-                            foldersLabel,
+                        checked = selectedMode == 1,
+                        label = foldersLabel,
                         onCheckedChange = { checked ->
                             if (checked) {
                                 selectedMode = 1
@@ -333,14 +342,18 @@ private fun LibraryContent(
             }
         }
 
-        if (currentFolderPath != null) {
+        if (uiState.currentFolderPath != null) {
             FolderBreadcrumb(
-                relativePath =
-                    currentFolderPath,
-                onFolderClick =
-                    onFolderClick,
+                relativePath = uiState.currentFolderPath,
+                onFolderClick = onFolderClick,
             )
         }
+
+        SortControlRow(
+            onOpenSortSheet = {
+                isSortSheetVisible = true
+            },
+        )
 
         LazyColumn(
             modifier =
@@ -349,64 +362,103 @@ private fun LibraryContent(
                     .fillMaxWidth(),
             contentPadding =
                 PaddingValues(
-                    bottom =
-                        bottomContentPadding,
+                    bottom = bottomContentPadding,
                 ),
         ) {
             if (selectedMode == 0) {
-                if (tracks.isEmpty()) {
+                if (sortedTracks.isEmpty()) {
                     item {
                         EmptyContent()
                     }
                 } else {
-                    itemsIndexed(
-                        items = tracks,
-                        key = { _, track ->
-                            track.id
-                        },
-                    ) { index, track ->
-                        val isCurrentTrack =
-                            track.id == currentTrackId
-
-                        TrackRow(
-                            track = track,
-                            onClick = {
-                                if (isCurrentTrack) {
-                                    onRestartCurrentTrack()
-                                } else {
-                                    onTrackClick(
-                                        tracks,
-                                        index,
-                                    )
-                                }
-                            },
-                            showAlbum = true,
-                            isCurrentTrack = isCurrentTrack,
-                        )
-                    }
+                    allSongsContent(
+                        tracks = sortedTracks,
+                        onTrackClick = onTrackClick,
+                        onRestartCurrentTrack =
+                            onRestartCurrentTrack,
+                        currentTrackId = currentTrackId,
+                    )
                 }
             } else {
-                if (currentFolderPath == null) {
+                if (uiState.currentFolderPath == null) {
                     rootFolderContent(
-                        folders = folders,
-                        onFolderClick =
-                            onFolderClick,
+                        folders = uiState.folders,
+                        onFolderClick = onFolderClick,
                     )
                 } else {
                     folderContent(
-                        folders = folders,
-                        tracks = folderTracks,
-                        onFolderClick =
-                            onFolderClick,
-                        onTrackClick =
-                            onTrackClick,
+                        folders = uiState.folders,
+                        tracks = sortedFolderTracks,
+                        onFolderClick = onFolderClick,
+                        onTrackClick = onTrackClick,
                         onRestartCurrentTrack =
                             onRestartCurrentTrack,
-                        currentTrackId =
-                            currentTrackId,
+                        currentTrackId = currentTrackId,
                     )
                 }
             }
+        }
+    }
+
+    if (isSortSheetVisible) {
+        LibrarySortBottomSheet(
+            selectedOption = uiState.sortOption,
+            sortOrder = uiState.sortOrder,
+            onDismissRequest = {
+                isSortSheetVisible = false
+            },
+            onSortOptionChange = { option ->
+                onSortOptionChange(option)
+                isSortSheetVisible = false
+            },
+            onToggleSortOrder = onToggleSortOrder,
+        )
+    }
+}
+
+@Composable
+private fun SortControlRow(
+    onOpenSortSheet: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 12.dp,
+                    top = 0.dp,
+                    end = 12.dp,
+                    bottom = 6.dp,
+                ),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilledIconButton(
+            onClick = onOpenSortSheet,
+            shapes = IconButtonDefaults.shapes(),
+            colors =
+                IconButtonDefaults
+                    .filledIconButtonColors(
+                        containerColor =
+                            MaterialTheme
+                                .colorScheme
+                                .surfaceContainerHigh,
+                        contentColor =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurface,
+                    ),
+        ) {
+            Icon(
+                painter =
+                    painterResource(
+                        CoreUiR.drawable.ic_sort,
+                    ),
+                contentDescription =
+                    stringResource(
+                        R.string.library_sort,
+                    ),
+            )
         }
     }
 }
@@ -487,10 +539,8 @@ private fun FolderBreadcrumb(
                             segments.lastIndex
 
                     toggleableItem(
-                        checked =
-                            isCurrentFolder,
-                        label =
-                            segment,
+                        checked = isCurrentFolder,
+                        label = segment,
                         onCheckedChange = { checked ->
                             if (
                                 checked &&
@@ -505,6 +555,39 @@ private fun FolderBreadcrumb(
                 }
             }
         }
+    }
+}
+
+private fun LazyListScope.allSongsContent(
+    tracks: List<Track>,
+    onTrackClick: (List<Track>, Int) -> Unit,
+    onRestartCurrentTrack: () -> Unit,
+    currentTrackId: Long?,
+) {
+    itemsIndexed(
+        items = tracks,
+        key = { _, track ->
+            track.id
+        },
+    ) { index, track ->
+        val isCurrentTrack =
+            track.id == currentTrackId
+
+        TrackRow(
+            track = track,
+            onClick = {
+                if (isCurrentTrack) {
+                    onRestartCurrentTrack()
+                } else {
+                    onTrackClick(
+                        tracks,
+                        index,
+                    )
+                }
+            },
+            showAlbum = true,
+            isCurrentTrack = isCurrentTrack,
+        )
     }
 }
 
@@ -609,8 +692,7 @@ private fun FolderRow(
         onClick = onClick,
         modifier =
             Modifier.fillMaxWidth(),
-        shapes =
-            ListItemDefaults.shapes(),
+        shapes = ListItemDefaults.shapes(),
         leadingContent = {
             Icon(
                 painter =
