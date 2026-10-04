@@ -3695,34 +3695,53 @@ A real sample rate field is not the same as a verified end-to-end bit-perfect cl
 
 # 86. SAFE MODIFICATION PROCEDURE FOR AI AGENTS
 
-When asked to change Rovia:
+When asked to change Rovia, an AI coding agent must follow this workflow exactly.
 
 ## Step 1
-Read this README.
+Read this `Agents.md` before modifying Rovia.
 
 ## Step 2
-Inspect the actual target file.
+Inspect the actual target file and surrounding implementation.
 
 ## Step 3
-Identify the owning module.
+Identify the owning module and preserve the documented architecture.
 
 ## Step 4
-Create a checkpoint before risky interaction changes.
+Create a checkpoint before risky interaction, navigation, playback, database, or migration changes.
 
 ## Step 5
-Make the smallest change that implements the request.
+Make the smallest change that implements the requested behavior.
 
 ## Step 6
-Do not touch unrelated architecture.
+Do not touch unrelated architecture, files, modules, UI behavior, or dependencies.
 
 ## Step 7
-Compile immediately.
+Compile the application with the mandatory full Debug build:
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+```
 
 ## Step 8
-Run the relevant runtime test on the Android device.
+Only when `:app:assembleDebug` succeeds, install the resulting Debug APK:
+
+```powershell
+.\gradlew.bat :app:installDebug
+```
 
 ## Step 9
-Only after verification should the change be considered final.
+Run the relevant runtime/regression test on the Android device or emulator.
+
+## Step 10
+If the change is verified successfully, create a structured Git commit immediately.
+
+## Step 11
+Remind the developer that the verified change must be committed if they have not committed it yet.
+
+## Step 12
+Do not leave a successfully verified change intentionally uncommitted unless the developer explicitly requests a different checkpoint strategy.
+
+A failed build or failed runtime verification is a checkpoint, not a reason to create a misleading "successful" commit.
 
 ---
 
@@ -3779,49 +3798,328 @@ A failed compile is a checkpoint, not a reason to perform unrelated cleanup.
 
 # 89. BUILD VERIFICATION
 
-Primary project verification command:
+The mandatory application-wide Debug verification command after every source change is:
 
 ```powershell
-cd D:\Code\Projects\android\Rovia
-
-./compiledebug
+.\gradlew.bat :app:assembleDebug
 ```
 
-The project helper compiles the application from the root module and is the preferred quick
-checkpoint after source/UI changes.
+This command must be run after the requested change has been implemented, before the change is considered complete.
 
-A successful result must end with:
+A successful build must end with:
 
 ```text
 BUILD SUCCESSFUL
-
-============================================
- KOTLIN COMPILATION SUCCESSFUL
-============================================
 ```
 
-Direct Gradle verification remains valid when the helper is unavailable:
+The preferred verification is the real `:app:assembleDebug` task because it validates the application
+assembly rather than only an individual Kotlin compilation task.
 
-```powershell
-.\gradlew.bat :app:compileDebugKotlin
+The helper script may still be used as an additional developer convenience, but it does not replace the
+mandatory command above for the AI-agent change workflow.
+
+Do not claim application-wide build success based only on one feature module unless the requested scope is
+explicitly limited to that module.
+
+If `:app:assembleDebug` fails:
+
+```text
+DO NOT INSTALL
+DO NOT CLAIM SUCCESS
+DO NOT CREATE A SUCCESSFUL FEATURE COMMIT
 ```
 
-Do not claim application-wide compile success based only on one feature module unless the requested
-scope is explicitly limited to that module.
+Fix the actual reported issue before proceeding.
 
 ---
 
 # 90. DEVICE INSTALL
 
-Development installation currently uses ADB.
+After and only after:
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+```
+
+finishes successfully, install the current Debug build with:
+
+```powershell
+.\gradlew.bat :app:installDebug
+```
+
+This is the standard Rovia development installation command for AI-agent verification.
+
+Runtime interaction changes should then be tested on the Android 16 device/emulator when possible.
+
+The required sequence is:
+
+```text
+source change
+    ↓
+.\gradlew.bat :app:assembleDebug
+    ↓
+BUILD SUCCESSFUL
+    ↓
+.\gradlew.bat :app:installDebug
+    ↓
+runtime/regression verification
+    ↓
+Git commit
+```
+
+Do not skip the install step when a successful application-wide Debug build was produced for a runtime-affecting change.
+
+---
+
+# 90.1. MANDATORY GIT COMMIT POLICY
+
+Every successfully implemented and verified change must be committed.
+
+A successful change is:
+
+```text
+requested change implemented
+        ↓
+:app:assembleDebug -> SUCCESS
+        ↓
+:app:installDebug -> SUCCESS
+        ↓
+relevant runtime/regression verification -> PASS
+        ↓
+structured Git commit
+```
+
+The AI coding agent must actively remind the developer to commit the change when the change has been verified
+but no commit has been created yet.
+
+## Commit messages are architectural labels
+
+Commit messages must follow the ownership of the changed code/module.
+
+The prefix identifies the primary project area that owns the change:
+
+```text
+app:
+core:
+feature:
+data:
+playback:
+build:
+test:
+docs:
+```
+
+Use the prefix that matches the architecture, not a generic Git convention.
+
+### `feature:`
+
+Use for changes owned by a feature module such as:
+
+```text
+feature/home
+feature/search
+feature/library
+feature/player
+feature/settings
+```
+
+Examples:
+
+```text
+feature: Adding a maintainer profile to the About page in settings
+feature: Fixing folder back navigation in the Library feature
+feature: Improving synchronized lyric rendering in the Player feature
+```
+
+### `core:`
+
+Use for changes owned by shared Core APIs, models, or shared UI components.
 
 Example:
 
-```powershell
-adb -s d6352feb install -r .\app\build\outputs\apk\debug\app-debug.apk
+```text
+core: Fixing a bug in the MiniPlayer within the core UI
 ```
 
-Runtime interaction changes must be tested on a real Android 16 device when possible.
+Other valid examples:
+
+```text
+core: Updating playback state contracts in core playback API
+core: Fixing TrackRow artwork handling in core UI
+```
+
+### `data:`
+
+Use for changes owned by:
+
+```text
+:data:database
+:data:media-store
+```
+
+Examples:
+
+```text
+data: Adding persistent Folder Filter migration support
+data: Fixing embedded lyric parsing in MediaStore
+```
+
+### `playback:`
+
+Use for changes owned by:
+
+```text
+:playback:media3
+```
+
+Examples:
+
+```text
+playback: Fixing queue state restoration in Media3 playback
+playback: Updating MediaSession playback state handling
+```
+
+### `app:`
+
+Use for application composition, root navigation, Activity, theme entry-point, or `UnifiedPlayerSheet`
+changes owned by `:app`.
+
+Examples:
+
+```text
+app: Fixing Player Back behavior in Navigation.kt
+app: Updating UnifiedPlayerSheet predictive back handling
+```
+
+### `build:`
+
+Use for Gradle, version catalog, signing configuration, build scripts, or build tooling changes.
+
+Examples:
+
+```text
+build: Updating Android Gradle Plugin configuration
+build: Fixing Debug installation workflow
+```
+
+### `test:`
+
+Use when the primary change is isolated to tests or test infrastructure.
+
+Examples:
+
+```text
+test: Adding Room migration coverage for excluded folders
+test: Updating Library navigation regression tests
+```
+
+### `docs:`
+
+Use for changes to engineering documentation such as this `Agents.md`.
+
+Example:
+
+```text
+docs: Updating AI agent commit and verification rules
+```
+
+## Commit message quality rules
+
+A commit message must:
+
+```text
+1. identify the owning architectural area;
+2. describe the actual change;
+3. mention the relevant feature/component when useful;
+4. be specific enough to identify the reason for the commit;
+5. remain readable without opening the diff.
+```
+
+Do not use vague commit messages such as:
+
+```text
+update
+changes
+fix
+bug fix
+misc
+stuff
+work
+wip
+test
+final
+update files
+small changes
+```
+
+Do not use a misleading prefix merely because it is convenient.
+
+For example:
+
+```text
+core: Fixing a bug in the MiniPlayer within the core UI
+```
+
+is correct when the changed MiniPlayer belongs to `:core:ui`.
+
+A Navigation 3 change in `app/` should not be committed as:
+
+```text
+feature: ...
+```
+
+unless the actual owning code is a feature module.
+
+## Scope discipline
+
+Prefer one logical change per commit.
+
+Do not mix unrelated changes into one commit merely because they were made during the same session.
+
+For example:
+
+```text
+feature: Fixing Library folder back navigation
+```
+
+should not also contain unrelated:
+
+```text
+data: database schema changes
+core: MiniPlayer redesign
+```
+
+unless the requested change genuinely requires all of those layers.
+
+When one requested change necessarily crosses multiple modules, use the prefix of the primary owning layer and make the
+message describe the complete behavior.
+
+## Mandatory commit workflow
+
+After successful verification:
+
+```powershell
+git status
+
+git add .
+
+git diff --cached --check
+
+git diff --cached --name-only
+
+git commit -m "PRIMARY_AREA: Specific description of the verified change"
+```
+
+Then verify:
+
+```powershell
+git log -1 --oneline
+git status
+```
+
+The working tree should be clean for a fully completed change unless there are explicitly unrelated local modifications.
+
+The AI agent must not silently finish a successful task and leave the developer unaware that a commit is still required.
 
 ---
 
