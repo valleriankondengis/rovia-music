@@ -27,11 +27,50 @@ data class RecentPlayEntity(
     @ColumnInfo(name = "genre")
     val genre: String?,
 
+    @ColumnInfo(name = "display_name")
+    val displayName: String?,
+
+    @ColumnInfo(name = "album_artist")
+    val albumArtist: String?,
+
+    @ColumnInfo(name = "composer")
+    val composer: String?,
+
+    @ColumnInfo(name = "author")
+    val author: String?,
+
+    @ColumnInfo(name = "writer")
+    val writer: String?,
+
+    @ColumnInfo(name = "year")
+    val year: Int?,
+
+    @ColumnInfo(name = "track_number")
+    val trackNumber: Int?,
+
+    @ColumnInfo(name = "disc_number")
+    val discNumber: String?,
+
+    @ColumnInfo(name = "cd_track_number")
+    val cdTrackNumber: String?,
+
+    @ColumnInfo(name = "compilation")
+    val compilation: String?,
+
     @ColumnInfo(name = "duration_ms")
     val durationMs: Long,
 
     @ColumnInfo(name = "date_added_epoch_seconds")
     val dateAddedEpochSeconds: Long,
+
+    @ColumnInfo(name = "date_modified_epoch_seconds")
+    val dateModifiedEpochSeconds: Long?,
+
+    @ColumnInfo(name = "metadata_date_epoch_millis")
+    val metadataDateEpochMillis: Long?,
+
+    @ColumnInfo(name = "inferred_date_epoch_millis")
+    val inferredDateEpochMillis: Long?,
 
     @ColumnInfo(name = "mime_type")
     val mimeType: String?,
@@ -39,11 +78,20 @@ data class RecentPlayEntity(
     @ColumnInfo(name = "sample_rate_hz")
     val sampleRateHz: Int?,
 
+    @ColumnInfo(name = "bits_per_sample")
+    val bitsPerSample: Int?,
+
     @ColumnInfo(name = "bitrate_bps")
     val bitrateBps: Int?,
 
+    @ColumnInfo(name = "file_size_bytes")
+    val fileSizeBytes: Long?,
+
     @ColumnInfo(name = "relative_path")
     val relativePath: String?,
+
+    @ColumnInfo(name = "volume_name")
+    val volumeName: String?,
 
     @ColumnInfo(name = "artwork_uri")
     val artworkUri: String?,

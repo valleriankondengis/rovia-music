@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "fa4a1a65e117bd1613c1ffb8cfa21b6b",
+    "identityHash": "0b8ee7fa349f740e5ccb3f7be9934c0e",
     "entities": [
       {
         "tableName": "recent_plays",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`track_id` INTEGER NOT NULL, `uri` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT, `album` TEXT, `genre` TEXT, `duration_ms` INTEGER NOT NULL, `date_added_epoch_seconds` INTEGER NOT NULL, `mime_type` TEXT, `sample_rate_hz` INTEGER, `bitrate_bps` INTEGER, `relative_path` TEXT, `artwork_uri` TEXT, `last_played_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`track_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`track_id` INTEGER NOT NULL, `uri` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT, `album` TEXT, `genre` TEXT, `display_name` TEXT, `album_artist` TEXT, `composer` TEXT, `author` TEXT, `writer` TEXT, `year` INTEGER, `track_number` INTEGER, `disc_number` TEXT, `cd_track_number` TEXT, `compilation` TEXT, `duration_ms` INTEGER NOT NULL, `date_added_epoch_seconds` INTEGER NOT NULL, `date_modified_epoch_seconds` INTEGER, `metadata_date_epoch_millis` INTEGER, `inferred_date_epoch_millis` INTEGER, `mime_type` TEXT, `sample_rate_hz` INTEGER, `bits_per_sample` INTEGER, `bitrate_bps` INTEGER, `file_size_bytes` INTEGER, `relative_path` TEXT, `volume_name` TEXT, `artwork_uri` TEXT, `last_played_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`track_id`))",
         "fields": [
           {
             "fieldPath": "trackId",
@@ -42,6 +42,56 @@
             "affinity": "TEXT"
           },
           {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumArtist",
+            "columnName": "album_artist",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "composer",
+            "columnName": "composer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "author",
+            "columnName": "author",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "writer",
+            "columnName": "writer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackNumber",
+            "columnName": "track_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "discNumber",
+            "columnName": "disc_number",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cdTrackNumber",
+            "columnName": "cd_track_number",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "compilation",
+            "columnName": "compilation",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "durationMs",
             "columnName": "duration_ms",
             "affinity": "INTEGER",
@@ -54,6 +104,21 @@
             "notNull": true
           },
           {
+            "fieldPath": "dateModifiedEpochSeconds",
+            "columnName": "date_modified_epoch_seconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metadataDateEpochMillis",
+            "columnName": "metadata_date_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inferredDateEpochMillis",
+            "columnName": "inferred_date_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
             "fieldPath": "mimeType",
             "columnName": "mime_type",
             "affinity": "TEXT"
@@ -64,13 +129,28 @@
             "affinity": "INTEGER"
           },
           {
+            "fieldPath": "bitsPerSample",
+            "columnName": "bits_per_sample",
+            "affinity": "INTEGER"
+          },
+          {
             "fieldPath": "bitrateBps",
             "columnName": "bitrate_bps",
             "affinity": "INTEGER"
           },
           {
+            "fieldPath": "fileSizeBytes",
+            "columnName": "file_size_bytes",
+            "affinity": "INTEGER"
+          },
+          {
             "fieldPath": "relativePath",
             "columnName": "relative_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "volumeName",
+            "columnName": "volume_name",
             "affinity": "TEXT"
           },
           {
@@ -143,7 +223,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fa4a1a65e117bd1613c1ffb8cfa21b6b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0b8ee7fa349f740e5ccb3f7be9934c0e')"
     ]
   }
 }
