@@ -24,6 +24,9 @@ data class RecentPlayEntity(
     @ColumnInfo(name = "album")
     val album: String?,
 
+    @ColumnInfo(name = "genre")
+    val genre: String?,
+
     @ColumnInfo(name = "duration_ms")
     val durationMs: Long,
 
@@ -38,6 +41,9 @@ data class RecentPlayEntity(
 
     @ColumnInfo(name = "bitrate_bps")
     val bitrateBps: Int?,
+
+    @ColumnInfo(name = "relative_path")
+    val relativePath: String?,
 
     @ColumnInfo(name = "artwork_uri")
     val artworkUri: String?,

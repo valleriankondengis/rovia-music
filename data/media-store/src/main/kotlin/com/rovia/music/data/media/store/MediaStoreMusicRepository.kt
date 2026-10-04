@@ -58,6 +58,7 @@ class MediaStoreMusicRepository(
                     MediaStore.Audio.Media.TITLE,
                     MediaStore.Audio.Media.ARTIST,
                     MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.GENRE,
                     MediaStore.Audio.Media.DURATION,
                     MediaStore.Audio.Media.DATE_ADDED,
                     MediaStore.Audio.Media.DISPLAY_NAME,
@@ -104,6 +105,11 @@ class MediaStoreMusicRepository(
                 val albumIndex =
                     cursor.getColumnIndexOrThrow(
                         MediaStore.Audio.Media.ALBUM,
+                    )
+
+                val genreIndex =
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media.GENRE,
                     )
 
                 val durationIndex =
@@ -155,7 +161,9 @@ class MediaStoreMusicRepository(
                     val relativePath =
                         cursor.getString(
                             relativePathIndex,
-                        )
+                        )?.takeUnless {
+                            it.isBlank()
+                        }
 
                     if (
                         isExcludedFolder(
@@ -194,6 +202,14 @@ class MediaStoreMusicRepository(
                     val album =
                         cursor.getString(
                             albumIndex,
+                        )?.takeUnless {
+                            it.isBlank() ||
+                                it == "<unknown>"
+                        }
+
+                    val genre =
+                        cursor.getString(
+                            genreIndex,
                         )?.takeUnless {
                             it.isBlank() ||
                                 it == "<unknown>"
@@ -260,6 +276,7 @@ class MediaStoreMusicRepository(
                                 title ?: "Unknown",
                             artist = artist,
                             album = album,
+                            genre = genre,
                             durationMs = durationMs,
                             dateAddedEpochSeconds =
                                 dateAddedEpochSeconds,
@@ -268,6 +285,8 @@ class MediaStoreMusicRepository(
                                 sampleRateHz,
                             bitrateBps =
                                 bitrateBps,
+                            relativePath =
+                                relativePath,
                             artworkUri =
                                 uri.toString(),
                         )

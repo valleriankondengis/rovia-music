@@ -12,13 +12,16 @@ fun Track.toRecentPlayEntity(
         title = title,
         artist = artist,
         album = album,
+        genre = genre,
         durationMs = durationMs,
         dateAddedEpochSeconds = dateAddedEpochSeconds,
         mimeType = mimeType,
         sampleRateHz = sampleRateHz,
         bitrateBps = bitrateBps,
+        relativePath = relativePath,
         artworkUri = artworkUri,
-        lastPlayedAtEpochMillis = lastPlayedAtEpochMillis,
+        lastPlayedAtEpochMillis =
+            lastPlayedAtEpochMillis,
     )
 }
 
@@ -29,11 +32,14 @@ fun RecentPlayEntity.toTrack(): Track {
         title = title,
         artist = artist,
         album = album,
+        genre = genre,
         durationMs = durationMs,
-        dateAddedEpochSeconds = dateAddedEpochSeconds,
+        dateAddedEpochSeconds =
+            dateAddedEpochSeconds,
         mimeType = mimeType,
         sampleRateHz = sampleRateHz,
         bitrateBps = bitrateBps,
+        relativePath = relativePath,
         artworkUri = artworkUri,
     )
 }

@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "f50de0d87586c51f08e4386f79f7e287",
+    "identityHash": "fa4a1a65e117bd1613c1ffb8cfa21b6b",
     "entities": [
       {
         "tableName": "recent_plays",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`track_id` INTEGER NOT NULL, `uri` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT, `album` TEXT, `duration_ms` INTEGER NOT NULL, `date_added_epoch_seconds` INTEGER NOT NULL, `mime_type` TEXT, `sample_rate_hz` INTEGER, `bitrate_bps` INTEGER, `artwork_uri` TEXT, `last_played_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`track_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`track_id` INTEGER NOT NULL, `uri` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT, `album` TEXT, `genre` TEXT, `duration_ms` INTEGER NOT NULL, `date_added_epoch_seconds` INTEGER NOT NULL, `mime_type` TEXT, `sample_rate_hz` INTEGER, `bitrate_bps` INTEGER, `relative_path` TEXT, `artwork_uri` TEXT, `last_played_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`track_id`))",
         "fields": [
           {
             "fieldPath": "trackId",
@@ -37,6 +37,11 @@
             "affinity": "TEXT"
           },
           {
+            "fieldPath": "genre",
+            "columnName": "genre",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "durationMs",
             "columnName": "duration_ms",
             "affinity": "INTEGER",
@@ -62,6 +67,11 @@
             "fieldPath": "bitrateBps",
             "columnName": "bitrate_bps",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "artworkUri",
@@ -133,7 +143,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f50de0d87586c51f08e4386f79f7e287')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fa4a1a65e117bd1613c1ffb8cfa21b6b')"
     ]
   }
 }
