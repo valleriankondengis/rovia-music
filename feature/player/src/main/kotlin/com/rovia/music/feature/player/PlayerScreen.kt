@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.Icon
@@ -67,6 +69,7 @@ import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
 import com.rovia.music.core.ui.component.AlbumArtwork
+import com.rovia.music.core.ui.component.TrackInfoBottomSheet
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.PI
@@ -280,6 +283,7 @@ private fun PortraitPlayerContent(
                 ),
     ) {
         PlayerActionButtonGroup(
+            track = track,
             hasLyrics = hasLyrics,
             isLyricsLoading = isLyricsLoading,
             isLyricsVisible = isLyricsVisible,
@@ -438,6 +442,7 @@ private fun LandscapePlayerContent(
                     .fillMaxHeight(),
         ) {
             PlayerActionButtonGroup(
+                track = track,
                 hasLyrics = hasLyrics,
                 isLyricsLoading = isLyricsLoading,
                 isLyricsVisible = isLyricsVisible,
@@ -797,132 +802,221 @@ private fun LyricsContent(
 
 @Composable
 private fun PlayerActionButtonGroup(
+    track: Track?,
     hasLyrics: Boolean,
     isLyricsLoading: Boolean,
     isLyricsVisible: Boolean,
     onToggleLyrics: () -> Unit,
     onClose: () -> Unit,
 ) {
-    ButtonGroup(
-        horizontalArrangement =
-            Arrangement.spacedBy(
-                ButtonGroupDefaults
-                    .ConnectedSpaceBetween,
-            ),
-        overflowIndicator = { menuState ->
-            ButtonGroupDefaults.OverflowIndicator(
-                menuState = menuState,
-            )
-        },
-    ) {
-        customItem(
-            buttonGroupContent = {
-                FilledIconButton(
-                    onClick = onClose,
-                    modifier =
-                        Modifier.size(48.dp),
-                    colors =
-                        IconButtonDefaults
-                            .filledIconButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-                            ),
-                    shapes =
-                        IconButtonDefaults.shapes(
-                            shape =
-                                ButtonGroupDefaults
-                                    .connectedLeadingButtonShape,
-                            pressedShape =
-                                ButtonGroupDefaults
-                                    .connectedLeadingButtonPressShape,
-                        ),
-                ) {
-                    Icon(
-                        painter =
-                            painterResource(
-                                CoreUiR.drawable
-                                    .ic_keyboard_arrow_down,
-                            ),
-                        contentDescription =
-                            stringResource(
-                                R.string.player_close,
-                            ),
-                        modifier =
-                            Modifier.size(22.dp),
-                    )
-                }
-            },
-            menuContent = {},
-        )
+    var isMenuExpanded by remember {
+        mutableStateOf(false)
+    }
 
-        customItem(
-            buttonGroupContent = {
-                FilledIconToggleButton(
-                    checked = isLyricsVisible,
-                    onCheckedChange = {
-                        onToggleLyrics()
-                    },
-                    modifier =
-                        Modifier.size(48.dp),
-                    colors =
-                        IconButtonDefaults
-                            .filledIconToggleButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-                                checkedContainerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primaryContainer,
-                                checkedContentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimaryContainer,
-                            ),
-                    shapes =
-                        IconButtonDefaults.toggleableShapes(
-                            shape =
-                                ButtonGroupDefaults
-                                    .connectedTrailingButtonShape,
-                            pressedShape =
-                                ButtonGroupDefaults
-                                    .connectedTrailingButtonPressShape,
-                            checkedShape =
-                                ButtonGroupDefaults
-                                    .connectedButtonCheckedShape,
-                        ),
-                ) {
-                    Icon(
-                        painter =
-                            painterResource(
-                                CoreUiR.drawable.ic_lyrics,
-                            ),
-                        contentDescription =
-                            stringResource(
-                                if (isLyricsVisible) {
-                                    R.string.player_hide_lyrics
-                                } else {
-                                    R.string.player_show_lyrics
-                                },
-                            ),
-                        modifier =
-                            Modifier.size(22.dp),
-                    )
-                }
+    var isInfoSheetVisible by remember {
+        mutableStateOf(false)
+    }
+
+    Row(
+        modifier =
+            Modifier.fillMaxWidth(),
+        verticalAlignment =
+            Alignment.CenterVertically,
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+    ) {
+        ButtonGroup(
+            horizontalArrangement =
+                Arrangement.spacedBy(
+                    ButtonGroupDefaults
+                        .ConnectedSpaceBetween,
+                ),
+            overflowIndicator = { menuState ->
+                ButtonGroupDefaults.OverflowIndicator(
+                    menuState = menuState,
+                )
             },
-            menuContent = {},
-        )
+        ) {
+            customItem(
+                buttonGroupContent = {
+                    FilledIconButton(
+                        onClick = onClose,
+                        modifier =
+                            Modifier.size(48.dp),
+                        colors =
+                            IconButtonDefaults
+                                .filledIconButtonColors(
+                                    containerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceContainerHigh,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                ),
+                        shapes =
+                            IconButtonDefaults.shapes(
+                                shape =
+                                    ButtonGroupDefaults
+                                        .connectedLeadingButtonShape,
+                                pressedShape =
+                                    ButtonGroupDefaults
+                                        .connectedLeadingButtonPressShape,
+                            ),
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    CoreUiR.drawable
+                                        .ic_keyboard_arrow_down,
+                                ),
+                            contentDescription =
+                                stringResource(
+                                    R.string.player_close,
+                                ),
+                            modifier =
+                                Modifier.size(22.dp),
+                        )
+                    }
+                },
+                menuContent = {},
+            )
+
+            customItem(
+                buttonGroupContent = {
+                    FilledIconToggleButton(
+                        checked = isLyricsVisible,
+                        onCheckedChange = {
+                            onToggleLyrics()
+                        },
+                        modifier =
+                            Modifier.size(48.dp),
+                        colors =
+                            IconButtonDefaults
+                                .filledIconToggleButtonColors(
+                                    containerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceContainerHigh,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    checkedContainerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primaryContainer,
+                                    checkedContentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onPrimaryContainer,
+                                ),
+                        shapes =
+                            IconButtonDefaults.toggleableShapes(
+                                shape =
+                                    ButtonGroupDefaults
+                                        .connectedTrailingButtonShape,
+                                pressedShape =
+                                    ButtonGroupDefaults
+                                        .connectedTrailingButtonPressShape,
+                                checkedShape =
+                                    ButtonGroupDefaults
+                                        .connectedButtonCheckedShape,
+                            ),
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    CoreUiR.drawable.ic_lyrics,
+                                ),
+                            contentDescription =
+                                stringResource(
+                                    if (isLyricsVisible) {
+                                        R.string.player_hide_lyrics
+                                    } else {
+                                        R.string.player_show_lyrics
+                                    },
+                                ),
+                            modifier =
+                                Modifier.size(22.dp),
+                        )
+                    }
+                },
+                menuContent = {},
+            )
+        }
+
+        Box {
+            FilledIconButton(
+                onClick = {
+                    isMenuExpanded = true
+                },
+                modifier =
+                    Modifier.size(48.dp),
+                colors =
+                    IconButtonDefaults
+                        .filledIconButtonColors(
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceContainerHigh,
+                            contentColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
+                        ),
+                shapes =
+                    IconButtonDefaults.shapes(),
+            ) {
+                Icon(
+                    painter =
+                        painterResource(
+                            CoreUiR.drawable.ic_more_vert,
+                        ),
+                    contentDescription =
+                        stringResource(
+                            CoreUiR.string.track_action_more,
+                        ),
+                    modifier =
+                        Modifier.size(24.dp),
+                )
+            }
+
+            DropdownMenu(
+                expanded = isMenuExpanded,
+                onDismissRequest = {
+                    isMenuExpanded = false
+                },
+            ) {
+                DropdownMenuItem(
+                    enabled = track != null,
+                    text = {
+                        Text(
+                            text =
+                                stringResource(
+                                    CoreUiR.string.track_action_info,
+                                ),
+                        )
+                    },
+                    onClick = {
+                        isMenuExpanded = false
+                        isInfoSheetVisible = true
+                    },
+                )
+            }
+        }
+    }
+
+    if (isInfoSheetVisible) {
+        track?.let { currentTrack ->
+            TrackInfoBottomSheet(
+                track = currentTrack,
+                onDismissRequest = {
+                    isInfoSheetVisible = false
+                },
+            )
+        }
     }
 }
 
