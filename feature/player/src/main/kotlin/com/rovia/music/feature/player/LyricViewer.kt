@@ -1,8 +1,12 @@
 package com.rovia.music.feature.player
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,11 +20,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +38,7 @@ import com.rovia.music.core.model.SyncedLyrics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import kotlin.math.abs
+import kotlin.math.min
 
 @Composable
 fun LyricViewer(
@@ -146,14 +155,6 @@ fun LyricViewer(
          * ======================================================
          * 2. Menjaga lyric aktif tepat di tengah.
          * ======================================================
-         *
-         * Kita menggunakan posisi item yang benar-benar sedang
-         * tampil di layar, lalu menghitung selisihnya terhadap
-         * pusat viewport.
-         *
-         * Pergerakan dilakukan sedikit demi sedikit dari dalam
-         * coroutine sehingga scrollBy() dipanggil pada konteks
-         * suspend yang benar.
          */
         LaunchedEffect(
             activeLineIndex,
@@ -175,9 +176,6 @@ fun LyricViewer(
 
             /*
              * Pastikan lyric aktif terlihat terlebih dahulu.
-             *
-             * Ini terutama diperlukan ketika user menekan lyric
-             * jauh di bagian bawah atau melakukan seek manual.
              */
             var layoutInfo =
                 listState.layoutInfo
@@ -212,11 +210,7 @@ fun LyricViewer(
             }
 
             /*
-             * Lakukan koreksi posisi dalam beberapa langkah kecil.
-             *
-             * Ini menghindari masalah positioning yang terjadi ketika
-             * kita langsung memaksa animateScrollToItem() dengan offset
-             * statis.
+             * Koreksi posisi dalam beberapa langkah kecil.
              */
             repeat(18) {
                 layoutInfo =
@@ -270,8 +264,6 @@ fun LyricViewer(
 
                 /*
                  * Bergerak sebagian dari jarak yang tersisa.
-                 *
-                 * Ini membuat gerakan halus tanpa overshoot.
                  */
                 val scrollStep =
                     distanceFromCenter * 0.45f
@@ -287,9 +279,6 @@ fun LyricViewer(
 
             /*
              * Koreksi terakhir dengan posisi aktual.
-             *
-             * Ini penting untuk memastikan lyric benar-benar
-             * berhenti tepat di tengah, bukan hanya mendekatinya.
              */
             layoutInfo =
                 listState.layoutInfo
@@ -384,9 +373,6 @@ fun LyricViewer(
                         activeWordIndex,
                     isActive = isActive,
                     onClick = {
-                        /*
-                         * Click-to-seek tetap sama seperti sebelumnya.
-                         */
                         onSeek(
                             line.startTimeMs,
                         )
@@ -421,6 +407,11 @@ private fun LyricLineContent(
             } else {
                 inactiveColor
             },
+        animationSpec =
+            tween(
+                durationMillis = 350,
+                easing = FastOutSlowInEasing,
+            ),
         label = "lyric-line-color",
     )
 
@@ -483,26 +474,99 @@ private fun LyricLineContent(
             }
         }
 
-    Text(
-        text = text,
+    val density = LocalDensity.current
+
+    /*
+     * Ukur lebar lyric yang benar-benar dirender.
+     *
+     * Ini digunakan agar lyric yang sangat panjang tidak
+     * diperbesar melebihi lebar viewport.
+     */
+    var textWidthPx by remember(text) {
+        mutableIntStateOf(0)
+    }
+
+    BoxWithConstraints(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clickable(
                     onClick = onClick,
-                )
-                .padding(
-                    vertical = 2.dp,
                 ),
-        color = lineColor,
-        style =
-            if (isActive) {
-                MaterialTheme.typography.titleLarge
+        contentAlignment =
+            Alignment.CenterStart,
+    ) {
+        val availableWidthPx =
+            with(density) {
+                maxWidth.toPx()
+            }
+
+        val safeWidthPx =
+            (
+                availableWidthPx -
+                    with(density) {
+                        12.dp.toPx()
+                    }
+            ).coerceAtLeast(1f)
+
+        val adaptiveScale =
+            if (
+                isActive &&
+                    textWidthPx > 0
+            ) {
+                min(
+                    1.10f,
+                    safeWidthPx /
+                        textWidthPx
+                            .toFloat(),
+                ).coerceAtLeast(1f)
+            } else if (isActive) {
+                1.10f
             } else {
-                MaterialTheme.typography.bodyLarge
+                1.0f
+            }
+
+        val lineScale by animateFloatAsState(
+            targetValue = adaptiveScale,
+            animationSpec =
+                tween(
+                    durationMillis = 400,
+                    easing = FastOutSlowInEasing,
+                ),
+            label = "lyric-line-scale",
+        )
+
+        Text(
+            text = text,
+            modifier =
+                Modifier
+                    .graphicsLayer {
+                        scaleX = lineScale
+                        scaleY = lineScale
+
+                        /*
+                         * Tetap rata kiri ketika membesar.
+                         */
+                        transformOrigin =
+                            TransformOrigin(
+                                pivotFractionX = 0f,
+                                pivotFractionY = 0.5f,
+                            )
+                    },
+            color = lineColor,
+            style =
+                if (isActive) {
+                    MaterialTheme.typography.titleLarge
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
+            maxLines = 3,
+            onTextLayout = { layoutResult ->
+                textWidthPx =
+                    layoutResult.size.width
             },
-        maxLines = 3,
-    )
+        )
+    }
 }
 
 private fun findActiveLineIndex(
