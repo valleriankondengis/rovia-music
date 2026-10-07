@@ -4,11 +4,11 @@
 
 package com.rovia.music.core.ui.component
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,24 +55,14 @@ fun MiniPlayer(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onOpenPlayer: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val track =
         playbackState.currentTrack
             ?: return
 
-    val cardModifier =
-        if (onOpenPlayer != null) {
-            modifier.clickable(
-                onClick = onOpenPlayer,
-            )
-        } else {
-            modifier
-        }
-
     Card(
-        modifier = cardModifier,
+        modifier = modifier,
         shape = MiniPlayerShape,
         elevation =
             CardDefaults.cardElevation(
@@ -84,17 +74,47 @@ fun MiniPlayer(
                 disabledElevation = 0.dp,
             ),
     ) {
-        Row(
+        MiniPlayerContent(
+            playbackState =
+                playbackState,
+            onPrevious =
+                onPrevious,
+            onPlayPause =
+                onPlayPause,
+            onNext =
+                onNext,
+            showArtwork = true,
             modifier =
-                Modifier.padding(
-                    horizontal = 12.dp,
-                    vertical = 12.dp,
-                ),
-            verticalAlignment =
-                Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.spacedBy(12.dp),
-        ) {
+                Modifier,
+        )
+    }
+}
+
+@Composable
+fun MiniPlayerContent(
+    playbackState: PlaybackState,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    showArtwork: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    val track =
+        playbackState.currentTrack
+            ?: return
+
+    Row(
+        modifier =
+            modifier.padding(
+                horizontal = 12.dp,
+                vertical = 12.dp,
+            ),
+        verticalAlignment =
+            Alignment.CenterVertically,
+        horizontalArrangement =
+            Arrangement.spacedBy(12.dp),
+    ) {
+        if (showArtwork) {
             AlbumArtwork(
                 artworkUri =
                     track.artworkUri,
@@ -109,53 +129,58 @@ fun MiniPlayer(
                         .shapes
                         .large,
             )
-
-            Column(
+        } else {
+            Spacer(
                 modifier =
-                    Modifier.weight(1f),
-                verticalArrangement =
-                    Arrangement.spacedBy(3.dp),
-            ) {
+                    Modifier.size(56.dp),
+            )
+        }
+
+        Column(
+            modifier =
+                Modifier.weight(1f),
+            verticalArrangement =
+                Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = track.title,
+                style =
+                    MaterialTheme
+                        .typography
+                        .titleMedium,
+                maxLines = 1,
+                overflow =
+                    TextOverflow.Ellipsis,
+            )
+
+            track.artist?.let { artist ->
                 Text(
-                    text = track.title,
+                    text = artist,
                     style =
                         MaterialTheme
                             .typography
-                            .titleMedium,
+                            .bodyMedium,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
                     maxLines = 1,
                     overflow =
                         TextOverflow.Ellipsis,
                 )
-
-                track.artist?.let { artist ->
-                    Text(
-                        text = artist,
-                        style =
-                            MaterialTheme
-                                .typography
-                                .bodyMedium,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant,
-                        maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis,
-                    )
-                }
             }
-
-            MiniPlayerButtonGroup(
-                isPlaying =
-                    playbackState.isPlaying,
-                onPrevious =
-                    onPrevious,
-                onPlayPause =
-                    onPlayPause,
-                onNext =
-                    onNext,
-            )
         }
+
+        MiniPlayerButtonGroup(
+            isPlaying =
+                playbackState.isPlaying,
+            onPrevious =
+                onPrevious,
+            onPlayPause =
+                onPlayPause,
+            onNext =
+                onNext,
+        )
     }
 }
 
