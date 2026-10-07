@@ -69,6 +69,10 @@ class PlayerViewModel(
             !isLyricsVisible.value
     }
 
+    fun hideLyrics() {
+        isLyricsVisible.value = false
+    }
+
     private fun observeCurrentTrack() {
         viewModelScope.launch {
             playbackController.playbackState
@@ -87,7 +91,6 @@ class PlayerViewModel(
     private suspend fun loadLyrics(
         track: com.rovia.music.core.model.Track?,
     ) {
-        isLyricsVisible.value = false
         lyrics.value = null
 
         if (track == null) {

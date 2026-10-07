@@ -4,6 +4,7 @@
 
 package com.rovia.music.core.ui.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,16 +55,24 @@ fun MiniPlayer(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onOpenPlayer: () -> Unit,
+    onOpenPlayer: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val track =
         playbackState.currentTrack
             ?: return
 
+    val cardModifier =
+        if (onOpenPlayer != null) {
+            modifier.clickable(
+                onClick = onOpenPlayer,
+            )
+        } else {
+            modifier
+        }
+
     Card(
-        onClick = onOpenPlayer,
-        modifier = modifier,
+        modifier = cardModifier,
         shape = MiniPlayerShape,
         elevation =
             CardDefaults.cardElevation(

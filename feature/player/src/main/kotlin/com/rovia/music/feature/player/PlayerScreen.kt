@@ -107,90 +107,111 @@ fun PlayerScreen(
             MaterialTheme.colorScheme.background,
         tonalElevation = 0.dp,
     ) {
-        if (isLandscape) {
-            LandscapePlayerContent(
-                track = track,
-                playbackState = playbackState,
-                lyrics = lyrics,
-                hasLyrics = hasLyrics,
-                isLyricsLoading = isLyricsLoading,
-                isLyricsVisible = isLyricsVisible,
-                onToggleLyrics = onToggleLyrics,
-                onClose = onClose,
-                seekPosition = seekPosition,
-                duration = duration,
-                displayedIsPlaying = displayedIsPlaying,
-                motionEffectsSpec = motionEffectsSpec,
-                onSeekPositionChange = { position ->
-                    if (!isSeeking) {
-                        isPlayingBeforeSeek =
-                            playbackState.isPlaying
-                    }
+        when {
+            isLyricsVisible -> {
+                PlayerLyricsFullscreenContent(
+                    track = track,
+                    playbackState = playbackState,
+                    lyrics = lyrics,
+                    hasLyrics = hasLyrics,
+                    isLyricsLoading = isLyricsLoading,
+                    isLyricsVisible = isLyricsVisible,
+                    onToggleLyrics = onToggleLyrics,
+                    onClose = onClose,
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onLyricSeek = onSeek,
+                )
+            }
 
-                    isSeeking = true
-                    seekPosition = position
-                },
-                onSeekFinished = {
-                    onSeek(
-                        seekPosition
-                            .toLong()
-                            .coerceIn(
-                                0L,
-                                duration,
-                            ),
-                    )
+            isLandscape -> {
+                LandscapePlayerContent(
+                    track = track,
+                    playbackState = playbackState,
+                    lyrics = lyrics,
+                    hasLyrics = hasLyrics,
+                    isLyricsLoading = isLyricsLoading,
+                    isLyricsVisible = isLyricsVisible,
+                    onToggleLyrics = onToggleLyrics,
+                    onClose = onClose,
+                    seekPosition = seekPosition,
+                    duration = duration,
+                    displayedIsPlaying = displayedIsPlaying,
+                    motionEffectsSpec = motionEffectsSpec,
+                    onSeekPositionChange = { position ->
+                        if (!isSeeking) {
+                            isPlayingBeforeSeek =
+                                playbackState.isPlaying
+                        }
 
-                    isSeeking = false
-                },
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                onRepeatModeChange = onRepeatModeChange,
-                onShuffleEnabledChange = onShuffleEnabledChange,
-                onLyricSeek = onSeek,
-            )
-        } else {
-            PortraitPlayerContent(
-                track = track,
-                playbackState = playbackState,
-                lyrics = lyrics,
-                hasLyrics = hasLyrics,
-                isLyricsLoading = isLyricsLoading,
-                isLyricsVisible = isLyricsVisible,
-                onToggleLyrics = onToggleLyrics,
-                onClose = onClose,
-                seekPosition = seekPosition,
-                duration = duration,
-                displayedIsPlaying = displayedIsPlaying,
-                motionEffectsSpec = motionEffectsSpec,
-                onSeekPositionChange = { position ->
-                    if (!isSeeking) {
-                        isPlayingBeforeSeek =
-                            playbackState.isPlaying
-                    }
+                        isSeeking = true
+                        seekPosition = position
+                    },
+                    onSeekFinished = {
+                        onSeek(
+                            seekPosition
+                                .toLong()
+                                .coerceIn(
+                                    0L,
+                                    duration,
+                                ),
+                        )
 
-                    isSeeking = true
-                    seekPosition = position
-                },
-                onSeekFinished = {
-                    onSeek(
-                        seekPosition
-                            .toLong()
-                            .coerceIn(
-                                0L,
-                                duration,
-                            ),
-                    )
+                        isSeeking = false
+                    },
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onRepeatModeChange = onRepeatModeChange,
+                    onShuffleEnabledChange = onShuffleEnabledChange,
+                    onLyricSeek = onSeek,
+                )
+            }
 
-                    isSeeking = false
-                },
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                onRepeatModeChange = onRepeatModeChange,
-                onShuffleEnabledChange = onShuffleEnabledChange,
-                onLyricSeek = onSeek,
-            )
+            else -> {
+                PortraitPlayerContent(
+                    track = track,
+                    playbackState = playbackState,
+                    lyrics = lyrics,
+                    hasLyrics = hasLyrics,
+                    isLyricsLoading = isLyricsLoading,
+                    isLyricsVisible = isLyricsVisible,
+                    onToggleLyrics = onToggleLyrics,
+                    onClose = onClose,
+                    seekPosition = seekPosition,
+                    duration = duration,
+                    displayedIsPlaying = displayedIsPlaying,
+                    motionEffectsSpec = motionEffectsSpec,
+                    onSeekPositionChange = { position ->
+                        if (!isSeeking) {
+                            isPlayingBeforeSeek =
+                                playbackState.isPlaying
+                        }
+
+                        isSeeking = true
+                        seekPosition = position
+                    },
+                    onSeekFinished = {
+                        onSeek(
+                            seekPosition
+                                .toLong()
+                                .coerceIn(
+                                    0L,
+                                    duration,
+                                ),
+                        )
+
+                        isSeeking = false
+                    },
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onRepeatModeChange = onRepeatModeChange,
+                    onShuffleEnabledChange = onShuffleEnabledChange,
+                    onLyricSeek = onSeek,
+                )
+            }
         }
     }
 }

@@ -4,11 +4,9 @@
 
 package com.rovia.music.feature.player
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,18 +20,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun LandscapePlayerContent(
@@ -59,6 +69,27 @@ internal fun LandscapePlayerContent(
     onShuffleEnabledChange: (Boolean) -> Unit,
     onLyricSeek: (Long) -> Unit,
 ) {
+    val showInlineLyrics =
+        hasLyrics &&
+            !isLyricsLoading
+
+    var resolvedHasLyrics by remember {
+        mutableStateOf(hasLyrics)
+    }
+
+    LaunchedEffect(
+        track?.id,
+        hasLyrics,
+        isLyricsLoading,
+    ) {
+        if (!isLyricsLoading) {
+            delay(180)
+
+            resolvedHasLyrics =
+                hasLyrics
+        }
+    }
+
     Row(
         modifier =
             Modifier
@@ -87,7 +118,8 @@ internal fun LandscapePlayerContent(
             )
 
             Spacer(
-                modifier = Modifier.height(12.dp),
+                modifier =
+                    Modifier.height(12.dp),
             )
 
             BoxWithConstraints(
@@ -98,43 +130,34 @@ internal fun LandscapePlayerContent(
                 contentAlignment =
                     Alignment.Center,
             ) {
-                val artworkSize =
+                val artworkTargetSize =
                     minOf(
                         maxWidth * 0.82f,
-                        maxHeight * 0.82f,
+                        maxHeight *
+                            if (resolvedHasLyrics) {
+                                0.76f
+                            } else {
+                                0.82f
+                            },
                     )
 
-                AnimatedContent(
-                    targetState = isLyricsVisible,
-                    modifier = Modifier.fillMaxSize(),
-                    transitionSpec = {
-                        fadeIn(
-                            animationSpec = motionEffectsSpec,
-                        ).togetherWith(
-                            fadeOut(
-                                animationSpec = motionEffectsSpec,
-                            ),
-                        ).using(null)
-                    },
-                    label = "player-landscape-content-transition",
-                ) { showLyrics ->
-                    if (showLyrics) {
-                        PlayerLyric(
-                            lyrics = lyrics,
-                            hasLyrics = hasLyrics,
-                            isLyricsLoading = isLyricsLoading,
-                            playbackPositionMs = playbackState.positionMs,
-                            onSeek = onLyricSeek,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        PlayerArtwork(
-                            track = track,
-                            size = artworkSize,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                }
+                val artworkSize by animateDpAsState(
+                    targetValue = artworkTargetSize,
+                    animationSpec =
+                        tween(
+                            durationMillis = 300,
+                        ),
+                    label = "landscapeArtworkSize",
+                )
+
+                PlayerArtwork(
+                    track = track,
+                    size = artworkSize,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(artworkSize),
+                )
             }
         }
 
@@ -164,6 +187,31 @@ internal fun LandscapePlayerContent(
                             Arrangement.Center
                         },
                 ) {
+                    if (showInlineLyrics) {
+                        PlayerCurrentLyricLine(
+                            lyrics = lyrics,
+                            playbackPositionMs =
+                                playbackState.positionMs,
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(8.dp),
+                        )
+                    } else {
+                        Spacer(
+                            modifier =
+                                Modifier.height(48.dp),
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(8.dp),
+                        )
+                    }
+
                     Text(
                         text =
                             track?.title
@@ -237,7 +285,7 @@ internal fun LandscapePlayerContent(
                                         ) {
                                             16.dp
                                         } else {
-                                            24.dp
+                                            28.dp
                                         },
                                 ),
                     )
@@ -297,5 +345,124 @@ internal fun LandscapePlayerContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PlayerCurrentLyricLine(
+    lyrics: SyncedLyrics?,
+    playbackPositionMs: Long,
+    modifier: Modifier = Modifier,
+) {
+    val activeLineIndex =
+        lyrics
+            ?.lines
+            ?.indexOfLast {
+                it.startTimeMs <= playbackPositionMs
+            }
+            ?: -1
+
+    val activeLine =
+        lyrics
+            ?.lines
+            ?.getOrNull(activeLineIndex)
+
+    if (
+        activeLine == null ||
+            activeLine.words.isEmpty()
+    ) {
+        Spacer(
+            modifier =
+                modifier.height(48.dp),
+        )
+
+        return
+    }
+
+    val activeWordIndex =
+        activeLine.words.indexOfLast {
+            it.startTimeMs <= playbackPositionMs
+        }
+
+    val inactiveColor =
+        MaterialTheme.colorScheme
+            .onSurfaceVariant
+            .copy(alpha = 0.55f)
+
+    val activeColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val lyricText =
+        buildAnnotatedString {
+            activeLine.words.forEachIndexed {
+                index,
+                word,
+                ->
+                val wordColor =
+                    when {
+                        activeWordIndex < 0 ->
+                            activeColor
+
+                        index == activeWordIndex ->
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+
+                        index < activeWordIndex ->
+                            activeColor
+
+                        else ->
+                            inactiveColor
+                    }
+
+                val wordFontWeight =
+                    when {
+                        index == activeWordIndex ->
+                            FontWeight.Bold
+
+                        index < activeWordIndex ->
+                            FontWeight.Medium
+
+                        else ->
+                            FontWeight.Normal
+                    }
+
+                pushStyle(
+                    SpanStyle(
+                        color = wordColor,
+                        fontWeight = wordFontWeight,
+                    ),
+                )
+
+                append(word.text)
+
+                if (
+                    index < activeLine.words.lastIndex
+                ) {
+                    append(" ")
+                }
+
+                pop()
+            }
+        }
+
+    Box(
+        modifier =
+            modifier.height(48.dp),
+        contentAlignment =
+            Alignment.CenterStart,
+    ) {
+        BasicText(
+            text = lyricText,
+            modifier =
+                Modifier.fillMaxWidth(),
+            maxLines = 2,
+            overflow = TextOverflow.Clip,
+            style =
+                MaterialTheme.typography.titleMedium.copy(
+                    textAlign = TextAlign.Start,
+                    lineHeight = 22.sp,
+                ),
+        )
     }
 }

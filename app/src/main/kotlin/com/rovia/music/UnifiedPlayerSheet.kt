@@ -562,10 +562,17 @@ fun UnifiedPlayerSheet(
         /*
          * Navigation bar
          *
-         * The NavigationBar composable is also only visually
-         * present on Home / Search / Library.
+         * IMPORTANT:
+         * Do not keep an invisible NavigationBar layer above
+         * the fullscreen Player. When progress reaches 1f,
+         * the NavigationBar is removed from composition so it
+         * cannot intercept touches intended for the fullscreen
+         * lyrics MiniPlayer.
          */
-        if (showBottomChrome) {
+        if (
+            showBottomChrome &&
+                progress < 0.999f
+        ) {
             Box(
                 modifier =
                     Modifier
@@ -580,7 +587,7 @@ fun UnifiedPlayerSheet(
                                         progress
                                 ).coerceIn(
                                     0f,
-                                    1f
+                                    1f,
                                 )
 
                             val navigationTranslation =

@@ -57,9 +57,14 @@ fun PlayerRoute(
         onRepeatModeChange = { repeatMode ->
             val nextMode =
                 when (repeatMode) {
-                    RepeatMode.OFF -> RepeatMode.ALL
-                    RepeatMode.ALL -> RepeatMode.ONE
-                    RepeatMode.ONE -> RepeatMode.OFF
+                    RepeatMode.OFF ->
+                        RepeatMode.ALL
+
+                    RepeatMode.ALL ->
+                        RepeatMode.ONE
+
+                    RepeatMode.ONE ->
+                        RepeatMode.OFF
                 }
 
             playbackController.setRepeatMode(
@@ -73,7 +78,10 @@ fun PlayerRoute(
         },
         onSeek =
             playbackController::seekTo,
-        onClose = onClose,
+        onClose = {
+            viewModel.hideLyrics()
+            onClose()
+        },
         modifier = modifier,
     )
 }
