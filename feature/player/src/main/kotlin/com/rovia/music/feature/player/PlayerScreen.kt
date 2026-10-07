@@ -121,6 +121,29 @@ fun PlayerScreen(
                     onPrevious = onPrevious,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
+                    seekPosition = seekPosition,
+                    duration = duration,
+                    onSeekPositionChange = { position ->
+                        if (!isSeeking) {
+                            isPlayingBeforeSeek =
+                                playbackState.isPlaying
+                        }
+
+                        isSeeking = true
+                        seekPosition = position
+                    },
+                    onSeekFinished = {
+                        onSeek(
+                            seekPosition
+                                .toLong()
+                                .coerceIn(
+                                    0L,
+                                    duration,
+                                ),
+                        )
+
+                        isSeeking = false
+                    },
                     onLyricSeek = onSeek,
                 )
             }

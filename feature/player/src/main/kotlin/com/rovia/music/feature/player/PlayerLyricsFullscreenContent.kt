@@ -31,6 +31,10 @@ internal fun PlayerLyricsFullscreenContent(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    seekPosition: Float,
+    duration: Long,
+    onSeekPositionChange: (Float) -> Unit,
+    onSeekFinished: (Long) -> Unit,
     onLyricSeek: (Long) -> Unit,
 ) {
     Column(
@@ -77,10 +81,13 @@ internal fun PlayerLyricsFullscreenContent(
 
         PlayerLyricsMiniPlayer(
             playbackState = playbackState,
+            positionMs = seekPosition,
+            durationMs = duration,
+            onPositionChange = onSeekPositionChange,
+            onSeekFinished = onSeekFinished,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
             onNext = onNext,
-            onSeek = onLyricSeek,
             modifier =
                 Modifier.fillMaxWidth(),
         )
