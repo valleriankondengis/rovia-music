@@ -11,14 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
-import com.rovia.music.core.ui.component.MiniPlayer
 
 @Composable
 internal fun PlayerLyricsFullscreenContent(
@@ -41,8 +39,10 @@ internal fun PlayerLyricsFullscreenContent(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .padding(
-                    horizontal = 24.dp,
-                    vertical = 16.dp,
+                    start = 24.dp,
+                    top = 16.dp,
+                    end = 24.dp,
+                    bottom = 20.dp,
                 ),
     ) {
         PlayerActionButtonGroup(
@@ -62,7 +62,8 @@ internal fun PlayerLyricsFullscreenContent(
             lyrics = lyrics,
             hasLyrics = hasLyrics,
             isLyricsLoading = isLyricsLoading,
-            playbackPositionMs = playbackState.positionMs,
+            playbackPositionMs =
+                playbackState.positionMs,
             onSeek = onLyricSeek,
             modifier =
                 Modifier
@@ -74,13 +75,14 @@ internal fun PlayerLyricsFullscreenContent(
             modifier = Modifier.height(16.dp),
         )
 
-        MiniPlayer(
+        PlayerLyricsMiniPlayer(
             playbackState = playbackState,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
             onNext = onNext,
-            onOpenPlayer = {},
-            modifier = Modifier.fillMaxWidth(),
+            onSeek = onLyricSeek,
+            modifier =
+                Modifier.fillMaxWidth(),
         )
     }
 }
