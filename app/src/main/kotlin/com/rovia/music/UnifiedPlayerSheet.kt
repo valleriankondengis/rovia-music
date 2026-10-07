@@ -2,34 +2,42 @@ package com.rovia.music
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.playback.PlaybackController
-import com.rovia.music.core.ui.component.MiniPlayer
+import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.player.PlayerRoute
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -48,27 +56,111 @@ fun UnifiedPlayerSheet(
     val density =
         LocalDensity.current
 
+    val configuration =
+        LocalConfiguration.current
+
     val scope =
         rememberCoroutineScope()
 
     val motionScheme =
         MaterialTheme.motionScheme
 
-    var progress by rememberSaveable {
-        mutableFloatStateOf(0f)
-    }
+    /*
+     * 0f = collapsed / MiniPlayer
+     * 1f = expanded / Full Player
+     *
+     * rememberSaveable is important here.
+     *
+     * The Player sheet is not a Navigation 3 destination.
+     * Therefore its expanded/collapsed state must survive
+     * configuration changes such as portrait <-> landscape.
+     */
+    val progressState =
+        rememberSaveable {
+            mutableFloatStateOf(0f)
+        }
 
-    var miniPlayerDismissProgress by remember {
-        mutableFloatStateOf(0f)
-    }
+    /*
+     * Separate visual progress for MiniPlayer dismissal.
+     *
+     * This state intentionally does not survive rotation.
+     */
+    val miniPlayerDismissProgressState =
+        remember {
+            mutableFloatStateOf(0f)
+        }
 
-    var miniPlayerGestureDirection by remember {
-        mutableFloatStateOf(0f)
+    /*
+     * Animation jobs are explicitly tracked so a new gesture
+     * can always cancel the previous settle animation.
+     */
+    val sheetSettleJobState =
+        remember {
+            mutableStateOf<Job?>(null)
+        }
+
+    val dismissSettleJobState =
+        remember {
+            mutableStateOf<Job?>(null)
+        }
+
+    val progress =
+        progressState.floatValue
+
+    val miniPlayerDismissProgress =
+        miniPlayerDismissProgressState.floatValue
+
+    val collapsedHeight =
+        80.dp
+
+    /*
+     * NavigationBar contract:
+     *
+     * NavigationBarHeight = 80dp
+     * NavigationBarBottomPadding = 20dp
+     * MiniPlayerNavigationSpacing = 8dp
+     *
+     * Therefore the collapsed MiniPlayer bottom position is:
+     *
+     * 80dp + 20dp + 8dp = 108dp
+     */
+    val miniPlayerBottomInset =
+        NavigationBarBottomInset +
+            MiniPlayerNavigationSpacing
+
+    /*
+     * MiniPlayer and NavigationBar both use 14dp horizontal
+     * inset when collapsed.
+     *
+     * The Player surface expands that inset to 0dp as it opens.
+     */
+    val currentHorizontalPadding =
+        lerpDp(
+            start = 14.dp,
+            stop = 0.dp,
+            fraction = progress,
+        )
+
+    val screenHeight =
+        configuration
+            .screenHeightDp
+            .dp
+
+    /*
+     * Restore the external progress observer after a
+     * configuration change.
+     *
+     * The local saveable state is restored before this effect
+     * runs, so the restored Player state is propagated.
+     */
+    LaunchedEffect(Unit) {
+        onProgressChanged(
+            progressState.floatValue,
+        )
     }
 
     LaunchedEffect(track) {
-        miniPlayerDismissProgress = 0f
-        miniPlayerGestureDirection = 0f
+        miniPlayerDismissProgressState.floatValue = 0f
     }
 
     fun setProgress(
@@ -80,14 +172,26 @@ fun UnifiedPlayerSheet(
                 1f,
             )
 
-        progress = clamped
+        progressState.floatValue = clamped
         onProgressChanged(clamped)
+    }
+
+    fun cancelSheetAnimation() {
+        sheetSettleJobState.value?.cancel()
+        sheetSettleJobState.value = null
+    }
+
+    fun cancelDismissAnimation() {
+        dismissSettleJobState.value?.cancel()
+        dismissSettleJobState.value = null
     }
 
     fun settleTo(
         target: Float,
         onSettled: (() -> Unit)? = null,
     ) {
+        cancelSheetAnimation()
+
         val targetProgress =
             target.coerceIn(
                 0f,
@@ -95,38 +199,43 @@ fun UnifiedPlayerSheet(
             )
 
         val startProgress =
-            progress.coerceIn(
+            progressState.floatValue.coerceIn(
                 0f,
                 1f,
             )
 
-        scope.launch {
-            val animation =
-                Animatable(startProgress)
+        sheetSettleJobState.value =
+            scope.launch {
+                try {
+                    val animation =
+                        Animatable(
+                            startProgress,
+                        )
 
-            animation.animateTo(
-                targetValue =
-                    targetProgress,
-                animationSpec =
-                    motionScheme
-                        .defaultSpatialSpec(),
-            ) {
-                progress =
-                    value.coerceIn(
-                        0f,
-                        1f,
-                    )
+                    animation.animateTo(
+                        targetValue =
+                            targetProgress,
+                        animationSpec =
+                            motionScheme
+                                .defaultSpatialSpec(),
+                    ) {
+                        setProgress(value)
+                    }
+
+                    setProgress(targetProgress)
+                    onSettled?.invoke()
+                } finally {
+                    sheetSettleJobState.value = null
+                }
             }
-
-            setProgress(targetProgress)
-            onSettled?.invoke()
-        }
     }
 
     fun settleMiniPlayerDismiss(
         target: Float,
         onSettled: (() -> Unit)? = null,
     ) {
+        cancelDismissAnimation()
+
         val targetProgress =
             target.coerceIn(
                 0f,
@@ -134,43 +243,56 @@ fun UnifiedPlayerSheet(
             )
 
         val startProgress =
-            miniPlayerDismissProgress.coerceIn(
-                0f,
-                1f,
-            )
+            miniPlayerDismissProgressState
+                .floatValue
+                .coerceIn(
+                    0f,
+                    1f,
+                )
 
-        scope.launch {
-            val animation =
-                Animatable(startProgress)
+        dismissSettleJobState.value =
+            scope.launch {
+                try {
+                    val animation =
+                        Animatable(
+                            startProgress,
+                        )
 
-            animation.animateTo(
-                targetValue =
-                    targetProgress,
-                animationSpec =
-                    motionScheme
-                        .defaultSpatialSpec(),
-            ) {
-                miniPlayerDismissProgress =
-                    value.coerceIn(
-                        0f,
-                        1f,
-                    )
+                    animation.animateTo(
+                        targetValue =
+                            targetProgress,
+                        animationSpec =
+                            motionScheme
+                                .defaultSpatialSpec(),
+                    ) {
+                        miniPlayerDismissProgressState
+                            .floatValue =
+                            value.coerceIn(
+                                0f,
+                                1f,
+                            )
+                    }
+
+                    miniPlayerDismissProgressState
+                        .floatValue =
+                        targetProgress
+
+                    onSettled?.invoke()
+                } finally {
+                    dismissSettleJobState.value = null
+                }
             }
-
-            miniPlayerDismissProgress =
-                targetProgress
-
-            onSettled?.invoke()
-        }
     }
 
     fun expand() {
-        settleMiniPlayerDismiss(0f)
+        cancelDismissAnimation()
+        miniPlayerDismissProgressState.floatValue = 0f
         settleTo(1f)
     }
 
     fun collapse() {
-        settleMiniPlayerDismiss(0f)
+        cancelDismissAnimation()
+        miniPlayerDismissProgressState.floatValue = 0f
         settleTo(0f)
     }
 
@@ -187,14 +309,16 @@ fun UnifiedPlayerSheet(
     ) { backProgress ->
         try {
             backProgress.collect { backEvent ->
+                cancelSheetAnimation()
+
                 val nextProgress =
                     (
                         1f -
                             backEvent.progress
-                    ).coerceIn(
-                        0f,
-                        1f,
-                    )
+                        ).coerceIn(
+                            0f,
+                            1f,
+                        )
 
                 setProgress(nextProgress)
             }
@@ -205,52 +329,136 @@ fun UnifiedPlayerSheet(
         }
     }
 
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize(),
-    ) {
-        /*
-         * Full Player
-         */
-        if (
-            track != null &&
-                progress > 0f
-        ) {
-            val cornerProgress =
-                (1f - progress)
-                    .coerceIn(
-                        0f,
-                        1f,
-                    )
+    if (track != null) {
+        val currentHeight =
+            lerpDp(
+                start = collapsedHeight,
+                stop = screenHeight,
+                fraction = progress,
+            )
 
-            Box(
+        val currentBottomPadding =
+            lerpDp(
+                start = miniPlayerBottomInset,
+                stop = 0.dp,
+                fraction = progress,
+            )
+
+        val cornerTop =
+            lerpDp(
+                start = 32.dp,
+                stop = 0.dp,
+                fraction = progress,
+            )
+
+        val cornerBottom =
+            lerpDp(
+                start = 20.dp,
+                stop = 0.dp,
+                fraction = progress,
+            )
+
+        /*
+         * Preserve the exact MiniPlayer Card container color.
+         */
+        val miniPlayerContainerColor =
+            CardDefaults
+                .cardColors()
+                .containerColor
+
+        val surfaceColor =
+            lerpColor(
+                start = miniPlayerContainerColor,
+                stop =
+                    MaterialTheme
+                        .colorScheme
+                        .background,
+                fraction = progress,
+            )
+
+        val playerContentAlpha =
+            (
+                (
+                    progress -
+                        0.08f
+                    ) / 0.92f
+                ).coerceIn(
+                    0f,
+                    1f,
+                )
+
+        val miniPlayerContentAlpha =
+            (
+                1f -
+                    progress
+                ).coerceIn(
+                    0f,
+                    1f,
+                )
+
+        Box(
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    .padding(
+                        bottom =
+                            currentBottomPadding,
+                    ),
+        ) {
+            /*
+             * Single physical Player surface.
+             *
+             * Horizontal inset:
+             * 0f progress -> 14dp
+             * 1f progress -> 0dp
+             */
+            Surface(
                 modifier =
                     Modifier
-                        .fillMaxSize()
+                        .align(
+                            Alignment.BottomCenter,
+                        )
+                        .fillMaxWidth()
+                        .padding(
+                            start =
+                                currentHorizontalPadding,
+                            end =
+                                currentHorizontalPadding,
+                        )
+                        .height(
+                            currentHeight,
+                        )
                         .graphicsLayer {
-                            alpha =
-                                progress.coerceIn(
-                                    0f,
-                                    1f,
-                                )
+                            val dismissProgress =
+                                miniPlayerDismissProgress
+                                    .coerceIn(
+                                        0f,
+                                        1f,
+                                    )
 
-                            val scale =
+                            val dismissScale =
                                 (
-                                    0.96f +
-                                        0.04f *
-                                            progress
-                                ).coerceIn(
-                                    0.96f,
-                                    1f,
-                                )
+                                    1f -
+                                        (
+                                            0.04f *
+                                                dismissProgress
+                                            )
+                                    ).coerceIn(
+                                        0.96f,
+                                        1f,
+                                    )
 
-                            scaleX = scale
-                            scaleY = scale
+                            scaleX =
+                                dismissScale
+
+                            scaleY =
+                                dismissScale
 
                             translationY =
-                                48.dp.toPx() *
-                                    cornerProgress
+                                with(density) {
+                                    160.dp.toPx() *
+                                        dismissProgress
+                                }
 
                             transformOrigin =
                                 TransformOrigin(
@@ -259,247 +467,256 @@ fun UnifiedPlayerSheet(
                                 )
                         }
                         .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onVerticalDrag = {
-                                    change,
-                                    dragAmount,
-                                ->
-                                    if (
-                                        dragAmount > 0f
-                                    ) {
-                                        val height =
-                                            size.height
-                                                .coerceAtLeast(
-                                                    1,
-                                                )
-                                                .toFloat()
+                            /*
+                             * Stable gesture detector.
+                             *
+                             * Do not make progress a
+                             * pointerInput key.
+                             */
+                            var gestureDirection =
+                                0
 
-                                        progress =
-                                            (
-                                                progress -
-                                                    (
-                                                        dragAmount /
-                                                            height
-                                                    )
-                                            ).coerceIn(
+                            var dragProgress =
+                                0f
+
+                            var dragDismissProgress =
+                                0f
+
+                            var dragStartProgress =
+                                0f
+
+                            detectVerticalDragGestures(
+                                onDragStart = {
+                                    cancelSheetAnimation()
+                                    cancelDismissAnimation()
+
+                                    dragStartProgress =
+                                        progressState
+                                            .floatValue
+                                            .coerceIn(
                                                 0f,
                                                 1f,
                                             )
 
-                                        change.consume()
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (
-                                        progress >=
-                                            0.5f
-                                    ) {
-                                        expand()
-                                    } else {
-                                        collapse()
-                                    }
-                                },
-                                onDragCancel = {
-                                    if (
-                                        progress >=
-                                            0.5f
-                                    ) {
-                                        expand()
-                                    } else {
-                                        collapse()
-                                    }
-                                },
-                            )
-                        },
-            ) {
-                PlayerRoute(
-                    playbackController =
-                        playbackController,
-                    lyricsRepository =
-                        lyricsRepository,
-                    onClose = {
-                        collapse()
-                    },
-                )
-            }
-        }
+                                    dragProgress =
+                                        dragStartProgress
 
-        /*
-         * MiniPlayer
-         *
-         * The state remains alive inside this composable even
-         * when showBottomChrome is false.
-         */
-        if (
-            showBottomChrome &&
-                track != null &&
-                progress < 0.999f
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(
-                            Alignment.BottomCenter,
-                        )
-                        .fillMaxWidth()
-                        .padding(
-                            start = 14.dp,
-                            end = 14.dp,
-                            bottom =
-                                NavigationBarBottomInset +
-                                    MiniPlayerNavigationSpacing,
-                        )
-                        .graphicsLayer {
-                            alpha =
-                                (
-                                    1f -
-                                        progress
-                                ).coerceIn(
-                                    0f,
-                                    1f,
-                                )
+                                    dragDismissProgress =
+                                        miniPlayerDismissProgressState
+                                            .floatValue
+                                            .coerceIn(
+                                                0f,
+                                                1f,
+                                            )
 
-                            val scale =
-                                (
-                                    1f -
-                                        (
-                                            0.04f *
-                                                miniPlayerDismissProgress
-                                        )
-                                ).coerceIn(
-                                    0.96f,
-                                    1f,
-                                )
-
-                            scaleX = scale
-                            scaleY = scale
-
-                            translationY =
-                                160.dp.toPx() *
-                                    miniPlayerDismissProgress
-
-                            transformOrigin =
-                                TransformOrigin(
-                                    pivotFractionX = 0.5f,
-                                    pivotFractionY = 0f,
-                                )
-                        }
-                        .zIndex(1f)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onDragStart = {
-                                    miniPlayerGestureDirection =
-                                        0f
+                                    gestureDirection = 0
                                 },
                                 onVerticalDrag = {
                                     change,
                                     dragAmount,
                                 ->
                                     if (
-                                        miniPlayerGestureDirection ==
-                                            0f &&
+                                        gestureDirection ==
+                                            0 &&
                                             dragAmount != 0f
                                     ) {
-                                        miniPlayerGestureDirection =
+                                        gestureDirection =
                                             if (
                                                 dragAmount < 0f
                                             ) {
-                                                -1f
+                                                -1
                                             } else {
-                                                1f
+                                                1
                                             }
                                     }
 
                                     when {
                                         /*
-                                         * Swipe down:
-                                         * drag MiniPlayer downward.
+                                         * MiniPlayer ->
+                                         * downward dismissal.
                                          */
-                                        miniPlayerGestureDirection >
-                                            0f &&
-                                            dragAmount > 0f -> {
-                                            val height =
+                                        dragStartProgress <=
+                                            0.001f &&
+                                            gestureDirection > 0 -> {
+                                            if (
+                                                dragAmount > 0f
+                                            ) {
+                                                val collapsedHeightPx =
+                                                    with(density) {
+                                                        collapsedHeight
+                                                            .toPx()
+                                                    }.coerceAtLeast(
+                                                        1f,
+                                                    )
+
+                                                val resistedDrag =
+                                                    dragAmount /
+                                                        (
+                                                            collapsedHeightPx *
+                                                                1.35f
+                                                            )
+
+                                                dragDismissProgress =
+                                                    (
+                                                        dragDismissProgress +
+                                                            resistedDrag
+                                                        )
+                                                        .coerceIn(
+                                                            0f,
+                                                            1f,
+                                                        )
+
+                                                miniPlayerDismissProgressState
+                                                    .floatValue =
+                                                    dragDismissProgress
+
+                                                change.consume()
+                                            }
+                                        }
+
+                                        /*
+                                         * Upward gesture expands Player.
+                                         */
+                                        gestureDirection < 0 -> {
+                                            val heightPx =
                                                 size.height
                                                     .coerceAtLeast(
                                                         1,
                                                     )
                                                     .toFloat()
 
-                                            val resistedDrag =
-                                                dragAmount /
-                                                    (
-                                                        height *
-                                                            1.35f
+                                            dragProgress =
+                                                (
+                                                    dragProgress -
+                                                        (
+                                                            dragAmount /
+                                                                heightPx
+                                                            )
+                                                    ).coerceIn(
+                                                        0f,
+                                                        1f,
                                                     )
 
-                                            miniPlayerDismissProgress =
-                                                (
-                                                    miniPlayerDismissProgress +
-                                                        resistedDrag
-                                                ).coerceIn(
-                                                    0f,
-                                                    1f,
-                                                )
+                                            setProgress(
+                                                dragProgress,
+                                            )
 
                                             change.consume()
                                         }
 
                                         /*
-                                         * Swipe up:
-                                         * open Player interactively.
+                                         * Downward gesture collapses Player.
                                          */
-                                        miniPlayerGestureDirection <
-                                            0f &&
-                                            dragAmount < 0f -> {
-                                            val height =
-                                                size.height
-                                                    .coerceAtLeast(
-                                                        1,
-                                                    )
-                                                    .toFloat()
-
-                                            progress =
-                                                (
-                                                    progress -
-                                                        (
-                                                            dragAmount /
-                                                                height
+                                        gestureDirection > 0 &&
+                                            dragStartProgress >
+                                            0.001f -> {
+                                            if (
+                                                dragAmount > 0f
+                                            ) {
+                                                val heightPx =
+                                                    size.height
+                                                        .coerceAtLeast(
+                                                            1,
                                                         )
-                                                ).coerceIn(
-                                                    0f,
-                                                    1f,
+                                                        .toFloat()
+
+                                                dragProgress =
+                                                    (
+                                                        dragProgress -
+                                                            (
+                                                                dragAmount /
+                                                                    heightPx
+                                                                )
+                                                        ).coerceIn(
+                                                            0f,
+                                                            1f,
+                                                        )
+
+                                                setProgress(
+                                                    dragProgress,
                                                 )
 
-                                            change.consume()
+                                                change.consume()
+                                            }
                                         }
                                     }
                                 },
                                 onDragEnd = {
                                     when {
                                         /*
-                                         * Swipe down MiniPlayer.
+                                         * Dismiss MiniPlayer.
                                          */
-                                        miniPlayerGestureDirection >
-                                            0f -> {
+                                        dragStartProgress <=
+                                            0.001f &&
+                                            gestureDirection > 0 -> {
                                             if (
-                                                miniPlayerDismissProgress >=
+                                                dragDismissProgress >=
                                                     0.45f
                                             ) {
                                                 stopMiniPlayer()
                                             } else {
                                                 settleMiniPlayerDismiss(
-                                                    0f,
+                                                    target = 0f,
                                                 )
                                             }
                                         }
 
                                         /*
-                                         * Swipe up MiniPlayer.
+                                         * Finish upward expansion.
                                          */
-                                        miniPlayerGestureDirection <
-                                            0f &&
-                                            progress >=
-                                                0.5f -> {
+                                        gestureDirection < 0 -> {
+                                            if (
+                                                dragProgress >=
+                                                    0.5f
+                                            ) {
+                                                expand()
+                                            } else {
+                                                collapse()
+                                            }
+                                        }
+
+                                        /*
+                                         * Finish downward collapse.
+                                         */
+                                        gestureDirection > 0 &&
+                                            dragStartProgress >
+                                            0.001f -> {
+                                            if (
+                                                dragProgress >=
+                                                    0.5f
+                                            ) {
+                                                expand()
+                                            } else {
+                                                collapse()
+                                            }
+                                        }
+
+                                        else -> {
+                                            if (
+                                                dragProgress >=
+                                                    0.5f
+                                            ) {
+                                                expand()
+                                            } else {
+                                                collapse()
+                                            }
+                                        }
+                                    }
+
+                                    gestureDirection = 0
+                                },
+                                onDragCancel = {
+                                    when {
+                                        dragStartProgress <=
+                                            0.001f &&
+                                            gestureDirection > 0 -> {
+                                            settleMiniPlayerDismiss(
+                                                target = 0f,
+                                            )
+                                        }
+
+                                        dragProgress >=
+                                            0.5f -> {
                                             expand()
                                         }
 
@@ -508,70 +725,137 @@ fun UnifiedPlayerSheet(
                                         }
                                     }
 
-                                    miniPlayerGestureDirection =
-                                        0f
-                                },
-                                onDragCancel = {
-                                    if (
-                                        miniPlayerGestureDirection >
-                                            0f
-                                    ) {
-                                        settleMiniPlayerDismiss(
-                                            0f,
-                                        )
-                                    } else if (
-                                        progress >=
-                                            0.5f
-                                    ) {
-                                        expand()
-                                    } else {
-                                        collapse()
-                                    }
-
-                                    miniPlayerGestureDirection =
-                                        0f
+                                    gestureDirection = 0
                                 },
                             )
                         },
+                color =
+                    surfaceColor,
+                shape =
+                    RoundedCornerShape(
+                        topStart = cornerTop,
+                        topEnd = cornerTop,
+                        bottomStart = cornerBottom,
+                        bottomEnd = cornerBottom,
+                    ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
             ) {
-                MiniPlayer(
-                    playbackState =
-                        playbackState,
-                    onPrevious =
-                        playbackController::skipToPrevious,
-                    onPlayPause = {
-                        if (
-                            playbackState.isPlaying
-                        ) {
-                            playbackController.pause()
-                        } else {
-                            playbackController.resume()
-                        }
-                    },
-                    onNext =
-                        playbackController::skipToNext,
-                    onOpenPlayer = {
-                        expand()
-                    },
+                Box(
                     modifier =
-                        Modifier.fillMaxWidth(),
-                )
+                        Modifier.fillMaxSize(),
+                ) {
+                    /*
+                     * PlayerRoute only exists once the surface
+                     * starts expanding.
+                     */
+                    if (progress > 0f) {
+                        PlayerRoute(
+                            playbackController =
+                                playbackController,
+                            lyricsRepository =
+                                lyricsRepository,
+                            onClose = {
+                                collapse()
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha =
+                                            playerContentAlpha
+                                    },
+                        )
+                    }
+
+                    /*
+                     * MiniPlayer stays aligned with the
+                     * same surface.
+                     */
+                    if (
+                        showBottomChrome &&
+                            miniPlayerContentAlpha > 0f
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(
+                                        Alignment.BottomCenter,
+                                    )
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        enabled =
+                                            progress <
+                                                0.999f,
+                                        onClick = {
+                                            expand()
+                                        },
+                                    )
+                                    .graphicsLayer {
+                                        alpha =
+                                            miniPlayerContentAlpha
+                                    },
+                        ) {
+                            MiniPlayerContent(
+                                playbackState =
+                                    playbackState,
+                                onPrevious =
+                                    playbackController::skipToPrevious,
+                                onPlayPause = {
+                                    if (
+                                        playbackState.isPlaying
+                                    ) {
+                                        playbackController.pause()
+                                    } else {
+                                        playbackController.resume()
+                                    }
+                                },
+                                onNext =
+                                    playbackController::skipToNext,
+                                showArtwork = true,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
 
-        /*
-         * Navigation bar
-         *
-         * IMPORTANT:
-         * Do not keep an invisible NavigationBar layer above
-         * the fullscreen Player. When progress reaches 1f,
-         * the NavigationBar is removed from composition so it
-         * cannot intercept touches intended for the fullscreen
-         * lyrics MiniPlayer.
-         */
-        if (
-            showBottomChrome &&
-                progress < 0.999f
+    /*
+     * NavigationBar remains outside the Player surface.
+     *
+     * It is not composed when the Player is fully expanded,
+     * so it cannot intercept Player touch events.
+     */
+    if (
+        showBottomChrome &&
+            progress < 0.999f
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(2f)
+                    .graphicsLayer {
+                        alpha =
+                            (
+                                1f -
+                                    progress
+                                ).coerceIn(
+                                    0f,
+                                    1f,
+                                )
+
+                        translationY =
+                            with(density) {
+                                NavigationBarHeight
+                                    .toPx() *
+                                    0.15f *
+                                    progress
+                            }
+                    },
         ) {
             Box(
                 modifier =
@@ -579,32 +863,74 @@ fun UnifiedPlayerSheet(
                         .align(
                             Alignment.BottomCenter,
                         )
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            alpha =
-                                (
-                                    1f -
-                                        progress
-                                ).coerceIn(
-                                    0f,
-                                    1f,
-                                )
-
-                            val navigationTranslation =
-                                with(density) {
-                                    NavigationBarHeight
-                                        .toPx() *
-                                        0.15f
-                                }
-
-                            translationY =
-                                navigationTranslation *
-                                    progress
-                        }
-                        .zIndex(2f),
+                        .fillMaxWidth(),
             ) {
                 navigationBar()
             }
         }
     }
+}
+
+private fun lerpDp(
+    start: Dp,
+    stop: Dp,
+    fraction: Float,
+): Dp {
+    val clampedFraction =
+        fraction.coerceIn(
+            0f,
+            1f,
+        )
+
+    return (
+        start.value +
+            (
+                stop.value -
+                    start.value
+                ) *
+                clampedFraction
+        ).dp
+}
+
+private fun lerpColor(
+    start: Color,
+    stop: Color,
+    fraction: Float,
+): Color {
+    val clampedFraction =
+        fraction.coerceIn(
+            0f,
+            1f,
+        )
+
+    return Color(
+        red =
+            start.red +
+                (
+                    stop.red -
+                        start.red
+                    ) *
+                    clampedFraction,
+        green =
+            start.green +
+                (
+                    stop.green -
+                        start.green
+                    ) *
+                    clampedFraction,
+        blue =
+            start.blue +
+                (
+                    stop.blue -
+                        start.blue
+                    ) *
+                    clampedFraction,
+        alpha =
+            start.alpha +
+                (
+                    stop.alpha -
+                        start.alpha
+                    ) *
+                    clampedFraction,
+    )
 }
