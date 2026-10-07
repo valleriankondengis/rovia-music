@@ -13,13 +13,17 @@
     <string name="track_info_album_artist">Album artist</string>
     <string name="track_info_genre">Genre</string>
     <string name="track_info_year">Year</string>
+    <string name="track_info_release_date">Release date</string>
     <string name="track_info_track">Track</string>
     <string name="track_info_disc">Disc</string>
     <string name="track_info_cd_track">CD track</string>
     <string name="track_info_compilation">Compilation</string>
+    <string name="track_info_release_type">Release type</string>
     <string name="track_info_composer">Composer</string>
     <string name="track_info_author">Author</string>
     <string name="track_info_writer">Writer</string>
+    <string name="track_info_label">Label</string>
+    <string name="track_info_copyright">Copyright</string>
 
     <!-- Audio metadata -->
     <string name="track_info_duration">Duration</string>

@@ -15,10 +15,15 @@ data class Track(
     val writer: String? = null,
 
     val year: Int? = null,
+    val releaseDate: String? = null,
     val trackNumber: Int? = null,
     val discNumber: String? = null,
     val cdTrackNumber: String? = null,
     val compilation: String? = null,
+
+    val label: String? = null,
+    val copyright: String? = null,
+    val releaseType: String? = null,
 
     val durationMs: Long,
     val dateAddedEpochSeconds: Long,

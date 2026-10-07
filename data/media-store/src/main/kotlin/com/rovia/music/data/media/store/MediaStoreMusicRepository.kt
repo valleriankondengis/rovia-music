@@ -2,6 +2,7 @@ package com.rovia.music.data.media.store
 
 import android.content.ContentResolver
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
 import com.rovia.music.core.library.FolderFilterRepository
 import com.rovia.music.core.library.MusicRepository
@@ -15,8 +16,11 @@ class MediaStoreMusicRepository(
     private val folderFilterRepository: FolderFilterRepository,
 ) : MusicRepository {
 
+    private val applicationContext =
+        context.applicationContext
+
     private val contentResolver: ContentResolver =
-        context.applicationContext.contentResolver
+        applicationContext.contentResolver
 
     private val excludedFolders: StateFlow<Set<String>>
         get() =
@@ -540,6 +544,11 @@ class MediaStoreMusicRepository(
                             id,
                         )
 
+                    val embeddedMetadata =
+                        readEmbeddedMetadata(
+                            uri = uri,
+                        )
+
                     tracks +=
                         Track(
                             id = id,
@@ -554,12 +563,18 @@ class MediaStoreMusicRepository(
                             author = author,
                             writer = writer,
                             year = year,
+                            releaseDate =
+                                embeddedMetadata.releaseDate,
                             trackNumber = trackNumber,
                             discNumber = discNumber,
                             cdTrackNumber =
                                 cdTrackNumber,
                             compilation =
                                 compilation,
+                            label = null,
+                            copyright =
+                                embeddedMetadata.copyright,
+                            releaseType = null,
                             durationMs = durationMs,
                             dateAddedEpochSeconds =
                                 dateAddedEpochSeconds,
@@ -604,6 +619,60 @@ class MediaStoreMusicRepository(
             tracks
         }
 
+    private fun readEmbeddedMetadata(
+        uri: android.net.Uri,
+    ): EmbeddedMetadata {
+        return try {
+            MediaMetadataRetriever().use { retriever ->
+                retriever.setDataSource(
+                    applicationContext,
+                    uri,
+                )
+
+                EmbeddedMetadata(
+                    releaseDate =
+                        retriever
+                            .extractMetadata(
+                                MediaMetadataRetriever
+                                    .METADATA_KEY_DATE,
+                            )
+                            ?.takeUnless {
+                                it.isBlank()
+                            },
+                    copyright =
+                        extractCopyrightMetadata(
+                            retriever,
+                        ),
+                )
+            }
+        } catch (
+            _: Exception,
+        ) {
+            EmbeddedMetadata()
+        }
+    }
+
+    private fun extractCopyrightMetadata(
+        retriever: MediaMetadataRetriever,
+    ): String? {
+        /*
+         * Android's platform metadata contract contains the
+         * copyright key in the native MediaMetadataRetriever
+         * implementation. The public SDK surface does not expose
+         * a named constant consistently across API levels, so the
+         * stable platform key value is kept locally.
+         *
+         * 15 = METADATA_KEY_COPYRIGHT
+         */
+        return retriever
+            .extractMetadata(
+                COPYRIGHT_METADATA_KEY,
+            )
+            ?.takeUnless {
+                it.isBlank()
+            }
+    }
+
     private fun isExcludedFolder(
         relativePath: String?,
         excludedFolders: Set<String>,
@@ -641,5 +710,14 @@ class MediaStoreMusicRepository(
         }
 
         return "$normalized/"
+    }
+
+    private data class EmbeddedMetadata(
+        val releaseDate: String? = null,
+        val copyright: String? = null,
+    )
+
+    private companion object {
+        const val COPYRIGHT_METADATA_KEY = 15
     }
 }

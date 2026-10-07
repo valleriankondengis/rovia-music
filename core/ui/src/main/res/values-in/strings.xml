@@ -13,13 +13,17 @@
     <string name="track_info_album_artist">Artis album</string>
     <string name="track_info_genre">Genre</string>
     <string name="track_info_year">Tahun</string>
+    <string name="track_info_release_date">Tanggal rilis</string>
     <string name="track_info_track">Track</string>
     <string name="track_info_disc">Disc</string>
     <string name="track_info_cd_track">Track CD</string>
     <string name="track_info_compilation">Kompilasi</string>
+    <string name="track_info_release_type">Jenis rilis</string>
     <string name="track_info_composer">Komposer</string>
     <string name="track_info_author">Penulis</string>
     <string name="track_info_writer">Pencipta</string>
+    <string name="track_info_label">Label</string>
+    <string name="track_info_copyright">Hak cipta</string>
 
     <!-- Metadata audio -->
     <string name="track_info_duration">Durasi</string>
