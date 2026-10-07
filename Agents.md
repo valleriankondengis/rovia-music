@@ -59,18 +59,30 @@ The current application contains these real features:
 - In-memory playback queue.
 - Play, pause, resume, seek, previous, and next.
 - Global MiniPlayer while a track is active.
-- Unified expandable Player sheet.
-- Swipe up from MiniPlayer to open Player.
+- Unified expandable/morphing Player sheet implemented as a single physical Player surface.
+- MiniPlayer content morphs into the full Player surface through continuous sheet progress rather than a
+  separate navigation destination or shared-element transition.
+- Swipe up from the MiniPlayer area to open Player.
 - Swipe down from Player to collapse Player.
 - MiniPlayer downward dismissal gesture that stops playback and clears the queue when the dismissal threshold is reached.
+- Player expansion progress survives Activity recreation/portrait-landscape rotation through saved Compose state.
 - Android Predictive Back for the Player sheet.
 - Navigation 3 Predictive Back for normal destinations, with no forward or normal-pop destination animation.
 - MediaSession background playback and system media controls.
 - Real MediaStore artwork loading through Android thumbnails.
 - Audio technical information such as sample rate, bitrate, and MIME-derived format when metadata exists.
+- Additional real track metadata fields such as release date, label, copyright, and release type when the
+  source exposes them; missing values remain missing and are not fabricated.
 - Embedded local lyrics parsing.
 - Line-synced and word-synced lyrics.
 - Automatic lyric scrolling and active-word highlighting.
+- Active lyric-line scaling with adaptive handling for long lyric lines.
+- Fullscreen lyrics mode that replaces the Player artwork area with the lyric viewer.
+- Fullscreen lyrics mode remains active while Previous/Next changes tracks; only the lyric content is reloaded.
+- Dedicated fullscreen lyrics MiniPlayer with independent playback controls and a separate seekbar surface.
+- Fullscreen lyrics seekbar shows elapsed playback time on the left and uses a fully rounded pill container.
+- Fullscreen lyrics MiniPlayer uses the same fully rounded pill geometry for visual consistency with its seekbar.
+- Fullscreen lyrics bottom spacing matches the NavigationBar's 20dp bottom padding.
 - Player artwork/lyrics toggle.
 - Portrait and landscape Player layouts.
 - Material 3 Expressive controls and motion.
@@ -343,6 +355,8 @@ Rovia/
     │       ├── PlayerLandscapeContent.kt
     │       ├── PlayerPlaybackControls.kt
     │       ├── PlayerPortraitContent.kt
+    │       ├── PlayerLyricsFullscreenContent.kt
+    │       ├── PlayerLyricsMiniPlayer.kt
     │       ├── PlayerRoute.kt
     │       ├── PlayerScreen.kt
     │       ├── PlayerSeekBar.kt
@@ -2026,7 +2040,11 @@ Vertical sheet gestures
 Playback stop/dismiss behavior
 ```
 
-The architecture is a layered root `Box`:
+The application still uses a root `Box` with the navigation content underneath and
+`UnifiedPlayerSheet` above it, but the Player/MiniPlayer relationship is now implemented as a
+continuous morphing surface rather than two independently stacked cards.
+
+Conceptually:
 
 ```text
 Root Box
@@ -2034,12 +2052,19 @@ Root Box
 ├── Navigation content
 │
 └── UnifiedPlayerSheet
-    ├── Full Player layer
-    ├── MiniPlayer layer
-    └── NavigationBar layer
+    ├── single physical Player surface
+    │   ├── MiniPlayerContent at low progress
+    │   └── full Player content at high progress
+    │
+    └── NavigationBar chrome layer
 ```
 
-The MiniPlayer and NavigationBar are deliberately separate layers.
+The physical Player surface changes its geometry continuously as `progress` changes. The MiniPlayer is
+therefore not a separate navigation destination and the full Player does not rely on a
+`SharedTransitionLayout`.
+
+The NavigationBar remains a separate bottom-chrome layer so it can be independently hidden when the
+Player reaches its fully expanded state.
 
 ---
 
@@ -2063,6 +2088,13 @@ This state drives:
 - predictive back mapping.
 
 Keep this state as the single source of truth for the sheet expansion itself.
+
+The current `progress` state is stored with `rememberSaveable` so an Activity recreation caused by
+portrait/landscape rotation does not reset an open Player back to the collapsed MiniPlayer state.
+
+After restoration, `UnifiedPlayerSheet` propagates the restored progress through its
+`onProgressChanged` callback so the rest of the application immediately observes the restored
+Player-open state.
 
 ---
 
@@ -2092,6 +2124,50 @@ cornerProgress = 1 - progress
 Values are clamped to prevent invalid negative corner sizes when motion animations overshoot.
 
 Do not remove those clamps.
+
+---
+
+# 20.1. MORPHING PLAYER SURFACE GEOMETRY
+
+The current `UnifiedPlayerSheet` uses one physical `Surface` for the MiniPlayer-to-Player transition.
+
+The surface morphs continuously with the same normalized `progress`:
+
+```text
+progress = 0.0
+    -> collapsed MiniPlayer geometry
+
+progress = 1.0
+    -> full-screen Player geometry
+```
+
+Current geometry contract:
+
+```text
+collapsed height
+    = 80dp
+
+horizontal outer padding
+    = approximately 14dp at the collapsed state
+    = 0dp at the fully expanded state
+
+bottom corner radius
+    = approximately 20dp at the collapsed state
+    = 0dp at the fully expanded state
+
+top corner radius
+    = approximately 32dp at the collapsed state
+    = 0dp at the fully expanded state
+```
+
+The surface's container color also morphs from the working Material Card container treatment toward
+`MaterialTheme.colorScheme.background` as the Player opens.
+
+The morph is intentionally implemented without `SharedTransitionLayout`. The Player surface itself
+changes size, padding, radius, and content state.
+
+Do not split this back into unrelated MiniPlayer and full-Player surfaces unless the architecture is
+explicitly redesigned.
 
 ---
 
@@ -2224,16 +2300,18 @@ It does not own the application's Predictive Back behavior.
 
 Back is coordinated by `UnifiedPlayerSheet`.
 
-`MiniPlayer` receives callbacks such as:
+`MiniPlayer` receives only playback/content callbacks:
 
 ```text
 onPrevious
 onPlayPause
 onNext
-onOpenPlayer
 ```
 
-Do not add a second back callback to MiniPlayer.
+Opening/expanding the Player is coordinated by `UnifiedPlayerSheet`, not by a click-navigation callback
+inside the reusable `MiniPlayer` component itself.
+
+Do not add a second back callback or an `onOpenPlayer` callback to the shared `MiniPlayer`.
 
 ---
 
@@ -2264,6 +2342,35 @@ Previous/Next use surface-container colors.
 
 Do not add custom borders or arbitrary drop shadows.
 
+The global `:core:ui` MiniPlayer keeps its documented asymmetric outer geometry because it participates
+in the main application's sheet transition.
+
+Fullscreen lyrics uses a separate `:feature:player` component named `PlayerLyricsMiniPlayer`. It is
+intentionally not the global MiniPlayer component because the fullscreen lyrics interaction needs its
+own independent seekbar and direct playback controls.
+
+`PlayerLyricsMiniPlayer` currently uses:
+
+```text
+seekbar container
+    = full pill
+
+lyrics MiniPlayer container
+    = full pill
+
+outer vertical gap
+    = 8dp
+
+seekbar inner horizontal padding
+    = 16dp
+
+seekbar elapsed-time ↔ seekbar gap
+    = 10dp
+```
+
+The dedicated fullscreen lyrics controls preserve the same Material theme and playback actions but do
+not expose an `onOpenPlayer` interaction.
+
 ---
 
 # 27. NAVIGATION BAR + MINIPLAYER LAYERING
@@ -2290,9 +2397,30 @@ The MiniPlayer-to-NavigationBar spacing contract is:
 
 The NavigationBar is kept at a higher `zIndex` than the MiniPlayer.
 
-This prevents MiniPlayer content/background from remaining over the navigation area.
+When the Player reaches the fully expanded state, the NavigationBar is not merely made transparent:
+its composable layer is removed from composition. This is important because an invisible NavigationBar
+could otherwise continue intercepting touch events intended for the fullscreen Player controls.
 
-Do not merge both into one parent card.
+The navigation bar contract remains:
+
+```text
+NavigationBarHeight
+    = 80dp
+
+NavigationBarBottomPadding
+    = 20dp
+
+NavigationBarBottomInset
+    = 100dp
+
+MiniPlayerNavigationSpacing
+    = 8dp
+```
+
+Fullscreen lyrics uses the same `20dp` bottom spacing as the NavigationBar so its bottom MiniPlayer
+does not visually float at an unrelated distance from the screen edge.
+
+Do not merge the NavigationBar and Player surface into one parent card.
 
 ---
 
@@ -2311,6 +2439,8 @@ PlayerActionButtonGroup
 PlayerPlaybackControls
 PlayerSeekBar
 PlayerTrackInfo
+PlayerLyricsFullscreenContent
+PlayerLyricsMiniPlayer
 PlayerViewModel
 PlayerUiState
 LyricViewer
@@ -2334,6 +2464,12 @@ Player controls itself.
 
 `PlayerTrackInfo` owns technical metadata, seek-time labels, and the Player-local formatting helpers.
 
+`PlayerLyricsFullscreenContent` owns the fullscreen lyrics layout, including the dedicated bottom
+fullscreen playback area.
+
+`PlayerLyricsMiniPlayer` owns the fullscreen lyrics seekbar + MiniPlayer composition. Its seekbar state
+is local to that fullscreen component and is forwarded to the same playback seek callback.
+
 `PlayerViewModel` coordinates playback state and lyrics state.
 
 `LyricViewer` renders timestamp-aware lyrics.
@@ -2356,6 +2492,12 @@ Both layouts must preserve:
 - playback controls;
 - lyrics toggle;
 - close/collapse action.
+
+The fullscreen lyrics layout is selected before the portrait/landscape layout when `isLyricsVisible`
+is true.
+
+Portrait/landscape rotation must not collapse the UnifiedPlayerSheet or dismiss fullscreen lyrics merely
+because the Activity is recreated.
 
 ---
 
@@ -2449,6 +2591,21 @@ USB DAC
 
 unless the corresponding pipeline is actually implemented and verified.
 
+The track-information presentation also supports extended metadata such as:
+
+```text
+release date
+label
+copyright
+release type
+```
+
+These values are sourced from real metadata when available. Missing values remain visibly
+missing/unknown rather than being omitted simply to make the sheet appear complete.
+
+The track-information rows are kept structurally consistent even when a specific metadata value is
+not available.
+
 ---
 
 # 34. TRACK MODEL
@@ -2468,6 +2625,10 @@ data class Track(
     val sampleRateHz: Int? = null,
     val bitrateBps: Int? = null,
     val artworkUri: String?,
+    val releaseDate: String? = null,
+    val label: String? = null,
+    val copyright: String? = null,
+    val releaseType: String? = null,
 )
 ```
 
@@ -2477,7 +2638,8 @@ Important semantics:
 - `artist` may be null;
 - `album` may be null;
 - technical metadata may be null;
-- artwork may be null.
+- artwork may be null;
+- extended release metadata may be null when the source does not expose it.
 
 Do not turn `Track.title` into nullable merely because MediaStore metadata can be incomplete.
 
@@ -3111,6 +3273,9 @@ active word
 
 The active line scrolls into view.
 
+The active line receives a stronger visual emphasis through a smooth scale animation. The scale is
+adaptive for long lines so text remains usable instead of growing excessively.
+
 The active word gets stronger visual emphasis and primary coloring.
 
 ---
@@ -3133,6 +3298,16 @@ Lyrics are not rendered on top of the album artwork.
 
 The toggle state is owned by `PlayerViewModel`.
 
+When lyrics are visible in the Player, the PlayerScreen replaces the normal Player content with
+`PlayerLyricsFullscreenContent`. The album artwork is therefore not layered underneath the fullscreen
+lyrics view.
+
+The fullscreen lyrics mode remains active while Previous/Next changes the current track. The lyric
+content itself is cleared and reloaded for the new track, but `isLyricsVisible` is not automatically
+reset during that track transition.
+
+Closing the Player explicitly hides lyrics before the Player sheet is closed.
+
 ---
 
 # 61. LYRIC STATES
@@ -3150,9 +3325,14 @@ unavailable
 When a new track becomes current:
 
 ```text
-lyrics visibility -> false
-lyrics state -> reset
+lyrics content -> clear
+lyrics loading  -> reload for the new track
+lyrics visibility -> preserved if fullscreen lyrics was already visible
 ```
+
+This allows fullscreen lyrics to remain open while Previous/Next moves between tracks.
+
+The explicit Player close operation still hides lyrics before the Player sheet is closed.
 
 The ViewModel then loads the new track's embedded lyrics.
 
@@ -3171,7 +3351,13 @@ isLyricsVisible
 
 into `PlayerUiState`.
 
-When the current track ID changes, the ViewModel cancels the previous lyric load and starts loading lyrics for the new track.
+When the current track ID changes, the ViewModel cancels the previous lyric load, clears the
+currently loaded lyric content, and starts loading lyrics for the new track.
+
+A current fullscreen lyrics session does not automatically hide itself merely because the current track
+changed. `isLyricsVisible` is controlled explicitly by the Player lyrics toggle/close behavior.
+
+`hideLyrics()` explicitly clears the fullscreen-visible state when the Player is closed.
 
 Exceptions from lyric loading are treated as lyric unavailability rather than causing fake data to appear.
 
@@ -4182,12 +4368,25 @@ After changing Player, MiniPlayer, or `UnifiedPlayerSheet`, verify:
 [ ] close button collapses Player
 [ ] MiniPlayer downward dismissal works
 [ ] MiniPlayer dismissal stops playback and clears queue
+[ ] tapping/clicking the MiniPlayer area opens the Player through `UnifiedPlayerSheet`
+[ ] shared MiniPlayer does not own `onOpenPlayer` or Back handling
 [ ] seek tap works
 [ ] seek drag works
 [ ] previous/next work
 [ ] lyrics button works
+[ ] fullscreen lyrics replaces the Player artwork content
+[ ] fullscreen lyrics Previous/Play/Pause/Next controls work
+[ ] fullscreen lyrics seekbar drag/tap works
+[ ] fullscreen lyrics elapsed time updates
+[ ] fullscreen lyrics seekbar and MiniPlayer use full pill shapes
+[ ] fullscreen lyrics bottom spacing is 20dp
 [ ] lyrics synchronization follows playback position
-[ ] switching tracks resets lyrics visibility/state
+[ ] active lyric line scale animation works
+[ ] changing tracks while fullscreen lyrics is visible keeps fullscreen mode
+[ ] new track lyrics are reloaded while fullscreen mode remains active
+[ ] rotating portrait ↔ landscape does not collapse the Player
+[ ] rotating while fullscreen lyrics is visible does not exit fullscreen lyrics
+[ ] NavigationBar is not touch-intercepting when Player is fully expanded
 [ ] portrait layout works
 [ ] landscape layout works
 ```
@@ -4658,6 +4857,185 @@ Do not reintroduce manually frozen button shapes where the native Expressive sha
 
 ---
 
+# 108. LATEST PLAYER / MINIPLAYER REFINEMENT CONTRACT
+
+This section records the current Player architecture after the latest verified refinement pass.
+
+## 108.1. Shared MiniPlayer API
+
+The reusable `:core:ui` `MiniPlayer` no longer owns an `onOpenPlayer` callback.
+
+Current responsibilities:
+
+```text
+previous
+play/pause
+next
+render playback content
+```
+
+Player opening is coordinated by `UnifiedPlayerSheet`.
+
+Do not reintroduce navigation ownership into the shared MiniPlayer just to make it clickable in one
+specific context.
+
+## 108.2. UnifiedPlayerSheet state preservation
+
+`UnifiedPlayerSheet` stores its sheet progress with `rememberSaveable`.
+
+Therefore:
+
+```text
+portrait
+    ↕
+landscape
+```
+
+rotation does not implicitly change:
+
+```text
+expanded Player
+    -> collapsed MiniPlayer
+```
+
+The restored progress is propagated through `onProgressChanged` after restoration so top-level
+navigation can immediately reflect the restored Player state.
+
+## 108.3. Fully expanded NavigationBar behavior
+
+At:
+
+```text
+progress >= 0.999
+```
+
+the NavigationBar composable is removed from the active composition instead of merely receiving
+`alpha = 0`.
+
+This is required to prevent an invisible bottom layer from intercepting Player control touches.
+
+The NavigationBar remains visible/interactive while the Player is sufficiently collapsed to show the
+bottom chrome.
+
+## 108.4. Fullscreen lyrics architecture
+
+When `isLyricsVisible` is true, `PlayerScreen` renders:
+
+```text
+PlayerLyricsFullscreenContent
+    ├── PlayerActionButtonGroup
+    ├── PlayerLyric / LyricViewer
+    └── PlayerLyricsMiniPlayer
+        ├── dedicated elapsed-time + WavySeekBar pill
+        └── dedicated playback MiniPlayer pill
+```
+
+This fullscreen MiniPlayer is intentionally separate from the reusable global `MiniPlayer`.
+
+The dedicated fullscreen bottom controls directly call the same:
+
+```text
+onPrevious
+onPlayPause
+onNext
+onSeek
+```
+
+callbacks supplied by `PlayerRoute`, so there is no duplicate playback architecture.
+
+## 108.5. Fullscreen lyrics pill geometry
+
+The dedicated fullscreen lyrics bottom controls use:
+
+```text
+seekbar container
+    = RoundedCornerShape(percent = 50)
+
+MiniPlayer container
+    = RoundedCornerShape(percent = 50)
+
+outer gap
+    = 8dp
+
+seekbar horizontal inner padding
+    = 16dp
+
+seekbar vertical inner padding
+    = 8dp
+
+elapsed-time ↔ WavySeekBar gap
+    = 10dp
+
+fullscreen content bottom padding
+    = 20dp
+```
+
+The seekbar is intentionally shorter than the outer pill width because the elapsed-time label and
+horizontal internal padding reserve visible space on the left and right.
+
+The two bottom surfaces use the same full-pill geometry so they read as one consistent control family.
+
+## 108.6. Fullscreen lyrics track-change behavior
+
+Track changes while fullscreen lyrics is visible must behave as:
+
+```text
+Previous / Next
+      ↓
+current track changes
+      ↓
+old lyric content cleared
+      ↓
+new embedded lyrics loaded
+      ↓
+fullscreen lyrics remains visible
+```
+
+Do not automatically hide the fullscreen lyrics view just because the current track changed.
+
+Closing the Player remains an explicit operation and hides lyrics before collapsing the sheet.
+
+## 108.7. Player orientation behavior
+
+The Player keeps dedicated portrait and landscape layouts.
+
+The current portrait layout preserves a fixed artwork slot so artwork size changes do not unexpectedly
+move the content below it.
+
+The current landscape layout remains the established two-column composition and must not be altered
+during unrelated fullscreen-lyrics work.
+
+Orientation-specific behavior belongs in:
+
+```text
+PlayerPortraitContent
+PlayerLandscapeContent
+```
+
+not in `UnifiedPlayerSheet`.
+
+## 108.8. Recent verified commits
+
+The latest three Player interaction refinements were intentionally separated by module ownership:
+
+```text
+cb999ff core: Clean up MiniPlayer interaction
+b4c5dc8 app: Refine UnifiedPlayerSheet behavior
+95cb760 feature: Refine fullscreen lyrics player
+```
+
+This commit separation is the preferred pattern for future changes:
+
+```text
+core:*     -> shared reusable UI/API behavior
+app:*      -> application shell, sheet, navigation, composition
+feature:*  -> feature-local presentation and behavior
+```
+
+Do not combine unrelated module ownership changes into one commit when they can be verified independently.
+
+---
+
 # 108. FOLDER FILTER HEADER CONTRACT
 
 `FolderFilterScreen` follows the same header geometry rules as Settings.
@@ -4798,7 +5176,7 @@ No feature behavior was intentionally changed by the source-tree migration.
 Before declaring a source-tree migration complete, verify:
 
 ```powershell
-Get-ChildItem -Path ".pp", ".\core", ".\data", ".\playback", ".eature" `
+Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
     -Recurse -Filter "*.kt" -File -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match "\src\main\java\" } |
     Select-Object -ExpandProperty FullName
@@ -4813,7 +5191,7 @@ Expected result:
 Then:
 
 ```powershell
-Get-ChildItem -Path ".pp", ".\core", ".\data", ".\playback", ".eature" `
+Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
     -Recurse -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match "\src\main\java$" } |
     Select-Object -ExpandProperty FullName
@@ -4828,7 +5206,7 @@ Expected result:
 Then:
 
 ```powershell
-Get-ChildItem -Path ".pp", ".\core", ".\data", ".\playback", ".eature" `
+Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
     -Recurse -Filter "*.java" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 ```
@@ -4965,6 +5343,34 @@ implementation pass.
   public feature API.
 - Preserved the existing `UnifiedPlayerSheet`, `PlayerRoute`, `PlayerViewModel`, `LyricViewer`,
   Predictive Back behavior, and playback architecture unchanged.
+
+## Latest Player interaction refinement
+
+- Reworked `UnifiedPlayerSheet` into a true MiniPlayer ↔ Player morphing surface using one physical
+  `Surface` driven by normalized `progress`.
+- Kept the Player out of Navigation 3 and out of `SharedTransitionLayout`.
+- Added saveable Player progress so rotation does not collapse the Player.
+- Propagated restored sheet progress back to `MainNavigation`.
+- Removed the invisible NavigationBar touch-interception problem by composing NavigationBar only while
+  the Player is not fully expanded.
+- Cleaned the shared `MiniPlayer` API so it no longer owns `onOpenPlayer`; opening behavior remains in
+  `UnifiedPlayerSheet`.
+- Added a dedicated `PlayerLyricsMiniPlayer` for fullscreen lyrics instead of reusing the shared
+  `MiniPlayer` component in a context with different interaction requirements.
+- Split fullscreen lyrics bottom controls into two physical pill surfaces:
+  a dedicated seekbar surface and a dedicated MiniPlayer surface.
+- Added elapsed playback time to the left side of the fullscreen lyrics seekbar.
+- Added internal horizontal seekbar spacing so the wavy seek visual does not touch the pill edges.
+- Standardized fullscreen lyrics seekbar and MiniPlayer shapes to full-pill geometry.
+- Matched fullscreen lyrics bottom content padding to the NavigationBar bottom padding of `20dp`.
+- Preserved direct Previous / Play-Pause / Next callbacks in fullscreen lyrics.
+- Kept fullscreen lyrics visible across track changes while clearing/reloading the actual lyric content.
+- Kept the explicit Player close operation responsible for hiding lyrics.
+- Added smoother lyric active-line scaling while preserving adaptive sizing for long lines.
+- Preserved the established portrait and landscape Player layouts while extracting the fullscreen
+  lyrics-specific presentation into focused feature-local files.
+- Kept all changes within the existing `:app`, `:core:ui`, and `:feature:player` module boundaries;
+  no additional dependency or architecture layer was introduced.
 
 ## Database integration
 
