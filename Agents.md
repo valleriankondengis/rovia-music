@@ -337,8 +337,16 @@ Rovia/
     ├── player/
     │   └── src/main/kotlin/com/rovia/music/feature/player/
     │       ├── LyricViewer.kt
+    │       ├── PlayerActionButtonGroup.kt
+    │       ├── PlayerArtwork.kt
+    │       ├── PlayerLyric.kt
+    │       ├── PlayerLandscapeContent.kt
+    │       ├── PlayerPlaybackControls.kt
+    │       ├── PlayerPortraitContent.kt
     │       ├── PlayerRoute.kt
     │       ├── PlayerScreen.kt
+    │       ├── PlayerSeekBar.kt
+    │       ├── PlayerTrackInfo.kt
     │       ├── PlayerUiState.kt
     │       └── PlayerViewModel.kt
     │
@@ -2295,6 +2303,14 @@ Do not merge both into one parent card.
 ```text
 PlayerRoute
 PlayerScreen
+PlayerPortraitContent
+PlayerLandscapeContent
+PlayerArtwork
+PlayerLyric
+PlayerActionButtonGroup
+PlayerPlaybackControls
+PlayerSeekBar
+PlayerTrackInfo
 PlayerViewModel
 PlayerUiState
 LyricViewer
@@ -2302,7 +2318,21 @@ LyricViewer
 
 `PlayerRoute` connects application APIs to the UI.
 
-`PlayerScreen` renders Player state.
+`PlayerScreen` is the orchestration layer: it owns transient seek interaction state, derives
+orientation, and selects the portrait or landscape composition. It does not render the detailed
+Player controls itself.
+
+`PlayerPortraitContent` and `PlayerLandscapeContent` own the orientation-specific visual layout.
+
+`PlayerArtwork` owns Player artwork presentation. `PlayerLyric` owns embedded-lyrics presentation and fallback state.
+
+`PlayerActionButtonGroup` owns the top Player actions and the track-information menu/sheet entry point.
+
+`PlayerPlaybackControls` owns previous/play-pause/next and repeat/shuffle controls.
+
+`PlayerSeekBar` owns the custom interactive wavy seek bar.
+
+`PlayerTrackInfo` owns technical metadata, seek-time labels, and the Player-local formatting helpers.
 
 `PlayerViewModel` coordinates playback state and lyrics state.
 
@@ -3766,6 +3796,14 @@ data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomFolde
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreMusicRepository.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedLyricsRepository.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerScreen.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerPortraitContent.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerLandscapeContent.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerArtwork.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerLyric.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerActionButtonGroup.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerPlaybackControls.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerSeekBar.kt
+feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerTrackInfo.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerViewModel.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/LyricViewer.kt
 ```
@@ -4909,6 +4947,24 @@ implementation pass.
 - Kept resources in `src/main/res`.
 - Confirmed there are no remaining `.kt` files under `src/main/java`.
 - Confirmed there are no remaining `.java` source files in the current application modules.
+
+## Player feature modularization
+
+- Refactored the 1,956-line `PlayerScreen.kt` into focused Player presentation files without
+  changing the Player state flow, playback callbacks, orientation behavior, lyrics behavior, seek
+  interaction, or Material 3 Expressive controls.
+- Kept transient seek interaction state in `PlayerScreen`, because it belongs to the screen-level
+  gesture/session interaction rather than persistent or domain state.
+- Moved portrait and landscape compositions into separate files so future orientation-specific UI
+  changes remain localized.
+- Isolated artwork/lyrics presentation, top action controls, playback controls, the custom wavy seek
+  bar, and technical/time metadata into focused internal presentation components.
+- Kept these components inside `:feature:player`; no new module, dependency, DI framework, or data
+  abstraction was introduced.
+- Kept cross-file Player UI helpers `internal` so they remain module-local rather than becoming a
+  public feature API.
+- Preserved the existing `UnifiedPlayerSheet`, `PlayerRoute`, `PlayerViewModel`, `LyricViewer`,
+  Predictive Back behavior, and playback architecture unchanged.
 
 ## Database integration
 
