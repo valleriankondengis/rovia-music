@@ -4,9 +4,6 @@
 
 package com.rovia.music.feature.player
 
-import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,16 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +34,6 @@ import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
-import kotlinx.coroutines.delay
 
 @Composable
 internal fun LandscapePlayerContent(
@@ -59,7 +49,7 @@ internal fun LandscapePlayerContent(
     duration: Long,
     displayedIsPlaying: Boolean,
     motionEffectsSpec:
-        FiniteAnimationSpec<Float>,
+        androidx.compose.animation.core.FiniteAnimationSpec<Float>,
     onSeekPositionChange: (Float) -> Unit,
     onSeekFinished: () -> Unit,
     onPrevious: () -> Unit,
@@ -72,23 +62,6 @@ internal fun LandscapePlayerContent(
     val showInlineLyrics =
         hasLyrics &&
             !isLyricsLoading
-
-    var resolvedHasLyrics by remember {
-        mutableStateOf(hasLyrics)
-    }
-
-    LaunchedEffect(
-        track?.id,
-        hasLyrics,
-        isLyricsLoading,
-    ) {
-        if (!isLyricsLoading) {
-            delay(180)
-
-            resolvedHasLyrics =
-                hasLyrics
-        }
-    }
 
     Row(
         modifier =
@@ -132,32 +105,27 @@ internal fun LandscapePlayerContent(
             ) {
                 val artworkTargetSize =
                     minOf(
-                        maxWidth * 0.82f,
-                        maxHeight *
-                            if (resolvedHasLyrics) {
-                                0.76f
-                            } else {
-                                0.82f
-                            },
+                        maxWidth * 0.88f,
+                        maxHeight * 0.88f,
                     )
 
-                val artworkSize by animateDpAsState(
-                    targetValue = artworkTargetSize,
-                    animationSpec =
-                        tween(
-                            durationMillis = 300,
-                        ),
-                    label = "landscapeArtworkSize",
-                )
-
-                PlayerArtwork(
-                    track = track,
-                    size = artworkSize,
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(artworkSize),
-                )
+                            .height(artworkTargetSize),
+                    contentAlignment =
+                        Alignment.Center,
+                ) {
+                    PlayerArtwork(
+                        track = track,
+                        size = artworkTargetSize,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(artworkTargetSize),
+                    )
+                }
             }
         }
 
@@ -212,10 +180,10 @@ internal fun LandscapePlayerContent(
                         )
                     }
 
-                    Text(
+                    androidx.compose.material3.Text(
                         text =
                             track?.title
-                                ?: stringResource(
+                                ?: androidx.compose.ui.res.stringResource(
                                     R.string.player_no_track,
                                 ),
                         style =
@@ -237,10 +205,10 @@ internal fun LandscapePlayerContent(
                                 ),
                     )
 
-                    Text(
+                    androidx.compose.material3.Text(
                         text =
                             track?.artist
-                                ?: stringResource(
+                                ?: androidx.compose.ui.res.stringResource(
                                     R.string
                                         .player_unknown_artist,
                                 ),
