@@ -125,14 +125,30 @@ internal fun PortraitPlayerContent(
             modifier = Modifier.height(20.dp),
         )
 
-        PlayerArtwork(
-            track = track,
-            size = artworkSize,
+        /*
+         * Artwork memiliki slot dengan tinggi tetap.
+         *
+         * Ukuran artwork boleh berubah 300dp <-> 320dp,
+         * tetapi slot tetap 320dp sehingga seluruh komponen
+         * di bawahnya tidak ikut naik/turun.
+         */
+        Box(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(artworkSize),
-        )
+                    .height(320.dp),
+            contentAlignment =
+                Alignment.Center,
+        ) {
+            PlayerArtwork(
+                track = track,
+                size = artworkSize,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(artworkSize),
+            )
+        }
 
         if (showInlineLyrics) {
             PlayerCurrentLyricLine(
