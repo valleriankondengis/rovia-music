@@ -1,3 +1,4 @@
+
 package com.rovia.music
 
 import androidx.compose.animation.EnterTransition
@@ -319,6 +320,8 @@ fun MainNavigation(
                 playbackController,
             lyricsRepository =
                 lyricsRepository,
+            musicRepository =
+                musicRepository,
             onProgressChanged = { progress ->
                 playerProgress =
                     progress
