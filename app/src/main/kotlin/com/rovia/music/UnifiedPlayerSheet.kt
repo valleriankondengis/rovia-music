@@ -1,3 +1,4 @@
+
 package com.rovia.music
 
 import androidx.activity.compose.PredictiveBackHandler
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.rovia.music.core.library.LyricsRepository
+import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.core.ui.component.MiniPlayerContent
@@ -45,6 +47,7 @@ fun UnifiedPlayerSheet(
     playbackState: PlaybackState,
     playbackController: PlaybackController,
     lyricsRepository: LyricsRepository,
+    musicRepository: MusicRepository,
     navigationBar: @Composable () -> Unit,
     onProgressChanged: (Float) -> Unit = {},
     showBottomChrome: Boolean = true,
@@ -755,6 +758,8 @@ fun UnifiedPlayerSheet(
                                 playbackController,
                             lyricsRepository =
                                 lyricsRepository,
+                            musicRepository =
+                                musicRepository,
                             onClose = {
                                 collapse()
                             },
