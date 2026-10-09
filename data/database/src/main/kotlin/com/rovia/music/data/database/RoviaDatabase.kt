@@ -6,9 +6,13 @@ import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import com.rovia.music.data.database.dao.ExcludedFolderDao
+import com.rovia.music.data.database.dao.MediaStoreSyncStateDao
+import com.rovia.music.data.database.dao.MusicTrackDao
 import com.rovia.music.data.database.dao.PlaybackSettingsDao
 import com.rovia.music.data.database.dao.RecentPlayDao
 import com.rovia.music.data.database.entity.ExcludedFolderEntity
+import com.rovia.music.data.database.entity.MediaStoreSyncStateEntity
+import com.rovia.music.data.database.entity.MusicTrackEntity
 import com.rovia.music.data.database.entity.PlaybackSettingsEntity
 import com.rovia.music.data.database.entity.RecentPlayEntity
 
@@ -20,6 +24,8 @@ private const val DATABASE_VERSION = 1
         RecentPlayEntity::class,
         ExcludedFolderEntity::class,
         PlaybackSettingsEntity::class,
+        MusicTrackEntity::class,
+        MediaStoreSyncStateEntity::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -31,6 +37,10 @@ abstract class RoviaDatabase : RoomDatabase() {
     abstract fun excludedFolderDao(): ExcludedFolderDao
 
     abstract fun playbackSettingsDao(): PlaybackSettingsDao
+
+    abstract fun musicTrackDao(): MusicTrackDao
+
+    abstract fun mediaStoreSyncStateDao(): MediaStoreSyncStateDao
 
     companion object {
 
