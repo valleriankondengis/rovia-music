@@ -1,19 +1,33 @@
+
 package com.rovia.music.data.database.entity
 
 import androidx.room3.ColumnInfo
 import androidx.room3.Entity
+import androidx.room3.Index
 import androidx.room3.PrimaryKey
 
 @Entity(
     tableName = "recent_plays",
+    indices = [
+        Index(
+            value = ["track_id", "volume_name"],
+        ),
+        Index(
+            value = ["last_played_at_epoch_millis"],
+        ),
+    ],
 )
 data class RecentPlayEntity(
+    /*
+     * MediaStore content URI uniquely identifies the source item
+     * more reliably than a track ID that may overlap across volumes.
+     */
     @PrimaryKey
-    @ColumnInfo(name = "track_id")
-    val trackId: Long,
-
     @ColumnInfo(name = "uri")
     val uri: String,
+
+    @ColumnInfo(name = "track_id")
+    val trackId: Long,
 
     @ColumnInfo(name = "title")
     val title: String,
@@ -45,6 +59,9 @@ data class RecentPlayEntity(
     @ColumnInfo(name = "year")
     val year: Int?,
 
+    @ColumnInfo(name = "release_date")
+    val releaseDate: String?,
+
     @ColumnInfo(name = "track_number")
     val trackNumber: Int?,
 
@@ -56,6 +73,15 @@ data class RecentPlayEntity(
 
     @ColumnInfo(name = "compilation")
     val compilation: String?,
+
+    @ColumnInfo(name = "label")
+    val label: String?,
+
+    @ColumnInfo(name = "copyright")
+    val copyright: String?,
+
+    @ColumnInfo(name = "release_type")
+    val releaseType: String?,
 
     @ColumnInfo(name = "duration_ms")
     val durationMs: Long,
