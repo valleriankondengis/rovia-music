@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.ksp)
@@ -31,7 +32,7 @@ dependencies {
     implementation(project(":core:library-api"))
     implementation(project(":core:playback-api"))
 
-    implementation(libs.androidx.room3.runtime)
+    api(libs.androidx.room3.runtime)
     implementation(libs.androidx.sqlite.framework)
 
     implementation(libs.kotlinx.coroutines.core)
