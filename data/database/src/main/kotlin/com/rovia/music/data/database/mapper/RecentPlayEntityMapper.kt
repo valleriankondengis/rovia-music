@@ -1,3 +1,4 @@
+
 package com.rovia.music.data.database.mapper
 
 import com.rovia.music.core.model.Track
@@ -7,8 +8,8 @@ fun Track.toRecentPlayEntity(
     lastPlayedAtEpochMillis: Long,
 ): RecentPlayEntity {
     return RecentPlayEntity(
-        trackId = id,
         uri = uri,
+        trackId = id,
         title = title,
         artist = artist,
         album = album,
@@ -19,10 +20,14 @@ fun Track.toRecentPlayEntity(
         author = author,
         writer = writer,
         year = year,
+        releaseDate = releaseDate,
         trackNumber = trackNumber,
         discNumber = discNumber,
         cdTrackNumber = cdTrackNumber,
         compilation = compilation,
+        label = label,
+        copyright = copyright,
+        releaseType = releaseType,
         durationMs = durationMs,
         dateAddedEpochSeconds = dateAddedEpochSeconds,
         dateModifiedEpochSeconds = dateModifiedEpochSeconds,
@@ -54,10 +59,14 @@ fun RecentPlayEntity.toTrack(): Track {
         author = author,
         writer = writer,
         year = year,
+        releaseDate = releaseDate,
         trackNumber = trackNumber,
         discNumber = discNumber,
         cdTrackNumber = cdTrackNumber,
         compilation = compilation,
+        label = label,
+        copyright = copyright,
+        releaseType = releaseType,
         durationMs = durationMs,
         dateAddedEpochSeconds = dateAddedEpochSeconds,
         dateModifiedEpochSeconds = dateModifiedEpochSeconds,
