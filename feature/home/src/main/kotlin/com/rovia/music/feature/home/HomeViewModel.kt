@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.home
 
 import androidx.lifecycle.ViewModel
@@ -9,7 +10,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 
 class HomeViewModel(
@@ -18,13 +18,9 @@ class HomeViewModel(
 ) : ViewModel() {
 
     private val recentlyAdded =
-        flow {
-            emit(
-                musicRepository.getRecentlyAdded(
-                    limit = 10,
-                ),
-            )
-        }
+        musicRepository.observeRecentlyAdded(
+            limit = 10,
+        )
 
     private val homeContent: Flow<HomeUiState> =
         combine(
