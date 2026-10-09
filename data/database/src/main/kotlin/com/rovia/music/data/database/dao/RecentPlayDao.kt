@@ -16,7 +16,7 @@ interface RecentPlayDao {
         SELECT *
         FROM recent_plays
         ORDER BY last_played_at_epoch_millis DESC,
-                 track_id ASC
+                 uri ASC
         """,
     )
     fun observeRecentPlays(): Flow<List<RecentPlayEntity>>
@@ -31,11 +31,11 @@ interface RecentPlayDao {
     @Query(
         """
         DELETE FROM recent_plays
-        WHERE track_id NOT IN (
-            SELECT track_id
+        WHERE uri NOT IN (
+            SELECT uri
             FROM recent_plays
             ORDER BY last_played_at_epoch_millis DESC,
-                     track_id ASC
+                     uri ASC
             LIMIT 10
         )
         """,
