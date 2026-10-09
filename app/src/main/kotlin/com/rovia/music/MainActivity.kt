@@ -1,3 +1,4 @@
+
 package com.rovia.music
 
 import android.Manifest
@@ -27,6 +28,23 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
+    override fun onResume() {
+        super.onResume()
+
+        /*
+         * Recheck permission whenever the app becomes active.
+         *
+         * If permission is available, request catalog synchronization
+         * through the application-scoped coordinator. This does not
+         * block Activity startup or the Compose UI.
+         */
+        if (hasAudioPermission()) {
+            (application as RoviaApplication)
+                .appContainer
+                .synchronizeMusicCatalog()
+        }
+    }
+
     override fun onCreate(
         savedInstanceState: Bundle?,
     ) {
@@ -50,11 +68,7 @@ class MainActivity : ComponentActivity() {
                     var hasAudioPermission by
                         remember {
                             mutableStateOf(
-                                ContextCompat.checkSelfPermission(
-                                    this,
-                                    Manifest.permission.READ_MEDIA_AUDIO,
-                                ) ==
-                                    PackageManager.PERMISSION_GRANTED,
+                                hasAudioPermission(),
                             )
                         }
 
@@ -64,6 +78,18 @@ class MainActivity : ComponentActivity() {
                                 ActivityResultContracts.RequestPermission(),
                         ) { granted ->
                             hasAudioPermission = granted
+
+                            /*
+                             * Permission may have been granted while
+                             * the Activity was paused. Start sync here
+                             * as well as in onResume so either lifecycle
+                             * ordering is handled safely.
+                             */
+                            if (granted) {
+                                roviaApplication
+                                    .appContainer
+                                    .synchronizeMusicCatalog()
+                            }
                         }
 
                     LaunchedEffect(
@@ -136,5 +162,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun hasAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_MEDIA_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
     }
 }
