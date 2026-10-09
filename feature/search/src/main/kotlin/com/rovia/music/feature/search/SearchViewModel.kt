@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.search
 
 import androidx.lifecycle.ViewModel
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -28,12 +28,15 @@ class SearchViewModel(
 
     private val query = MutableStateFlow("")
 
+    /*
+     * Observe the shared catalog rather than requesting a one-time
+     * snapshot from getAllTracks().
+     *
+     * The Room-backed repository will emit updates when the catalog
+     * changes after MediaStore synchronization.
+     */
     private val allTracks: Flow<List<Track>> =
-        flow {
-            emit(
-                musicRepository.getAllTracks(),
-            )
-        }.flowOn(Dispatchers.IO)
+        musicRepository.observeAllTracks()
 
     private val indexedTracks: Flow<List<SearchEntry>> =
         allTracks
