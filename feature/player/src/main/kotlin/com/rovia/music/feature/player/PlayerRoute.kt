@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.player
 
 import androidx.compose.runtime.Composable
@@ -6,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovia.music.core.library.LyricsRepository
+import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.playback.PlaybackController
 
@@ -13,6 +15,7 @@ import com.rovia.music.core.playback.PlaybackController
 fun PlayerRoute(
     playbackController: PlaybackController,
     lyricsRepository: LyricsRepository,
+    musicRepository: MusicRepository,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -24,6 +27,8 @@ fun PlayerRoute(
                         playbackController,
                     lyricsRepository =
                         lyricsRepository,
+                    musicRepository =
+                        musicRepository,
                 ),
         )
 
