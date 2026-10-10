@@ -2,8 +2,26 @@
 <resources>
     <string name="section_recent_play">Baru Diputar</string>
     <string name="section_recently_added">Baru Ditambahkan</string>
+    <string name="section_recent_artists">Artis Terakhir Diputar</string>
+    <string name="section_recent_albums">Album Terakhir Diputar</string>
+    <string name="section_recent_genres">Genre Terakhir Diputar</string>
+
     <string name="recently_added_empty">Belum ada musik.</string>
     <string name="home_error">Tidak dapat membaca koleksi musik.</string>
+
     <string name="action_play_track">Putar %1$s</string>
+    <string name="action_open_artist">Buka artis %1$s</string>
+    <string name="action_open_album">Buka album %1$s</string>
+    <string name="action_open_genre">Buka genre %1$s</string>
     <string name="action_settings">Pengaturan</string>
+
+    <string name="recent_collection_back">Kembali</string>
+    <string name="recent_collection_play_all">Putar semua</string>
+    <string name="recent_collection_tracks">Daftar lagu</string>
+    <string name="recent_collection_empty">Tidak ada lagu yang cocok dalam koleksi ini.</string>
+
+    <plurals name="recent_collection_track_count">
+        <item quantity="one">%d lagu</item>
+        <item quantity="other">%d lagu</item>
+    </plurals>
 </resources>
