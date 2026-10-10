@@ -2,7 +2,9 @@
 package com.rovia.music.feature.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -17,6 +19,7 @@ fun PlayerRoute(
     lyricsRepository: LyricsRepository,
     musicRepository: MusicRepository,
     onClose: () -> Unit,
+    onCloseActionAvailable: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val viewModel: PlayerViewModel =
@@ -38,6 +41,40 @@ fun PlayerRoute(
 
     val playbackState =
         uiState.playbackState
+
+    /*
+     * Keep one shared close action for both the Player UI
+     * and the parent sheet's completed predictive Back gesture.
+     *
+     * The lyrics visibility is cleared before the sheet closes.
+     */
+    val closePlayer: () -> Unit =
+        remember(
+            viewModel,
+            onClose,
+        ) {
+            {
+                viewModel.hideLyrics()
+                onClose()
+            }
+        }
+
+    /*
+     * Register the close action with the parent while this
+     * PlayerRoute is composed. The parent can invoke the same
+     * action after a successful predictive Back gesture.
+     *
+     * A cancelled gesture does not invoke this action.
+     */
+    DisposableEffect(closePlayer) {
+        onCloseActionAvailable(
+            closePlayer,
+        )
+
+        onDispose {
+            onCloseActionAvailable(null)
+        }
+    }
 
     PlayerScreen(
         playbackState = playbackState,
@@ -83,10 +120,7 @@ fun PlayerRoute(
         },
         onSeek =
             playbackController::seekTo,
-        onClose = {
-            viewModel.hideLyrics()
-            onClose()
-        },
+        onClose = closePlayer,
         modifier = modifier,
     )
 }
