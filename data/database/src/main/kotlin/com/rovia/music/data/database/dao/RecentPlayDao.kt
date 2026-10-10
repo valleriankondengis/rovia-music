@@ -1,3 +1,4 @@
+
 package com.rovia.music.data.database.dao
 
 import androidx.room3.Dao
@@ -11,6 +12,12 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface RecentPlayDao {
 
+    /**
+     * Observes every unique track recorded in Recent Play.
+     *
+     * The collection is ordered by most recently played first.
+     * No arbitrary item limit is applied at the database layer.
+     */
     @Query(
         """
         SELECT *
@@ -21,6 +28,10 @@ interface RecentPlayDao {
     )
     fun observeRecentPlays(): Flow<List<RecentPlayEntity>>
 
+    /**
+     * Inserts a new recent track or updates the existing record
+     * when the same track is played again.
+     */
     @Insert(
         onConflict = OnConflictStrategy.REPLACE,
     )
@@ -28,25 +39,16 @@ interface RecentPlayDao {
         entity: RecentPlayEntity,
     )
 
-    @Query(
-        """
-        DELETE FROM recent_plays
-        WHERE uri NOT IN (
-            SELECT uri
-            FROM recent_plays
-            ORDER BY last_played_at_epoch_millis DESC,
-                     uri ASC
-            LIMIT 10
-        )
-        """,
-    )
-    suspend fun trimToTen()
-
+    /**
+     * Records the latest playback information for a track.
+     *
+     * Existing tracks are updated instead of duplicated.
+     * Older records are retained, regardless of the collection size.
+     */
     @Transaction
     suspend fun record(
         entity: RecentPlayEntity,
     ) {
         upsert(entity)
-        trimToTen()
     }
 }
