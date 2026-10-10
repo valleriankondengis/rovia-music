@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.library
 
 import com.rovia.music.core.model.MusicFolder
@@ -16,6 +17,10 @@ sealed interface LibraryUiState {
             LibrarySortOption.DEFAULT,
         val sortOrder: LibrarySortOrder =
             LibrarySortOrder.ASCENDING,
+        val browseMode: LibraryBrowseMode =
+            LibraryBrowseMode.ALL_SONGS,
+        val selectedCollection: LibraryCollectionSelection? =
+            null,
     ) : LibraryUiState
 
     data class Error(

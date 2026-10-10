@@ -1,4 +1,5 @@
-﻿@file:OptIn(
+﻿
+@file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -38,7 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,6 +66,11 @@ fun LibraryScreen(
     onSortOptionChange: (LibrarySortOption) -> Unit = {},
     onToggleSortOrder: () -> Unit = {},
     hasMiniPlayer: Boolean = false,
+    onBrowseModeChange: (LibraryBrowseMode) -> Unit = {},
+    onOpenArtist: (String) -> Unit = {},
+    onOpenAlbum: (String, String?) -> Unit = { _, _ -> },
+    onOpenGenre: (String) -> Unit = {},
+    onBackFromCollection: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (uiState) {
@@ -88,6 +93,11 @@ fun LibraryScreen(
                 onSortOptionChange = onSortOptionChange,
                 onToggleSortOrder = onToggleSortOrder,
                 hasMiniPlayer = hasMiniPlayer,
+                onBrowseModeChange = onBrowseModeChange,
+                onOpenArtist = onOpenArtist,
+                onOpenAlbum = onOpenAlbum,
+                onOpenGenre = onOpenGenre,
+                onBackFromCollection = onBackFromCollection,
                 modifier = modifier,
             )
 
@@ -125,18 +135,13 @@ private fun LibraryContent(
     onSortOptionChange: (LibrarySortOption) -> Unit,
     onToggleSortOrder: () -> Unit,
     hasMiniPlayer: Boolean,
+    onBrowseModeChange: (LibraryBrowseMode) -> Unit,
+    onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (String, String?) -> Unit,
+    onOpenGenre: (String) -> Unit,
+    onBackFromCollection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedMode by remember(uiState.currentFolderPath) {
-        mutableIntStateOf(
-            if (uiState.currentFolderPath != null) {
-                1
-            } else {
-                0
-            },
-        )
-    }
-
     var isSortSheetVisible by remember {
         mutableStateOf(false)
     }
@@ -144,6 +149,21 @@ private fun LibraryContent(
     val allSongsLabel =
         stringResource(
             R.string.library_all_songs,
+        )
+
+    val artistsLabel =
+        stringResource(
+            R.string.library_artist,
+        )
+
+    val albumsLabel =
+        stringResource(
+            R.string.library_album,
+        )
+
+    val genresLabel =
+        stringResource(
+            R.string.library_genre,
         )
 
     val foldersLabel =
@@ -183,6 +203,87 @@ private fun LibraryContent(
             order = uiState.sortOrder,
         )
 
+    val artists =
+        remember(uiState.tracks) {
+            buildArtistCollections(
+                tracks = uiState.tracks,
+            )
+        }
+
+    val albums =
+        remember(uiState.tracks) {
+            buildAlbumCollections(
+                tracks = uiState.tracks,
+            )
+        }
+
+    val genres =
+        remember(uiState.tracks) {
+            buildGenreCollections(
+                tracks = uiState.tracks,
+            )
+        }
+
+    val selectedCollectionTracks =
+        remember(
+            uiState.tracks,
+            uiState.selectedCollection,
+            uiState.sortOption,
+            uiState.sortOrder,
+        ) {
+            uiState.tracks
+                .filter { track ->
+                    matchesCollection(
+                        track = track,
+                        selection = uiState.selectedCollection,
+                    )
+                }
+                .sortedForLibrary(
+                    option = uiState.sortOption,
+                    order = uiState.sortOrder,
+                )
+        }
+
+    val screenTitle =
+        when (val selection = uiState.selectedCollection) {
+            is LibraryCollectionSelection.Artist ->
+                selection.name
+
+            is LibraryCollectionSelection.Album ->
+                selection.title
+
+            is LibraryCollectionSelection.Genre ->
+                selection.name
+
+            null ->
+                stringResource(
+                    R.string.library_title,
+                )
+        }
+
+    val showSortControl =
+        uiState.selectedCollection != null ||
+            uiState.browseMode == LibraryBrowseMode.ALL_SONGS ||
+            uiState.browseMode == LibraryBrowseMode.FOLDER
+
+    fun selectBrowseMode(
+        mode: LibraryBrowseMode,
+    ) {
+        when (mode) {
+            LibraryBrowseMode.ALL_SONGS ->
+                onShowAllSongs()
+
+            LibraryBrowseMode.FOLDER ->
+                onShowRootFolders()
+
+            LibraryBrowseMode.ARTIST,
+            LibraryBrowseMode.ALBUM,
+            LibraryBrowseMode.GENRE,
+            ->
+                onBrowseModeChange(mode)
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
@@ -193,16 +294,14 @@ private fun LibraryContent(
                 ),
             title = {
                 Text(
-                    text =
-                        stringResource(
-                            R.string.library_title,
-                        ),
+                    text = screenTitle,
                 )
             },
             navigationIcon = {
                 AnimatedVisibility(
                     visible =
-                        uiState.currentFolderPath != null,
+                        uiState.currentFolderPath != null ||
+                            uiState.selectedCollection != null,
                     enter =
                         expandHorizontally(
                             expandFrom = Alignment.Start,
@@ -229,7 +328,15 @@ private fun LibraryContent(
                             ),
                 ) {
                     FilledIconButton(
-                        onClick = onBackFromFolder,
+                        onClick = {
+                            if (
+                                uiState.selectedCollection != null
+                            ) {
+                                onBackFromCollection()
+                            } else {
+                                onBackFromFolder()
+                            }
+                        },
                         shapes = IconButtonDefaults.shapes(),
                         colors =
                             IconButtonDefaults
@@ -268,11 +375,11 @@ private fun LibraryContent(
                                     MaterialTheme
                                         .colorScheme
                                         .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-                            ),
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                ),
                 ) {
                     Icon(
                         painter =
@@ -288,6 +395,10 @@ private fun LibraryContent(
             },
         )
 
+        /*
+         * Library browsing modes:
+         * All Songs, Artist, Album, Genre, and Folder.
+         */
         Row(
             modifier =
                 Modifier
@@ -320,23 +431,71 @@ private fun LibraryContent(
                         ),
                 ) {
                     toggleableItem(
-                        checked = selectedMode == 0,
+                        checked =
+                            uiState.browseMode ==
+                                LibraryBrowseMode.ALL_SONGS,
                         label = allSongsLabel,
                         onCheckedChange = { checked ->
                             if (checked) {
-                                selectedMode = 0
-                                onShowAllSongs()
+                                selectBrowseMode(
+                                    LibraryBrowseMode.ALL_SONGS,
+                                )
                             }
                         },
                     )
 
                     toggleableItem(
-                        checked = selectedMode == 1,
+                        checked =
+                            uiState.browseMode ==
+                                LibraryBrowseMode.ARTIST,
+                        label = artistsLabel,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                selectBrowseMode(
+                                    LibraryBrowseMode.ARTIST,
+                                )
+                            }
+                        },
+                    )
+
+                    toggleableItem(
+                        checked =
+                            uiState.browseMode ==
+                                LibraryBrowseMode.ALBUM,
+                        label = albumsLabel,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                selectBrowseMode(
+                                    LibraryBrowseMode.ALBUM,
+                                )
+                            }
+                        },
+                    )
+
+                    toggleableItem(
+                        checked =
+                            uiState.browseMode ==
+                                LibraryBrowseMode.GENRE,
+                        label = genresLabel,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                selectBrowseMode(
+                                    LibraryBrowseMode.GENRE,
+                                )
+                            }
+                        },
+                    )
+
+                    toggleableItem(
+                        checked =
+                            uiState.browseMode ==
+                                LibraryBrowseMode.FOLDER,
                         label = foldersLabel,
                         onCheckedChange = { checked ->
                             if (checked) {
-                                selectedMode = 1
-                                onShowRootFolders()
+                                selectBrowseMode(
+                                    LibraryBrowseMode.FOLDER,
+                                )
                             }
                         },
                     )
@@ -345,48 +504,49 @@ private fun LibraryContent(
         }
 
         /*
-         * Folder breadcrumb and sort control share one row.
-         *
-         * The breadcrumb receives the flexible space.
-         * The sort control keeps its own fixed area.
-         * VerticalDivider creates a visual boundary so
-         * scrolling folder labels never cover the sort button.
+         * Folder breadcrumb and sorting controls.
          */
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 12.dp,
-                    )
-                    .padding(
-                        bottom = 8.dp,
-                    ),
-            verticalAlignment =
-                Alignment.CenterVertically,
+        if (
+            uiState.currentFolderPath != null ||
+                showSortControl
         ) {
-            if (uiState.currentFolderPath != null) {
-                FolderBreadcrumb(
-                    modifier =
-                        Modifier.weight(1f),
-                    relativePath =
-                        uiState.currentFolderPath,
-                    onFolderClick =
-                        onFolderClick,
-                )
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 12.dp,
+                        )
+                        .padding(
+                            bottom = 8.dp,
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically,
+            ) {
+                if (uiState.currentFolderPath != null) {
+                    FolderBreadcrumb(
+                        modifier =
+                            Modifier.weight(1f),
+                        relativePath =
+                            uiState.currentFolderPath,
+                        onFolderClick =
+                            onFolderClick,
+                    )
+                } else {
+                    Spacer(
+                        modifier =
+                            Modifier.weight(1f),
+                    )
+                }
 
-            } else {
-                Spacer(
-                    modifier =
-                        Modifier.weight(1f),
-                )
+                if (showSortControl) {
+                    SortControlRow(
+                        onOpenSortSheet = {
+                            isSortSheetVisible = true
+                        },
+                    )
+                }
             }
-
-            SortControlRow(
-                onOpenSortSheet = {
-                    isSortSheetVisible = true
-                },
-            )
         }
 
         LazyColumn(
@@ -399,36 +559,82 @@ private fun LibraryContent(
                     bottom = bottomContentPadding,
                 ),
         ) {
-            if (selectedMode == 0) {
-                if (sortedTracks.isEmpty()) {
-                    item {
-                        EmptyContent()
+            when {
+                uiState.selectedCollection != null -> {
+                    if (selectedCollectionTracks.isEmpty()) {
+                        item {
+                            EmptyContent()
+                        }
+                    } else {
+                        allSongsContent(
+                            tracks = selectedCollectionTracks,
+                            onTrackClick = onTrackClick,
+                            onRestartCurrentTrack =
+                                onRestartCurrentTrack,
+                            currentTrackId = currentTrackId,
+                        )
                     }
-                } else {
-                    allSongsContent(
-                        tracks = sortedTracks,
-                        onTrackClick = onTrackClick,
-                        onRestartCurrentTrack =
-                            onRestartCurrentTrack,
-                        currentTrackId = currentTrackId,
+                }
+
+                uiState.browseMode ==
+                    LibraryBrowseMode.ALL_SONGS -> {
+                    if (sortedTracks.isEmpty()) {
+                        item {
+                            EmptyContent()
+                        }
+                    } else {
+                        allSongsContent(
+                            tracks = sortedTracks,
+                            onTrackClick = onTrackClick,
+                            onRestartCurrentTrack =
+                                onRestartCurrentTrack,
+                            currentTrackId = currentTrackId,
+                        )
+                    }
+                }
+
+                uiState.browseMode ==
+                    LibraryBrowseMode.ARTIST -> {
+                    artistCollectionContent(
+                        artists = artists,
+                        onArtistClick = onOpenArtist,
                     )
                 }
-            } else {
-                if (uiState.currentFolderPath == null) {
-                    rootFolderContent(
-                        folders = uiState.folders,
-                        onFolderClick = onFolderClick,
+
+                uiState.browseMode ==
+                    LibraryBrowseMode.ALBUM -> {
+                    albumCollectionContent(
+                        albums = albums,
+                        onAlbumClick = onOpenAlbum,
                     )
-                } else {
-                    folderContent(
-                        folders = uiState.folders,
-                        tracks = sortedFolderTracks,
-                        onFolderClick = onFolderClick,
-                        onTrackClick = onTrackClick,
-                        onRestartCurrentTrack =
-                            onRestartCurrentTrack,
-                        currentTrackId = currentTrackId,
+                }
+
+                uiState.browseMode ==
+                    LibraryBrowseMode.GENRE -> {
+                    genreCollectionContent(
+                        genres = genres,
+                        onGenreClick = onOpenGenre,
                     )
+                }
+
+                uiState.browseMode ==
+                    LibraryBrowseMode.FOLDER -> {
+                    if (uiState.currentFolderPath == null) {
+                        rootFolderContent(
+                            folders = uiState.folders,
+                            onFolderClick = onFolderClick,
+                        )
+                    } else {
+                        folderContent(
+                            folders = uiState.folders,
+                            tracks = sortedFolderTracks,
+                            onFolderClick = onFolderClick,
+                            onTrackClick = onTrackClick,
+                            onRestartCurrentTrack =
+                                onRestartCurrentTrack,
+                            currentTrackId = currentTrackId,
+                        )
+                    }
                 }
             }
         }
@@ -447,6 +653,322 @@ private fun LibraryContent(
             },
             onToggleSortOrder = onToggleSortOrder,
         )
+    }
+}
+
+private data class AlbumCollection(
+    val title: String,
+    val artist: String?,
+)
+
+private data class AlbumCollectionKey(
+    val normalizedTitle: String,
+    val normalizedArtist: String?,
+)
+
+private fun buildArtistCollections(
+    tracks: List<Track>,
+): List<String> {
+    return tracks
+        .mapNotNull { track ->
+            artistDisplayName(track)
+        }
+        .distinctBy { name ->
+            normalizeMetadataName(name)
+        }
+        .sortedBy { name ->
+            normalizeMetadataName(name)
+        }
+}
+
+private fun buildAlbumCollections(
+    tracks: List<Track>,
+): List<AlbumCollection> {
+    val albums =
+        tracks.mapNotNull { track ->
+            val title =
+                cleanMetadata(
+                    track.album,
+                ) ?: return@mapNotNull null
+
+            AlbumCollection(
+                title = title,
+                artist =
+                    albumArtistDisplayName(
+                        track,
+                    ),
+            )
+        }
+
+    return albums
+        .groupBy { album ->
+            AlbumCollectionKey(
+                normalizedTitle =
+                    normalizeMetadataName(
+                        album.title,
+                    ),
+                normalizedArtist =
+                    album.artist?.let(
+                        ::normalizeMetadataName,
+                    ),
+            )
+        }
+        .values
+        .map { albumEntries ->
+            albumEntries.first()
+        }
+        .sortedWith(
+            compareBy<AlbumCollection> {
+                normalizeMetadataName(
+                    it.title,
+                )
+            }.thenBy {
+                it.artist?.let(
+                    ::normalizeMetadataName,
+                ).orEmpty()
+            },
+        )
+}
+
+private fun buildGenreCollections(
+    tracks: List<Track>,
+): List<String> {
+    return tracks
+        .mapNotNull { track ->
+            cleanMetadata(
+                track.genre,
+            )
+        }
+        .distinctBy { genre ->
+            normalizeMetadataName(genre)
+        }
+        .sortedBy { genre ->
+            normalizeMetadataName(genre)
+        }
+}
+
+private fun artistDisplayName(
+    track: Track,
+): String? {
+    return cleanMetadata(track.artist)
+        ?: cleanMetadata(track.albumArtist)
+}
+
+private fun albumArtistDisplayName(
+    track: Track,
+): String? {
+    return cleanMetadata(track.albumArtist)
+        ?: cleanMetadata(track.artist)
+}
+
+private fun cleanMetadata(
+    value: String?,
+): String? {
+    return value
+        ?.trim()
+        ?.takeIf {
+            it.isNotEmpty()
+        }
+}
+
+private fun normalizeMetadataName(
+    value: String,
+): String {
+    return value.trim().lowercase()
+}
+
+private fun sameMetadataName(
+    first: String?,
+    second: String?,
+): Boolean {
+    val cleanFirst =
+        cleanMetadata(first)
+
+    val cleanSecond =
+        cleanMetadata(second)
+
+    return when {
+        cleanFirst == null &&
+            cleanSecond == null -> true
+
+        cleanFirst == null ||
+            cleanSecond == null -> false
+
+        else ->
+            cleanFirst.equals(
+                other = cleanSecond,
+                ignoreCase = true,
+            )
+    }
+}
+
+private fun matchesCollection(
+    track: Track,
+    selection: LibraryCollectionSelection?,
+): Boolean {
+    return when (selection) {
+        is LibraryCollectionSelection.Artist ->
+            sameMetadataName(
+                first =
+                    artistDisplayName(track),
+                second = selection.name,
+            )
+
+        is LibraryCollectionSelection.Album ->
+            sameMetadataName(
+                first = track.album,
+                second = selection.title,
+            ) &&
+                sameMetadataName(
+                    first =
+                        albumArtistDisplayName(track),
+                    second = selection.artist,
+                )
+
+        is LibraryCollectionSelection.Genre ->
+            sameMetadataName(
+                first = track.genre,
+                second = selection.name,
+            )
+
+        null ->
+            false
+    }
+}
+
+private fun LazyListScope.artistCollectionContent(
+    artists: List<String>,
+    onArtistClick: (String) -> Unit,
+) {
+    if (artists.isEmpty()) {
+        item {
+            EmptyCollectionContent(
+                text =
+                    stringResource(
+                        R.string.library_empty_artists,
+                    ),
+            )
+        }
+        return
+    }
+
+    items(
+        items = artists,
+        key = { artist ->
+            "artist:${normalizeMetadataName(artist)}"
+        },
+    ) { artist ->
+        ListItem(
+            onClick = {
+                onArtistClick(artist)
+            },
+            modifier =
+                Modifier.fillMaxWidth(),
+            shapes = ListItemDefaults.shapes(),
+        ) {
+            Text(
+                text = artist,
+            )
+        }
+    }
+}
+
+private fun LazyListScope.albumCollectionContent(
+    albums: List<AlbumCollection>,
+    onAlbumClick: (String, String?) -> Unit,
+) {
+    if (albums.isEmpty()) {
+        item {
+            EmptyCollectionContent(
+                text =
+                    stringResource(
+                        R.string.library_empty_albums,
+                    ),
+            )
+        }
+        return
+    }
+
+    items(
+        items = albums,
+        key = { album ->
+            "album:${normalizeMetadataName(album.title)}:" +
+                album.artist
+                    ?.let(::normalizeMetadataName)
+                    .orEmpty()
+        },
+    ) { album ->
+        ListItem(
+            onClick = {
+                onAlbumClick(
+                    album.title,
+                    album.artist,
+                )
+            },
+            modifier =
+                Modifier.fillMaxWidth(),
+            shapes = ListItemDefaults.shapes(),
+        ) {
+            Column(
+                verticalArrangement =
+                    Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = album.title,
+                )
+
+                album.artist?.let { artist ->
+                    Text(
+                        text = artist,
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodySmall,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun LazyListScope.genreCollectionContent(
+    genres: List<String>,
+    onGenreClick: (String) -> Unit,
+) {
+    if (genres.isEmpty()) {
+        item {
+            EmptyCollectionContent(
+                text =
+                    stringResource(
+                        R.string.library_empty_genres,
+                    ),
+            )
+        }
+        return
+    }
+
+    items(
+        items = genres,
+        key = { genre ->
+            "genre:${normalizeMetadataName(genre)}"
+        },
+    ) { genre ->
+        ListItem(
+            onClick = {
+                onGenreClick(genre)
+            },
+            modifier =
+                Modifier.fillMaxWidth(),
+            shapes = ListItemDefaults.shapes(),
+        ) {
+            Text(
+                text = genre,
+            )
+        }
     }
 }
 
@@ -776,6 +1298,27 @@ private fun EmptyContent(
                 stringResource(
                     R.string.library_empty,
                 ),
+        )
+    }
+}
+
+@Composable
+private fun EmptyCollectionContent(
+    text: String,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 20.dp,
+                    vertical = 32.dp,
+                ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = text,
         )
     }
 }

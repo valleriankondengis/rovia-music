@@ -29,14 +29,135 @@ class LibraryViewModel(
         loadRootContent()
     }
 
+    /**
+     * Changes the active Library browsing mode.
+     *
+     * Switching to Folder returns to the root folder list.
+     * Switching to another mode clears any selected collection
+     * and folder-specific content without modifying playback.
+     */
+    fun setBrowseMode(
+        mode: LibraryBrowseMode,
+    ) {
+        if (mode == LibraryBrowseMode.FOLDER) {
+            showRootFolders()
+            return
+        }
+
+        val currentState =
+            _uiState.value as? LibraryUiState.Content
+                ?: return
+
+        _uiState.value =
+            currentState.copy(
+                browseMode = mode,
+                selectedCollection = null,
+                folderTracks = emptyList(),
+                currentFolderPath = null,
+            )
+    }
+
+    /**
+     * Opens an artist collection selected from real track metadata.
+     */
+    fun openArtist(
+        name: String,
+    ) {
+        if (name.isBlank()) {
+            return
+        }
+
+        openCollection(
+            mode = LibraryBrowseMode.ARTIST,
+            selection =
+                LibraryCollectionSelection.Artist(
+                    name = name,
+                ),
+        )
+    }
+
+    /**
+     * Opens an album collection.
+     *
+     * The artist identity is part of the selection so albums
+     * with the same title from different artists can stay separate.
+     */
+    fun openAlbum(
+        title: String,
+        artist: String?,
+    ) {
+        if (title.isBlank()) {
+            return
+        }
+
+        openCollection(
+            mode = LibraryBrowseMode.ALBUM,
+            selection =
+                LibraryCollectionSelection.Album(
+                    title = title,
+                    artist = artist,
+                ),
+        )
+    }
+
+    /**
+     * Opens a genre collection selected from real track metadata.
+     */
+    fun openGenre(
+        name: String,
+    ) {
+        if (name.isBlank()) {
+            return
+        }
+
+        openCollection(
+            mode = LibraryBrowseMode.GENRE,
+            selection =
+                LibraryCollectionSelection.Genre(
+                    name = name,
+                ),
+        )
+    }
+
+    /**
+     * Returns from a collection's track list to its collection list.
+     */
+    fun clearCollectionSelection() {
+        val currentState =
+            _uiState.value as? LibraryUiState.Content
+                ?: return
+
+        if (currentState.selectedCollection == null) {
+            return
+        }
+
+        _uiState.value =
+            currentState.copy(
+                selectedCollection = null,
+            )
+    }
+
+    private fun openCollection(
+        mode: LibraryBrowseMode,
+        selection: LibraryCollectionSelection,
+    ) {
+        val currentState =
+            _uiState.value as? LibraryUiState.Content
+                ?: return
+
+        _uiState.value =
+            currentState.copy(
+                browseMode = mode,
+                selectedCollection = selection,
+                folderTracks = emptyList(),
+                currentFolderPath = null,
+            )
+    }
+
     fun openFolder(
         relativePath: String,
     ) {
         viewModelScope.launch {
-            val currentState =
-                _uiState.value as? LibraryUiState.Content
-                    ?: return@launch
-
             try {
                 val folders =
                     folderBrowserRepository.getSubFolders(
@@ -50,8 +171,15 @@ class LibraryViewModel(
                             relativePath,
                     )
 
+                val latestState =
+                    _uiState.value as? LibraryUiState.Content
+                        ?: return@launch
+
                 _uiState.value =
-                    currentState.copy(
+                    latestState.copy(
+                        browseMode =
+                            LibraryBrowseMode.FOLDER,
+                        selectedCollection = null,
                         folders = folders,
                         folderTracks = folderTracks,
                         currentFolderPath =
@@ -59,7 +187,13 @@ class LibraryViewModel(
                                 relativePath,
                             ),
                     )
-            } catch (throwable: Throwable) {
+            } catch (
+                cancellation: CancellationException,
+            ) {
+                throw cancellation
+            } catch (
+                throwable: Throwable,
+            ) {
                 _uiState.value =
                     LibraryUiState.Error(
                         throwable = throwable,
@@ -89,13 +223,21 @@ class LibraryViewModel(
                         folderBrowserRepository
                             .getRootFolders()
 
+                    val latestState =
+                        _uiState.value
+                            as? LibraryUiState.Content
+                            ?: return@launch
+
                     _uiState.value =
-                        currentState.copy(
+                        latestState.copy(
+                            browseMode =
+                                LibraryBrowseMode.FOLDER,
+                            selectedCollection = null,
                             folders = rootFolders,
-                            folderTracks =
-                                emptyList(),
+                            folderTracks = emptyList(),
                             currentFolderPath = null,
                         )
+
                     return@launch
                 }
 
@@ -111,14 +253,27 @@ class LibraryViewModel(
                             parentPath,
                     )
 
+                val latestState =
+                    _uiState.value as? LibraryUiState.Content
+                        ?: return@launch
+
                 _uiState.value =
-                    currentState.copy(
+                    latestState.copy(
+                        browseMode =
+                            LibraryBrowseMode.FOLDER,
+                        selectedCollection = null,
                         folders = folders,
                         folderTracks = folderTracks,
                         currentFolderPath =
                             parentPath,
                     )
-            } catch (throwable: Throwable) {
+            } catch (
+                cancellation: CancellationException,
+            ) {
+                throw cancellation
+            } catch (
+                throwable: Throwable,
+            ) {
                 _uiState.value =
                     LibraryUiState.Error(
                         throwable = throwable,
@@ -128,35 +283,60 @@ class LibraryViewModel(
     }
 
     fun showAllSongs() {
+        setBrowseMode(
+            LibraryBrowseMode.ALL_SONGS,
+        )
+    }
+
+    fun showRootFolders() {
         val currentState =
             _uiState.value as? LibraryUiState.Content
                 ?: return
 
+        /*
+         * Update the presentation state immediately, then load
+         * the actual root folders without blocking navigation.
+         */
         _uiState.value =
             currentState.copy(
+                browseMode =
+                    LibraryBrowseMode.FOLDER,
+                selectedCollection = null,
                 folderTracks = emptyList(),
                 currentFolderPath = null,
             )
-    }
 
-    fun showRootFolders() {
         viewModelScope.launch {
-            val currentState =
-                _uiState.value as? LibraryUiState.Content
-                    ?: return@launch
-
             try {
                 val rootFolders =
                     folderBrowserRepository
                         .getRootFolders()
 
-                _uiState.value =
-                    currentState.copy(
-                        folders = rootFolders,
-                        folderTracks = emptyList(),
-                        currentFolderPath = null,
-                    )
-            } catch (throwable: Throwable) {
+                val latestState =
+                    _uiState.value as? LibraryUiState.Content
+                        ?: return@launch
+
+                /*
+                 * Do not overwrite folder content if the user
+                 * navigated into a folder while this request ran.
+                 */
+                if (
+                    latestState.browseMode ==
+                        LibraryBrowseMode.FOLDER &&
+                    latestState.currentFolderPath == null
+                ) {
+                    _uiState.value =
+                        latestState.copy(
+                            folders = rootFolders,
+                        )
+                }
+            } catch (
+                cancellation: CancellationException,
+            ) {
+                throw cancellation
+            } catch (
+                throwable: Throwable,
+            ) {
                 _uiState.value =
                     LibraryUiState.Error(
                         throwable = throwable,
@@ -222,8 +402,8 @@ class LibraryViewModel(
                          * loading runs independently.
                          *
                          * Subsequent catalog emissions update only
-                         * the song list, preserving the current folder,
-                         * its tracks, and the user's sorting choices.
+                         * the song list, preserving the current mode,
+                         * collection, folder, and sorting choices.
                          */
                         _uiState.value =
                             when (currentState) {
@@ -254,8 +434,10 @@ class LibraryViewModel(
                                             ?: return@launch
 
                                     /*
-                                     * Do not overwrite the folder
-                                     * currently being browsed.
+                                     * Update only the root folder list.
+                                     * Preserve whichever browsing mode
+                                     * and collection the user currently
+                                     * has selected.
                                      */
                                     if (
                                         latestState.currentFolderPath ==

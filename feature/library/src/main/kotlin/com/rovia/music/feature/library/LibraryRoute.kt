@@ -1,4 +1,5 @@
-﻿package com.rovia.music.feature.library
+﻿
+package com.rovia.music.feature.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
@@ -42,16 +43,37 @@ fun LibraryRoute(
     val currentTrackId =
         playbackState.currentTrack?.id
 
-    val isInsideFolder =
-        (uiState as? LibraryUiState.Content)
-            ?.currentFolderPath != null
+    val contentState =
+        uiState as? LibraryUiState.Content
 
+    val isInsideFolder =
+        contentState?.currentFolderPath != null
+
+    val isInsideCollection =
+        contentState?.selectedCollection != null
+
+    /*
+     * Navigation priority:
+     *
+     * 1. Return from an Artist, Album, or Genre collection.
+     * 2. Otherwise, navigate to the parent folder.
+     *
+     * Do not intercept Back while the Full Player is open.
+     */
     BackHandler(
         enabled =
-            isInsideFolder &&
+            (isInsideCollection || isInsideFolder) &&
                 !isPlayerOpen,
     ) {
-        viewModel.goToParentFolder()
+        when {
+            isInsideCollection -> {
+                viewModel.clearCollectionSelection()
+            }
+
+            isInsideFolder -> {
+                viewModel.goToParentFolder()
+            }
+        }
     }
 
     LibraryScreen(
@@ -90,5 +112,33 @@ fun LibraryRoute(
             viewModel.toggleSortOrder()
         },
         hasMiniPlayer = hasMiniPlayer,
+
+        /*
+         * Library browsing mode callbacks.
+         */
+        onBrowseModeChange = { mode ->
+            viewModel.setBrowseMode(
+                mode = mode,
+            )
+        },
+        onOpenArtist = { name ->
+            viewModel.openArtist(
+                name = name,
+            )
+        },
+        onOpenAlbum = { title, artist ->
+            viewModel.openAlbum(
+                title = title,
+                artist = artist,
+            )
+        },
+        onOpenGenre = { name ->
+            viewModel.openGenre(
+                name = name,
+            )
+        },
+        onBackFromCollection = {
+            viewModel.clearCollectionSelection()
+        },
     )
 }
