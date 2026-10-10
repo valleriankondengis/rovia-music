@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.library
 
 import com.rovia.music.core.model.Track
@@ -7,9 +8,9 @@ enum class LibrarySortOption {
     TITLE,
     ARTIST,
     ALBUM,
+    GENRE,
     DATE_ADDED,
     DATE_MODIFIED,
-    DURATION,
 }
 
 enum class LibrarySortOrder {
@@ -53,6 +54,13 @@ fun List<Track>.sortedForLibrary(
                             order = order,
                         )
 
+                    LibrarySortOption.GENRE ->
+                        compareNullableStrings(
+                            first = first.genre,
+                            second = second.genre,
+                            order = order,
+                        )
+
                     LibrarySortOption.DATE_ADDED ->
                         compareOrderedLongs(
                             first = first.dateAddedEpochSeconds,
@@ -64,13 +72,6 @@ fun List<Track>.sortedForLibrary(
                         compareNullableLongs(
                             first = first.dateModifiedEpochSeconds,
                             second = second.dateModifiedEpochSeconds,
-                            order = order,
-                        )
-
-                    LibrarySortOption.DURATION ->
-                        compareOrderedLongs(
-                            first = first.durationMs,
-                            second = second.durationMs,
                             order = order,
                         )
                 }
