@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.home
 
 import androidx.compose.runtime.Composable
@@ -12,6 +13,9 @@ fun HomeRoute(
     musicRepository: MusicRepository,
     playbackController: PlaybackController,
     onOpenSettings: () -> Unit,
+    onOpenArtist: (String) -> Unit = {},
+    onOpenAlbum: (String, String?) -> Unit = { _, _ -> },
+    onOpenGenre: (String) -> Unit = {},
 ) {
     val viewModel: HomeViewModel =
         viewModel(
@@ -50,5 +54,8 @@ fun HomeRoute(
         currentTrackId = currentTrackId,
         onOpenSettings = onOpenSettings,
         hasMiniPlayer = hasMiniPlayer,
+        onOpenArtist = onOpenArtist,
+        onOpenAlbum = onOpenAlbum,
+        onOpenGenre = onOpenGenre,
     )
 }
