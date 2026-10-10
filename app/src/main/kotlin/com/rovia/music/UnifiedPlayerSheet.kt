@@ -377,16 +377,23 @@ fun UnifiedPlayerSheet(
                 fraction = progress,
             )
 
+        /*
+         * Full pill shape at collapsed state:
+         * collapsed height = 80dp, corner radius = 40dp.
+         *
+         * Both top and bottom corners transition smoothly
+         * to square corners as the Player expands.
+         */
         val cornerTop =
             lerpDp(
-                start = 32.dp,
+                start = 40.dp,
                 stop = 0.dp,
                 fraction = progress,
             )
 
         val cornerBottom =
             lerpDp(
-                start = 20.dp,
+                start = 40.dp,
                 stop = 0.dp,
                 fraction = progress,
             )

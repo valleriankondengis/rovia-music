@@ -1,4 +1,5 @@
-﻿@file:OptIn(
+﻿
+@file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
 
@@ -31,22 +32,9 @@ import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.ui.R
 
-private val MiniPlayerTopRadius =
-    32.dp
-
-private val MiniPlayerBottomRadius =
-    20.dp
-
 private val MiniPlayerShape =
     RoundedCornerShape(
-        topStart =
-            MiniPlayerTopRadius,
-        topEnd =
-            MiniPlayerTopRadius,
-        bottomStart =
-            MiniPlayerBottomRadius,
-        bottomEnd =
-            MiniPlayerBottomRadius,
+        percent = 50,
     )
 
 @Composable
