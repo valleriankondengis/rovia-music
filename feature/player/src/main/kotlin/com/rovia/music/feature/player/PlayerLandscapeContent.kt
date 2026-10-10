@@ -239,6 +239,7 @@ internal fun LandscapePlayerContent(
                     WavySeekBar(
                         positionMs = seekPosition,
                         durationMs = duration,
+                        isPlaying = playbackState.isPlaying,
                         onPositionChange =
                             onSeekPositionChange,
                         onSeekFinished =

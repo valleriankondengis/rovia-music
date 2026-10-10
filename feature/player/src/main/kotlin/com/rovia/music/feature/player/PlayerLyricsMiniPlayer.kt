@@ -181,6 +181,7 @@ internal fun PlayerLyricsMiniPlayer(
                     WavySeekBar(
                         positionMs = latestSeekPosition,
                         durationMs = durationMs,
+                        isPlaying = playbackState.isPlaying,
                         onPositionChange = {},
                         onSeekFinished = {},
                         modifier =

@@ -211,6 +211,7 @@ internal fun PortraitPlayerContent(
         WavySeekBar(
             positionMs = seekPosition,
             durationMs = duration,
+            isPlaying = playbackState.isPlaying,
             onPositionChange =
                 onSeekPositionChange,
             onSeekFinished =

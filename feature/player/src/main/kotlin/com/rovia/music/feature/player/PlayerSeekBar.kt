@@ -4,10 +4,15 @@
 
 package com.rovia.music.feature.player
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,7 +28,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
@@ -32,6 +36,7 @@ import kotlin.math.sin
 internal fun WavySeekBar(
     positionMs: Float,
     durationMs: Long,
+    isPlaying: Boolean,
     onPositionChange: (Float) -> Unit,
     onSeekFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -44,6 +49,17 @@ internal fun WavySeekBar(
         with(density) {
             wavelength.toPx()
         }
+
+    val waveStrength by
+        animateFloatAsState(
+            targetValue = if (isPlaying) 1f else 0f,
+            animationSpec =
+                tween(
+                    durationMillis = 650,
+                    easing = FastOutSlowInEasing,
+                ),
+            label = "seekBarWaveStrength",
+        )
 
     var waveOffset by remember {
         mutableFloatStateOf(0f)
@@ -87,8 +103,8 @@ internal fun WavySeekBar(
         ) * durationMs
     }
 
-    LaunchedEffect(wavelengthPx) {
-        while (true) {
+    LaunchedEffect(wavelengthPx, isPlaying) {
+        while (isPlaying) {
             waveOffset =
                 (
                     waveOffset +
@@ -155,7 +171,7 @@ internal fun WavySeekBar(
             size.height / 2f
 
         val amplitude =
-            3.5.dp.toPx()
+            3.5.dp.toPx() * waveStrength
 
         val strokeWidth =
             4.dp.toPx()
@@ -166,6 +182,19 @@ internal fun WavySeekBar(
         val trackGap =
             10.dp.toPx()
 
+        val stopIndicatorSize =
+            SliderDefaults.TrackStopIndicatorSize
+
+        val stopIndicatorRadius =
+            with(density) {
+                stopIndicatorSize.toPx() / 2f
+            }
+
+        // Keep the native stop indicator fully inside the Canvas bounds.
+        val stopIndicatorCenterX =
+            (size.width - stopIndicatorRadius)
+                .coerceAtLeast(0f)
+
         val progressX =
             size.width * progress
 
@@ -174,7 +203,7 @@ internal fun WavySeekBar(
                 dotRadius +
                 trackGap
 
-        if (trackStart < size.width) {
+        if (trackStart < stopIndicatorCenterX) {
             drawLine(
                 color = trackColor,
                 start =
@@ -184,7 +213,7 @@ internal fun WavySeekBar(
                     ),
                 end =
                     Offset(
-                        x = size.width,
+                        x = stopIndicatorCenterX,
                         y = centerY,
                     ),
                 strokeWidth = strokeWidth,
@@ -200,42 +229,49 @@ internal fun WavySeekBar(
                 y = centerY,
             )
 
-            var x = 1.5f
+            if (waveStrength > 0f) {
+                var x = 1.5f
 
-            while (x <= progressX) {
-                val phase =
-                    (
-                        (x - waveOffset) /
-                            wavelengthPx
-                    ) *
+                while (x <= progressX) {
+                    val phase =
                         (
-                            2f *
-                                PI.toFloat()
+                            (x - waveOffset) /
+                                wavelengthPx
+                        ) *
+                            (
+                                2f *
+                                    PI.toFloat()
+                            )
+
+                    val wave =
+                        amplitude *
+                            sin(
+                                phase.toDouble(),
+                            ).toFloat()
+
+                    val ramp =
+                        (
+                            x /
+                                wavelengthPx
+                        ).coerceIn(
+                            0f,
+                            1f,
                         )
 
-                val wave =
-                    amplitude *
-                        sin(
-                            phase.toDouble(),
-                        ).toFloat()
-
-                val ramp =
-                    (
-                        x /
-                            wavelengthPx
-                    ).coerceIn(
-                        0f,
-                        1f,
+                    path.lineTo(
+                        x = x,
+                        y =
+                            centerY +
+                                wave * ramp,
                     )
 
+                    x += 1.5f
+                }
+            } else {
                 path.lineTo(
-                    x = x,
-                    y =
-                        centerY +
-                            wave * ramp,
+                    x = progressX,
+                    y = centerY,
                 )
-
-                x += 1.5f
             }
 
             drawPath(
@@ -258,6 +294,18 @@ internal fun WavySeekBar(
                     y = centerY,
                 ),
         )
+
+        // Material 3 Slider's native stop indicator at the track's right end.
+        with(SliderDefaults) {
+            drawStopIndicator(
+                offset =
+                    Offset(
+                        x = stopIndicatorCenterX,
+                        y = centerY,
+                    ),
+                size = stopIndicatorSize,
+                color = primaryColor,
+            )
+        }
     }
 }
-
