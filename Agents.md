@@ -45,6 +45,9 @@ The current application contains these real features:
 
 - Runtime `READ_MEDIA_AUDIO` permission handling.
 - Local audio discovery through Android `MediaStore`.
+- A Room-backed music catalog synchronized with MediaStore, used as the read source for Home, Library, Search, and active-track metadata.
+- Per-volume MediaStore version/generation tracking to skip unchanged catalog scans and perform incremental synchronization when possible.
+- Separate bounded enrichment of selected embedded metadata; catalog listing does not open every audio file with `MediaMetadataRetriever`.
 - Home screen.
 - Recently Added section, limited to 10 real tracks.
 - Persistent Recent Play history, limited to 10 tracks.
@@ -112,33 +115,29 @@ Never insert:
 
 If data does not exist, show the actual empty/unavailable state.
 
-## 3.2 Application database
+## 3.2 Application database and synchronized music catalog
 
-Rovia uses **Room 3 as the abstraction layer over Android SQLite** for structured application-owned
-persistent state.
+Rovia uses **Room 3 over Android SQLite** for its persistent application state and its local, queryable
+music catalog. Database implementation details are isolated in `:data:database`.
 
-The database implementation is isolated in:
+Current database tables:
 
-```text
-:data:database
-```
+- `music_tracks`: the synchronized local catalog used by Home, Library, Search, and track metadata observation;
+- `media_store_sync_state`: per-volume MediaStore version/generation checkpoints;
+- `recent_plays`: the latest 10 playback-history records;
+- `excluded_folders`: persisted Folder Filter selections.
 
-Current persistent data:
+**MediaStore remains authoritative for which local media files exist and for indexed MediaStore values.**
+Room intentionally stores a synchronized catalog snapshot so the app does not have to query and parse the
+entire library on every screen/startup. Room is a local index/cache for catalog reads, not the source of
+truth for the underlying files. Synchronization reconciles Room against MediaStore.
 
-- Recent Play;
-- Folder Filter selections.
+Do not introduce another persistence/database technology for these existing responsibilities. Keep Room,
+DAOs, entities, SQLite, and concrete database repositories inside `:data:database`; feature modules use
+Core repository APIs rather than accessing Room/SQLite directly.
 
-Do not introduce another database technology for application-owned structured state when the existing
-Rovia database can support the requirement.
-
-Room/SQLite implementation details must remain inside `:data:database`. Feature modules must use
-Core repository interfaces rather than accessing Room, DAO, Entity, or SQLite classes directly.
-
-MediaStore remains the source of truth for the device's local audio collection. Rovia's database must
-not become a mirror of the complete MediaStore library.
-
-Do not add `DataStore` or `SharedPreferences` as an alternative persistence mechanism for data that
-belongs in the existing structured application database.
+Do not add `DataStore` or `SharedPreferences` as an alternative for data that belongs in the existing
+structured database.
 
 Current database stack:
 
@@ -296,14 +295,19 @@ Rovia/
 │   │   │   ├── RoviaDatabaseProvider.kt
 │   │   │   ├── dao/
 │   │   │   │   ├── ExcludedFolderDao.kt
+│   │   │   │   ├── MediaStoreSyncStateDao.kt
+│   │   │   │   ├── MusicTrackDao.kt
 │   │   │   │   └── RecentPlayDao.kt
 │   │   │   ├── entity/
 │   │   │   │   ├── ExcludedFolderEntity.kt
+│   │   │   │   ├── MediaStoreSyncStateEntity.kt
+│   │   │   │   ├── MusicTrackEntity.kt
 │   │   │   │   └── RecentPlayEntity.kt
 │   │   │   ├── mapper/
 │   │   │   │   └── RecentPlayEntityMapper.kt
 │   │   │   └── repository/
 │   │   │       ├── RoomFolderFilterRepository.kt
+│   │   │       ├── RoomMusicCatalogRepository.kt
 │   │   │       └── RoomRecentPlayRepository.kt
 │   │   └── src/androidTest/kotlin/com/rovia/music/data/database/
 │   │       └── RoviaDatabaseMigrationTest.kt
@@ -311,9 +315,13 @@ Rovia/
 │   └── media-store/
 │       └── src/main/kotlin/com/rovia/music/data/media/store/
 │           ├── EmbeddedLyricsRepository.kt
+│           ├── EmbeddedMetadataEnrichmentProcessor.kt
+│           ├── EmbeddedMetadataSignature.kt
+│           ├── MediaCatalogSyncCoordinator.kt
+│           ├── MediaStoreCatalogDataSource.kt
 │           ├── MediaStoreFolderBrowserRepository.kt
 │           ├── MediaStoreFolderScannerRepository.kt
-│           └── MediaStoreMusicRepository.kt
+│           └── MediaStoreMusicRepository.kt  # legacy repository; not AppContainer's catalog source
 │
 ├── playback/
 │   └── media3/
@@ -457,6 +465,8 @@ Owns:
 Current persistent tables:
 
 ```text
+music_tracks
+media_store_sync_state
 recent_plays
 excluded_folders
 ```
@@ -602,11 +612,26 @@ Do not add image/video permissions or unrelated permissions without a real imple
 
 # 10. APP CONTAINER
 
-`AppContainer` currently wires concrete implementations:
+`AppContainer` manually wires the application's shared repositories and controllers. The current catalog
+read path is Room-backed; `MediaStoreMusicRepository` is not the `MusicRepository` instance used by the app.
+
+Current wiring:
 
 ```text
 MusicRepository
-    -> MediaStoreMusicRepository
+    -> RoomMusicCatalogRepository
+    -> MusicTrackDao / music_tracks
+
+MediaStoreCatalogDataSource
+    -> MediaStore volume/version/generation and audio queries
+
+MediaCatalogSyncCoordinator
+    -> synchronizes MediaStore changes into music_tracks
+    -> stores per-volume checkpoints in media_store_sync_state
+
+EmbeddedMetadataEnrichmentProcessor
+    -> reads selected embedded metadata for pending tracks in bounded batches
+    -> updates music_tracks and matching recent_plays metadata
 
 FolderScannerRepository
     -> MediaStoreFolderScannerRepository
@@ -624,311 +649,119 @@ PlaybackController
     -> Media3PlaybackController
 ```
 
-Conceptually:
+`MainActivity` requests catalog synchronization after audio permission is available and again when the
+activity resumes. `AppContainer` guards against launching duplicate active catalog-sync jobs. Catalog
+synchronization happens off the UI thread. Embedded metadata enrichment is separate from the MediaStore
+catalog query and uses bounded batches (currently 24 tracks per batch).
 
-```text
-RoviaApplication
-     │
-     ├── applicationScope
-     │
-     ▼
- AppContainer
-      ├── MusicRepository
-      ├── FolderScannerRepository
-      ├── FolderFilterRepository
-      ├── LyricsRepository
-      ├── RecentPlayRepository
-      └── PlaybackController
-```
+The `:app` module owns manual dependency wiring. It passes the existing `MusicRepository` instance to
+Home, Library, Search, and the Player route. Do not construct a second catalog repository inside a feature.
 
-Room and SQLite implementation details are hidden behind the `:data:database` module.
+## 10.1 DATABASE AND MEDIASTORE CATALOG ARCHITECTURE
 
-Keep this explicit.
+Rovia uses Room 3 over the Android framework SQLite driver, stored in `rovia.db`, as both:
 
-## 10.1 DATABASE ARCHITECTURE
+- persistent storage for application-owned state; and
+- the reactive local catalog/index for MediaStore audio tracks.
 
-Rovia uses Room 3 as an abstraction layer over SQLite.
+Current tables and keys:
 
-The database is isolated in:
+### `music_tracks`
 
-```text
-:data:database
-```
+Stores the synchronized local music catalog. The composite primary key is `(volume_name, track_id)` because
+MediaStore IDs must be interpreted together with their volume. It holds the real `Track` fields needed by the
+UI, plus synchronization/enrichment data such as `generation_modified`, `embedded_metadata_signature`,
+`embedded_metadata_status`, and the last enrichment timestamp.
 
-Current implementation:
+The UI-facing catalog repository maps these entities to `Track`. Its `observeAllTracks()`,
+`observeRecentlyAdded(limit)`, and `observeTrackByUri(uri)` Flows emit catalog updates from Room. The URI
+lookup is used to observe metadata for the currently active player track without querying the entire library
+for that individual observation.
 
-```text
-Room 3
-   ↓
-RoviaDatabase
-   ↓
-AndroidSQLiteDriver
-   ↓
-Android framework SQLite
-   ↓
-rovia.db
-```
+### `media_store_sync_state`
 
-Current database tables:
+Stores the MediaStore version and last successfully synchronized generation/checkpoint per volume. Do not
+advance a checkpoint before all changes represented by it have been handled successfully.
 
 ### `recent_plays`
 
-Stores persistent Recent Play state.
-
-Primary key:
-
-```text
-track_id
-```
-
-Stored fields:
-
-```text
-track_id
-uri
-title
-artist
-album
-duration_ms
-date_added_epoch_seconds
-mime_type
-sample_rate_hz
-bitrate_bps
-artwork_uri
-last_played_at_epoch_millis
-```
-
-Recent Play is limited to the latest 10 records.
+Stores a bounded playback-history snapshot with a maximum of 10 distinct URIs. The primary key is `uri`;
+`track_id` is additional metadata, not the unique key, because track IDs can overlap across volumes. Stored
+track metadata includes real values when available, such as release date, label, copyright, and release type.
+When embedded release date/copyright metadata is enriched later, the matching Recent Play snapshot is updated
+by URI. Missing tags remain null; do not fabricate values.
 
 ### `excluded_folders`
 
-Stores the user's Folder Filter selections.
+Stores the user's excluded relative folder paths. Folder Filter selections remain application-owned
+persistent state; folder discovery and the underlying audio files remain MediaStore responsibilities.
 
-Primary key:
+### MediaStore synchronization contract
 
-```text
-relative_path
-```
+`MediaStoreCatalogDataSource` discovers available external volumes and reads their MediaStore version,
+generation, audio rows, or lightweight IDs. It does not write to Room and does not use
+`MediaMetadataRetriever` during catalog listing.
 
-The database stores only the user's exclusion decision. Folder metadata and local audio discovery
-remain MediaStore responsibilities.
+`MediaCatalogSyncCoordinator` follows these rules:
 
-### Database boundaries
+1. On first synchronization, a missing checkpoint, a changed MediaStore version, or a generation rollback,
+   perform a full scan for that volume.
+2. If the stored MediaStore version matches and generation advanced, query rows whose
+   `GENERATION_MODIFIED` is newer than the last successful checkpoint.
+3. If version and generation are unchanged, skip the audio catalog query for that volume.
+4. Reconcile track IDs so entries removed from MediaStore are removed from the Room catalog.
+5. Treat an unavailable volume as unavailable, not as an empty volume; do not delete its cached catalog just
+   because it is absent from the current mounted-volume list.
+6. Persist a successful checkpoint only after the corresponding synchronization/reconciliation succeeds.
 
-The intended dependency direction is:
+MediaStore remains authoritative for underlying files, volume availability, content URIs, paths, and
+MediaStore-indexed metadata. Room intentionally stores a synchronized catalog of the complete available local
+library so normal UI reads do not need to scan and parse every file again. Do not describe this catalog as
+“application-only state” or prohibit storing the synchronized track catalog in Room; that policy is obsolete.
 
-```text
-feature / playback
-        ↓
-Core repository interface
-        ↓
-:data:database
-        ↓
-Room 3
-        ↓
-SQLite
-```
+### Embedded metadata enrichment
 
-Feature modules must not access:
+`EmbeddedMetadataEnrichmentProcessor` reads selected tags (`releaseDate` and copyright) independently from
+catalog scanning. It processes pending tracks in bounded batches (currently 24) on `Dispatchers.IO`. It records
+a source signature and processing status so a track that has already been processed is not reopened on every
+startup. A changed MediaStore source signature can mark its embedded metadata pending again. An absent tag is
+a valid missing value; a failed read is tracked separately from a successful read with no tag.
 
-```text
-RoomDatabase
-DAO
-Entity
-SQLiteDatabase
-SQLiteOpenHelper
-```
+The metadata signature is based on MediaStore/source metadata fields; it is not a cryptographic checksum of
+the entire audio file. Do not call it a content hash.
 
-directly.
+### Active player metadata
 
-### MediaStore remains the source of truth
+`PlayerViewModel` observes the active playback URI through `MusicRepository.observeTrackByUri()`. When Room
+emits a newer catalog `Track` for the same URI, the UI state uses that refreshed track for presentation while
+keeping playback position, play/pause state, duration, repeat, and shuffle sourced from
+`PlaybackController.playbackState`. This UI refresh must not restart playback or rebuild the Media3 queue.
+The playback module remains unaware of Room/SQLite.
 
-The Rovia database must not mirror the complete MediaStore collection.
+`artworkUri` currently uses the MediaStore content URI for the track. Embedded metadata enrichment does not
+update `artwork_uri`, and the artwork loader remains based on Android `ContentResolver.loadThumbnail()`.
+Do not add cache-busting or a separate artwork cache as part of unrelated metadata changes.
 
-MediaStore remains authoritative for:
+### Schema version and current development policy
 
-```text
-audio files
-audio metadata
-MediaStore IDs
-content URIs
-relative folder paths
-device media availability
-```
-
-SQLite is only for application-owned state that must survive process/application restarts.
-
-### Initialization
-
-The database is created once for the application process and shared through `RoviaDatabaseProvider`.
-
-Folder Filter state is restored from Room before MediaStore-backed library queries use the exclusion set.
-
-### Schema versioning
-
-The current database schema version is:
-
-```text
-1
-```
-
-Version 1 contains:
-
-```text
-recent_plays
-excluded_folders
-```
-
-The exported baseline schema is stored at:
+The current `RoviaDatabase` schema version remains `1`, with its current exported schema at:
 
 ```text
 data/database/schemas/com.rovia.music.data.database.RoviaDatabase/1.json
 ```
 
-The schema export is part of the source-controlled database history. Do not overwrite an older schema
-file with a newer schema.
+Keep that export aligned with the current `RoviaDatabase` entities and schema. During the current active
+Rovia development cycle, do not increment the schema version or add migrations/automigrations merely to
+preserve local development data unless the developer explicitly asks for a migration. Clearing the app's local
+data or reinstalling is an accepted development reset after an incompatible schema change.
 
-Future versions are additive/evolutionary and must preserve existing user data.
+This development convenience is not a production data-loss policy. Before a release where existing user data
+must survive an upgrade, explicitly establish the released schema baseline, increment the version for a real
+schema evolution, preserve released schema exports, and implement/test the required migration path. Do not add
+`fallbackToDestructiveMigration()` as a production recovery strategy.
 
-### Migration policy
-
-Rovia uses incremental Room migrations.
-
-The expected evolution pattern is:
-
-```text
-Version 1
-    ↓ migration
-Version 2
-    ↓ migration
-Version 3
-    ↓ migration
-Version 4
-```
-
-A migration version represents a database schema change, not necessarily one feature.
-
-For example, Favorites, Playlists, and Play History may be introduced together as one schema version if
-their final schema is designed and shipped together.
-
-When a future feature changes the database schema:
-
-1. Add or modify the relevant Room `Entity`/schema.
-2. Increase the `RoviaDatabase` version.
-3. Create the required migration path from the previous schema version.
-4. Generate the new exported schema.
-5. Keep all previous exported schema files.
-6. Add or update migration tests.
-7. Verify that existing user data remains available after migration.
-8. Build and run the relevant regression tests on Android.
-
-For schema changes that Room can safely infer, prefer Room `AutoMigration`.
-
-For ambiguous or data-transforming changes such as complex renames, deletes, or custom data conversion,
-use an explicit Room migration/`AutoMigrationSpec` as appropriate.
-
-Do not create a migration merely because a feature was added if that feature does not change the database
-schema.
-
-### Destructive migration is prohibited
-
-Do not add:
-
-```kotlin
-fallbackToDestructiveMigration()
-```
-
-or equivalent destructive migration behavior as a normal recovery mechanism.
-
-If Rovia encounters a newer database schema without a valid migration path, the development/build/test
-process must expose the missing migration rather than silently deleting the user's database.
-
-User-owned persistent data must never be intentionally discarded during normal schema upgrades.
-
-### Migration testing contract
-
-Rovia uses Room's migration testing support inside `:data:database`.
-
-Current test:
-
-```text
-data/database/src/androidTest/kotlin/
-└── com/rovia/music/data/database/
-    └── RoviaDatabaseMigrationTest.kt
-```
-
-The current baseline test verifies that database version 1 can be created with:
-
-```text
-recent_plays
-excluded_folders
-```
-
-Future migration tests must verify both:
-
-```text
-schema correctness
-+
-data preservation
-```
-
-The intended future test flow is:
-
-```text
-create Version N database
-        ↓
-insert representative existing user data
-        ↓
-run N → N+1 migration
-        ↓
-validate new schema
-        ↓
-validate old data is still present
-```
-
-The database instrumentation tests are run with:
-
-```powershell
-.\gradlew.bat :data:database:connectedDebugAndroidTest
-```
-
-Do not delete the user's real `rovia.db` merely to make a migration test pass. Migration tests use their own
-test database.
-
-### Database source-of-truth rule
-
-The following distinction is mandatory:
-
-```text
-MediaStore
-    = source of truth for local audio/media
-
-Room / SQLite
-    = source of truth for Rovia-owned persistent application state
-```
-
-Never copy the entire MediaStore library into Room merely because a new feature needs persistence.
-
-### Database growth policy
-
-Future persistent features may reuse the existing `:data:database` module.
-
-Examples include:
-
-```text
-Favorites
-Playlists
-Play History
-Play Counts
-Pinned Albums
-Pinned Artists
-```
-
-Before adding another persistence technology, determine whether the existing Rovia Room database can
-represent the required state.
-
-Keep database implementation details isolated inside `:data:database` and expose domain-level repository
-interfaces through the appropriate `core:*` API modules.
+Keep schema tests aligned with the actual current table set. Migration tests must use a dedicated test database;
+they must not delete or alter the developer's real `rovia.db`.
 
 ---
 
@@ -2647,28 +2480,25 @@ The repository keeps a non-null title fallback.
 
 ---
 
-# 35. MEDIASTORE QUERY
+# 35. MEDIASTORE CATALOG AND SYNCHRONIZATION
 
-`MediaStoreMusicRepository` queries the external audio collection.
+`MediaStoreCatalogDataSource` is the low-level reader for the local audio collection. It queries each
+available MediaStore volume and reads version/generation markers, track rows, and lightweight track IDs for
+reconciliation. It does not write to Room and does not open every audio file to extract embedded metadata.
 
-Current projection includes:
+`MediaCatalogSyncCoordinator` synchronizes its results into Room's `music_tracks` table. A full scan is used
+for first indexing or when MediaStore version/checkpoint conditions require one; incremental scans query rows
+whose `GENERATION_MODIFIED` is newer than the saved checkpoint. Unchanged volume version/generation markers
+allow the coordinator to skip the full audio-row query. Catalog deletions are reconciled against IDs from
+MediaStore. A currently unavailable volume must not be treated as an empty volume.
 
-```text
-_ID
-TITLE
-ARTIST
-ALBUM
-DURATION
-DATE_ADDED
-DISPLAY_NAME
-MIME_TYPE
-SAMPLERATE
-BITRATE
-```
+`RoomMusicCatalogRepository` is the active app-level `MusicRepository`. Home, Library, Search, and active Player
+metadata use its database-backed Flows. `MediaStoreMusicRepository` may remain in the source tree, but it is
+not the repository wired by `AppContainer` for the primary catalog read path. Do not reintroduce the old
+per-track `MediaMetadataRetriever` listing path as the Home/Library/Search startup path.
 
-The repository builds real `Track` objects from these values.
-
-The repository does not use the database as a mirror of MediaStore. Application-owned persistence is handled separately by `:data:database`.
+The MediaStore-derived `Track` uses the real MediaStore content URI for both `uri` and `artworkUri`. Artwork
+loading remains a separate operation handled by the existing Android thumbnail component.
 
 ---
 
@@ -2692,23 +2522,15 @@ The data layer must not hardcode localized user-facing strings such as `Unknown 
 
 # 37. RECENTLY ADDED
 
-Home requests:
+Home observes the Room-backed catalog through:
 
 ```text
-limit = 10
+MusicRepository.observeRecentlyAdded(limit = 10)
 ```
 
-sorted by:
-
-```text
-DATE_ADDED DESC
-```
-
-This is actual MediaStore information.
-
+The list is sorted using real MediaStore `DATE_ADDED` values. Room emits updates when catalog rows change;
+Home must not launch a full MediaStore scan or open every audio file just to render this section.
 Do not fabricate recently added tracks.
-
-Do not load the entire library just to render this section.
 
 ---
 
@@ -2723,7 +2545,8 @@ Folders
 
 The selector uses Material 3 Expressive `ButtonGroup` APIs rather than a custom segmented control.
 
-All Songs mode requests the complete local audio collection through `MusicRepository.getAllTracks()`.
+All Songs mode observes the complete synchronized local audio catalog through `MusicRepository.observeAllTracks()`.
+Room provides the reactive read model; MediaStore synchronization is handled separately in `:data:media-store`.
 
 Current all-song sort:
 
@@ -2871,13 +2694,8 @@ The same no-fake-data rule applies to folder artwork, names, and track counts.
 
 # 39. RECENT PLAY
 
-Recent Play is persistent across application restarts.
-
-Current implementation stores at most:
-
-```text
-10 tracks
-```
+Recent Play is persistent across application restarts and is limited to the latest 10 distinct content URIs.
+The primary key is `uri`, not `track_id`, because MediaStore IDs can overlap across storage volumes.
 
 The playback flow is:
 
@@ -2897,13 +2715,15 @@ SQLite
 
 Recording behavior:
 
-1. Remove/replace the existing entry with the same track ID.
+1. Remove/replace the existing entry with the same content URI.
 2. Update `last_played_at_epoch_millis`.
-3. Trim the table so only the latest 10 entries remain.
-4. Expose the database-backed state through `StateFlow`.
+3. Trim the table so only the latest 10 distinct URI records remain.
+4. Expose database-backed state through the existing Recent Play repository/Flow.
+5. When embedded `releaseDate`/`copyright` metadata is later extracted for the same URI, update those fields
+   in the Recent Play snapshot without creating a new playback event.
 
-Recent Play persistence stores application-owned playback history only. It does not modify or replace
-MediaStore data.
+Recent Play is an application-owned playback-history snapshot. It does not modify the underlying media file;
+MediaStore remains authoritative for media availability and indexed source metadata.
 
 ---
 
@@ -3675,30 +3495,30 @@ Do not let screens construct services directly.
 
 # 74. HOME VIEWMODEL
 
-`HomeViewModel` currently combines:
+`HomeViewModel` observes:
 
 ```text
-MusicRepository.getRecentlyAdded(limit = 10)
+MusicRepository.observeRecentlyAdded(limit = 10)
 PlaybackController.recentPlays
 ```
 
-and exposes a `HomeUiState` through `StateFlow`.
-
-Errors are represented as an actual error state.
+and exposes a `HomeUiState` through `StateFlow`. Recently Added comes from Room's synchronized catalog;
+Recent Play remains backed by the dedicated Recent Play repository exposed through playback state. Errors are
+represented as actual error states.
 
 ---
 
 # 75. LIBRARY VIEWMODEL
 
-`LibraryViewModel` requests:
+`LibraryViewModel` observes:
 
 ```text
-MusicRepository.getAllTracks()
+MusicRepository.observeAllTracks()
 ```
 
-and exposes a `LibraryUiState` through `StateFlow`.
-
-No persistence layer is involved.
+and exposes a `LibraryUiState` through `StateFlow`. Track listings come from the Room-backed synchronized
+catalog, while folder discovery/browsing continues to use the dedicated MediaStore folder repositories.
+Excluded folders are applied by the catalog query and the existing Folder Filter repository.
 
 ---
 
@@ -3706,9 +3526,9 @@ No persistence layer is involved.
 
 `SearchRoute` observes text changes from Compose `TextFieldState` and forwards the query to `SearchViewModel`.
 
-Search processing is local to the application and the MediaStore-backed track collection.
-
-No network search is involved.
+`SearchViewModel` observes `MusicRepository.observeAllTracks()` and performs local fuzzy matching over the
+Room-backed synchronized catalog. Search remains offline and exposes a bounded result list (currently 50).
+It does not independently query MediaStore or open audio files per query. No network search is involved.
 
 ---
 
@@ -3749,16 +3569,24 @@ Keep Rovia intentionally lightweight.
 Current important constraints:
 
 - Home Recently Added is limited to 10.
-- Recent Play is limited to 10.
-- Search limits results to 50.
-- Album artwork uses thumbnail loading.
+- Recent Play is limited to 10 distinct content URIs.
+- Search exposes at most 50 results.
+- Home, Library, Search, and active-player metadata read from Room-backed catalog Flows.
+- MediaStore remains the source of truth for media availability and indexed source values; `music_tracks` is
+  intentionally a synchronized local catalog, not a user-data-only table.
+- Use per-volume MediaStore version/generation checkpoints to avoid querying the entire catalog when nothing
+  changed and use incremental synchronization when supported by the current checkpoint.
+- Do not run `MediaMetadataRetriever` as part of catalog listing for every track. Enrich selected embedded tags
+  separately in bounded batches.
+- Recent Play stores only the latest 10 entries.
+- Album artwork uses Android thumbnail loading.
 - There is only one playback service/player path.
-- The app does not continuously scan the entire filesystem.
+- The app does not continuously scan the raw filesystem.
 - No network image loading exists.
 - No background worker is introduced without a real requirement.
-- The application database stores only bounded application-owned state and must not mirror the complete MediaStore library.
 
-Do not optimize by introducing new caching layers before they are needed.
+Do not add new cache layers or another media database before they are needed. Preserve the separation between
+MediaStore synchronization, Room catalog reads, embedded metadata enrichment, and Media3 playback.
 
 ---
 
@@ -3832,20 +3660,7 @@ The application must not label an audio file as Hi-Res/Bit-Perfect/DSD merely be
 
 # 83. DATABASE POLICY
 
-Rovia has an application-owned Room 3 database backed by Android SQLite.
-
-Current persistent data:
-
-```text
-Recent Play
-Folder Filter selections
-```
-
-Current database module:
-
-```text
-:data:database
-```
+Rovia uses Room 3 over Android SQLite in `:data:database`.
 
 Current schema version:
 
@@ -3853,7 +3668,35 @@ Current schema version:
 1
 ```
 
-The database is not a mirror of the device's MediaStore library.
+Current tables:
+
+```text
+music_tracks
+media_store_sync_state
+recent_plays
+excluded_folders
+```
+
+Responsibilities:
+
+- `music_tracks`: synchronized local audio catalog and metadata/enrichment state;
+- `media_store_sync_state`: per-volume MediaStore version/generation checkpoints;
+- `recent_plays`: bounded history of the latest 10 distinct content URIs;
+- `excluded_folders`: persisted Folder Filter selections.
+
+The catalog is intentionally persisted in Room for fast/reactive reads. MediaStore remains the authority for
+underlying local files, mounted-volume availability, content URIs, relative paths, and indexed source values;
+Room's catalog must be synchronized against it. Do not describe `music_tracks` as a table that must not exist
+or must not mirror a synchronized local track inventory.
+
+Room/SQLite implementation details remain inside `:data:database`; app and feature code use Core repository
+interfaces. Do not introduce a second persistence technology for these responsibilities.
+
+The current development policy keeps the schema at version `1` and does not add migration/automigration work
+unless explicitly requested. When a local schema change makes an existing development database incompatible,
+clearing app data or reinstalling is acceptable during development. Before shipping schema changes to users
+whose existing data must be preserved, establish an explicit released schema baseline and migration plan.
+Do not use destructive fallback migration as a production recovery strategy.
 
 The database does not currently persist:
 
@@ -3866,9 +3709,8 @@ open folder/navigation path
 language selection
 ```
 
-Language follows Android resources.
-
-Settings remains a UI shell except for explicitly implemented persistence such as Folder Filter.
+Language follows Android resources. Settings remains a UI shell except for explicitly implemented persistent
+data such as Folder Filter selections.
 
 ---
 
@@ -3911,53 +3753,67 @@ A real sample rate field is not the same as a verified end-to-end bit-perfect cl
 
 # 86. SAFE MODIFICATION PROCEDURE FOR AI AGENTS
 
-When asked to change Rovia, an AI coding agent must follow this workflow exactly.
+When asked to change Rovia, follow this workflow exactly.
 
-## Step 1
-Read this `Agents.md` before modifying Rovia.
+## Step 1 — Read the engineering contract
 
-## Step 2
-Inspect the actual target file and surrounding implementation.
+Read `Agents.md` before modifying the project. Treat the implementation as an existing application, not a blank template.
 
-## Step 3
-Identify the owning module and preserve the documented architecture.
+## Step 2 — Inspect the current file
 
-## Step 4
-Create a checkpoint before risky interaction, navigation, playback, database, or migration changes.
+Before modifying an existing file, inspect its latest full contents. If those contents are not already available, ask the developer to send the complete current file first. Do not guess from snippets, reconstruct unseen code, or make partial edits to a file whose current structure is unknown.
 
-## Step 5
-Make the smallest change that implements the requested behavior.
+## Step 3 — Create/open files through Windows PowerShell and VS Code
 
-## Step 6
-Do not touch unrelated architecture, files, modules, UI behavior, or dependencies.
+For a new file, provide a PowerShell command to create its parent directory/file and a `code <relative-path>` command to open it in VS Code. Always provide the complete source file, ready to paste. For an existing file, provide the complete updated file rather than isolated fragments unless the developer explicitly asks for a minimal diff.
 
-## Step 7
-Compile the application with the mandatory full Debug build:
+## Step 4 — One file-level change per build checkpoint
+
+Keep the requested change small and file-scoped. A checkpoint is a workflow step, not a Git commit or tag. Do not create an interim commit merely because a build checkpoint has been reached.
+
+## Step 5 — Preserve unrelated behavior
+
+Do not touch unrelated architecture, files, modules, UI behavior, or dependencies. Prefer the smallest change that fulfils the requested behavior.
+
+## Step 6 — Build after each file-level change
+
+After the developer pastes/saves the changed file, ask them to run:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
 ```
 
-## Step 8
-Only when `:app:assembleDebug` succeeds, install the resulting Debug APK:
+Stop and wait for the actual build output before proceeding to another file. Do not make further source changes while that checkpoint is unresolved.
+
+## Step 7 — Resolve errors before continuing
+
+If the build fails, fix the actual reported error in the current step. Do not proceed to another planned change, install the APK, or claim success while the build fails.
+
+## Step 8 — Install after all intended changes compile
+
+After all intended file-level changes pass their build checkpoints, run:
 
 ```powershell
 .\gradlew.bat :app:installDebug
 ```
 
-## Step 9
-Run the relevant runtime/regression test on the Android device or emulator.
+## Step 9 — Verify runtime behavior
 
-## Step 10
-If the change is verified successfully, create a structured Git commit immediately.
+Run the relevant runtime/regression checks on the Android device or emulator. Do not claim runtime behavior is verified until the user reports the observed result or an actual test provides it.
 
-## Step 11
-Remind the developer that the verified change must be committed if they have not committed it yet.
+## Step 10 — Commit verified files individually
 
-## Step 12
-Do not leave a successfully verified change intentionally uncommitted unless the developer explicitly requests a different checkpoint strategy.
+After the changes pass the required verification, use the PowerShell Git workflow in Section 90.1. The current project preference is one changed file per commit, using an accurate module prefix and an English message.
 
-A failed build or failed runtime verification is a checkpoint, not a reason to create a misleading "successful" commit.
+## Step 11 — Keep staging precise
+
+Stage only the exact file being committed. Do not use `git add .` or `git commit -a` for the per-file workflow.
+
+## Step 12 — Final synchronization
+
+After the individual commits are complete, inspect the commit history and `git status -sb`. Push/sync only after the full local commit set has been checked and the developer requests or confirms it.
+
+A failed build or failed runtime verification is a checkpoint for fixing the current step, not a reason to make unrelated changes or create a misleading successful commit.
 
 ---
 
@@ -3977,9 +3833,16 @@ data/database/src/main/kotlin/com/rovia/music/data/database/RoviaDatabase.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/RoviaDatabaseProvider.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/dao/RecentPlayDao.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/dao/ExcludedFolderDao.kt
+data/database/src/main/kotlin/com/rovia/music/data/database/dao/MusicTrackDao.kt
+data/database/src/main/kotlin/com/rovia/music/data/database/dao/MediaStoreSyncStateDao.kt
+data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomMusicCatalogRepository.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomRecentPlayRepository.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomFolderFilterRepository.kt
-data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreMusicRepository.kt
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreMusicRepository.kt (legacy; not the AppContainer catalog read path)
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreCatalogDataSource.kt
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaCatalogSyncCoordinator.kt
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedMetadataEnrichmentProcessor.kt
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedMetadataSignature.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedLyricsRepository.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerScreen.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerPortraitContent.kt
@@ -4000,23 +3863,45 @@ Do not make a broad regex-based replacement in these files without inspecting th
 
 # 88. POWER-SHELL CHANGE WORKFLOW
 
-The project is developed on Windows.
+The project is developed on Windows using PowerShell and VS Code.
+
+For a new file, create the parent directory and empty file with explicit PowerShell commands, then open it with VS Code. For example:
+
+```powershell
+$path = '.\path\to\NewFile.kt'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+New-Item -ItemType File -Force -Path $path | Out-Null
+code $path
+```
+
+The AI agent must then provide the complete source contents for the developer to paste into the opened file.
+
+For an existing file, inspect the latest complete contents before modifying it. Return the full updated file so the developer can replace it without accidentally leaving stale code. Use `code <relative-path>` to open the target file.
 
 The preferred source-change workflow is incremental and observable:
 
-1. Inspect the actual target path before making changes.
-2. For new files, create the required directory and file explicitly.
-3. For Kotlin-only source migration, move `.kt` files only; do not modify package declarations.
-4. Verify the destination tree before deleting an old directory.
-5. Compile immediately after each meaningful structural change.
-6. Only remove an empty old source directory after the moved files compile successfully.
-7. Prefer complete, deterministic file operations over broad regex replacements when the target
-   source is structured and known.
-8. Never use a script that can close the developer's PowerShell session unexpectedly.
-9. Do not use `exit` in a script intended to be pasted into an interactive PowerShell session.
-10. Keep the terminal available so the real compiler error can be inspected.
+1. Confirm the repository-relative target path before editing.
+2. Inspect the current full file before modifying an existing file.
+3. Change one file at a time unless the developer explicitly requests a coordinated batch.
+4. After each file-level change, use this build checkpoint and wait for the developer's output:
 
-A failed compile is a checkpoint, not a reason to perform unrelated cleanup.
+   ```powershell
+   .\gradlew.bat :app:assembleDebug
+   ```
+
+5. If the build fails, address that exact error before proceeding.
+6. After all intended changes compile, install and perform runtime regression testing:
+
+   ```powershell
+   .\gradlew.bat :app:installDebug
+   ```
+
+7. Do not use broad regex replacement when a structured file can be edited deterministically.
+8. For Kotlin-only source migration, move `.kt` files only; do not modify package declarations. Verify the new tree and compile before removing an empty old source directory.
+9. Never run a script that closes the developer's interactive PowerShell session. Do not use `exit` in a script meant to be pasted into PowerShell.
+10. Keep the terminal available so actual compiler output can be inspected.
+
+A build checkpoint is a workflow pause, not a Git commit, stash, branch, or tag. Do not create checkpoint commits unless explicitly requested.
 
 ---
 
@@ -4097,30 +3982,29 @@ Do not skip the install step when a successful application-wide Debug build was 
 
 # 90.1. MANDATORY GIT COMMIT POLICY
 
-Every successfully implemented and verified change must be committed.
+Every successfully implemented and verified change must be committed. The current Rovia workflow creates **one commit per changed file**, even when several files belong to the same larger feature. This keeps each commit narrowly reviewable.
 
-A successful change is:
+For runtime-affecting changes, the normal verification sequence is:
 
 ```text
 requested change implemented
         ↓
-:app:assembleDebug -> SUCCESS
+per-file :app:assembleDebug checkpoints -> SUCCESS
+        ↓
+all intended changes compile
         ↓
 :app:installDebug -> SUCCESS
         ↓
 relevant runtime/regression verification -> PASS
         ↓
-structured Git commit
+one commit per changed file
 ```
 
-The AI coding agent must actively remind the developer to commit the change when the change has been verified
-but no commit has been created yet.
+Do not claim full runtime verification unless the developer has confirmed it or the relevant tests have actually run.
 
 ## Commit messages are architectural labels
 
-Commit messages must follow the ownership of the changed code/module.
-
-The prefix identifies the primary project area that owns the change:
+The prefix identifies the owner of the file being committed:
 
 ```text
 app:
@@ -4133,217 +4017,59 @@ test:
 docs:
 ```
 
-Use the prefix that matches the architecture, not a generic Git convention.
-
-### `feature:`
-
-Use for changes owned by a feature module such as:
+Use an English imperative description after the prefix. Examples:
 
 ```text
-feature/home
-feature/search
-feature/library
-feature/player
-feature/settings
+core: Add URI-based track observation API
+data: Add MediaStore catalog sync state
+app: Pass music repository to player sheet
+feature: Observe active track catalog metadata
+playback: Preserve queue state during track transitions
+build: Update Gradle configuration
+test: Add catalog synchronization coverage
+docs: Update catalog architecture and development rules
 ```
 
-Examples:
+Prefix ownership:
 
-```text
-feature: Adding a maintainer profile to the About page in settings
-feature: Fixing folder back navigation in the Library feature
-feature: Improving synchronized lyric rendering in the Player feature
-```
+- `core:` — Core APIs, domain models, and shared UI (`:core:*`).
+- `data:` — database/catalog persistence and MediaStore data code (`:data:database`, `:data:media-store`).
+- `app:` — application wiring, Activity, root Navigation, theme entry point, and `UnifiedPlayerSheet` (`:app`).
+- `feature:` — feature-local UI, routes, state, and ViewModels (`:feature:*`).
+- `playback:` — Media3/ExoPlayer implementation (`:playback:media3`).
+- `build:` — Gradle and build tooling.
+- `test:` — test-only changes.
+- `docs:` — engineering documents such as `Agents.md`.
 
-### `core:`
+Do not use a prefix merely because it is convenient. Select the prefix matching the file's architectural owner.
 
-Use for changes owned by shared Core APIs, models, or shared UI components.
+## Commit message quality
 
-Example:
+A message must describe the actual file change, be specific enough to understand without opening the diff, and avoid vague text such as `update`, `fix`, `misc`, `wip`, `final`, or `small changes`.
 
-```text
-core: Fixing a bug in the MiniPlayer within the core UI
-```
+## Mandatory per-file PowerShell commands
 
-Other valid examples:
-
-```text
-core: Updating playback state contracts in core playback API
-core: Fixing TrackRow artwork handling in core UI
-```
-
-### `data:`
-
-Use for changes owned by:
-
-```text
-:data:database
-:data:media-store
-```
-
-Examples:
-
-```text
-data: Adding persistent Folder Filter migration support
-data: Fixing embedded lyric parsing in MediaStore
-```
-
-### `playback:`
-
-Use for changes owned by:
-
-```text
-:playback:media3
-```
-
-Examples:
-
-```text
-playback: Fixing queue state restoration in Media3 playback
-playback: Updating MediaSession playback state handling
-```
-
-### `app:`
-
-Use for application composition, root navigation, Activity, theme entry-point, or `UnifiedPlayerSheet`
-changes owned by `:app`.
-
-Examples:
-
-```text
-app: Fixing Player Back behavior in Navigation.kt
-app: Updating UnifiedPlayerSheet predictive back handling
-```
-
-### `build:`
-
-Use for Gradle, version catalog, signing configuration, build scripts, or build tooling changes.
-
-Examples:
-
-```text
-build: Updating Android Gradle Plugin configuration
-build: Fixing Debug installation workflow
-```
-
-### `test:`
-
-Use when the primary change is isolated to tests or test infrastructure.
-
-Examples:
-
-```text
-test: Adding Room migration coverage for excluded folders
-test: Updating Library navigation regression tests
-```
-
-### `docs:`
-
-Use for changes to engineering documentation such as this `Agents.md`.
-
-Example:
-
-```text
-docs: Updating AI agent commit and verification rules
-```
-
-## Commit message quality rules
-
-A commit message must:
-
-```text
-1. identify the owning architectural area;
-2. describe the actual change;
-3. mention the relevant feature/component when useful;
-4. be specific enough to identify the reason for the commit;
-5. remain readable without opening the diff.
-```
-
-Do not use vague commit messages such as:
-
-```text
-update
-changes
-fix
-bug fix
-misc
-stuff
-work
-wip
-test
-final
-update files
-small changes
-```
-
-Do not use a misleading prefix merely because it is convenient.
-
-For example:
-
-```text
-core: Fixing a bug in the MiniPlayer within the core UI
-```
-
-is correct when the changed MiniPlayer belongs to `:core:ui`.
-
-A Navigation 3 change in `app/` should not be committed as:
-
-```text
-feature: ...
-```
-
-unless the actual owning code is a feature module.
-
-## Scope discipline
-
-Prefer one logical change per commit.
-
-Do not mix unrelated changes into one commit merely because they were made during the same session.
-
-For example:
-
-```text
-feature: Fixing Library folder back navigation
-```
-
-should not also contain unrelated:
-
-```text
-data: database schema changes
-core: MiniPlayer redesign
-```
-
-unless the requested change genuinely requires all of those layers.
-
-When one requested change necessarily crosses multiple modules, use the prefix of the primary owning layer and make the
-message describe the complete behavior.
-
-## Mandatory commit workflow
-
-After successful verification:
+Run these commands from the repository root, repeating them for each changed file:
 
 ```powershell
-git status
-
-git add .
-
+git add -- "path/to/one/file.kt"
 git diff --cached --check
-
 git diff --cached --name-only
-
-git commit -m "PRIMARY_AREA: Specific description of the verified change"
+git commit -m "PREFIX: Specific English description"
 ```
 
-Then verify:
+Before committing, verify that `git diff --cached --name-only` lists exactly the one intended file. If other files are already staged, unstage them and stage only the intended path. Never use `git add .` or `git commit -a` for this workflow.
+
+After each commit, confirm the output and inspect the next file separately. After all intended file commits complete, verify the recent commit history and working tree:
 
 ```powershell
-git log -1 --oneline
-git status
+git log -N --oneline
+git status -sb
 ```
 
-The working tree should be clean for a fully completed change unless there are explicitly unrelated local modifications.
+Replace `N` with the number of commits created. Do not push/sync midway through the series. Once the whole series is reviewed, push with `git push origin main` when requested or confirmed by the developer.
 
-The AI agent must not silently finish a successful task and leave the developer unaware that a commit is still required.
+The AI agent must not silently finish a verified task without stating which file commits, if any, remain.
 
 ---
 
@@ -4447,7 +4173,7 @@ Music metadata itself must remain unchanged between languages.
 
 # 94. MEDIASTORE REGRESSION CHECKLIST
 
-Test tracks with:
+Test representative local tracks covering:
 
 ```text
 [ ] normal title
@@ -4458,11 +4184,29 @@ Test tracks with:
 [ ] different sample rates
 [ ] different bitrates
 [ ] different MIME types
+[ ] embedded release date/copyright present
+[ ] one or both embedded release tags missing
 [ ] embedded lyrics
 [ ] no embedded lyrics
 ```
 
-No metadata should be fabricated.
+Catalog synchronization checks:
+
+```text
+[ ] first sync builds the Room catalog from available MediaStore volumes
+[ ] unchanged MediaStore version/generation skips the audio-row catalog query
+[ ] generation changes are processed incrementally when the checkpoint remains valid
+[ ] changed MediaStore version or invalid checkpoint triggers a full scan
+[ ] removed MediaStore track IDs are reconciled out of Room
+[ ] an unavailable volume is not treated as an empty volume
+[ ] catalog listing does not open every audio file through MediaMetadataRetriever
+[ ] selected embedded metadata is enriched separately in bounded batches
+[ ] Room-backed Home, Library, and Search show the synchronized catalog
+[ ] active Player Track Info observes catalog metadata by URI without restarting playback
+[ ] Recent Play metadata is refreshed by URI when embedded release metadata is discovered later
+```
+
+No metadata should be fabricated. Missing embedded copyright/release-date tags are valid absent values and must not be displayed as synthetic metadata.
 
 ---
 
@@ -4519,13 +4263,13 @@ Do not add a full icon pack for one or two new icons.
 
 # 98. SOURCE OF TRUTH RULE
 
-This README documents the intended/current architecture, but the code is the final runtime authority.
+This `Agents.md` documents the intended/current architecture, but the code is the final runtime authority.
 
-If code and README genuinely disagree because a new feature was intentionally implemented:
+If code and this file genuinely disagree because a new feature was intentionally implemented:
 
 1. inspect the code;
 2. verify the new behavior;
-3. update this README together with the intentional architectural change.
+3. update `Agents.md` together with the intentional architectural change.
 
 Do not silently rewrite working code merely to make it match stale documentation.
 
@@ -4562,6 +4306,10 @@ native ButtonGroup controls
 native ListItem rows
 tappable folder breadcrumb/path
 MediaStore-derived folder browsing
+Room-backed synchronized music catalog
+per-volume MediaStore generation/version synchronization
+separate bounded embedded-metadata enrichment
+URI-based active-player metadata observation
 explicit dp geometry contracts
 Kotlin-only source tree
 no src/main/java directories
@@ -4629,9 +4377,11 @@ clear module boundaries
 real Android APIs
 real Media3 playback
 real device data
-Room 3 only where persistent application state is genuinely required
-incremental Room migrations with preserved user data
-MediaStore as the source of truth for the local media library
+Room 3 for application state and the synchronized local music catalog
+MediaStore as the authority for underlying local media and indexed source values
+per-volume version/generation synchronization with incremental updates when possible
+bounded embedded-metadata enrichment separate from catalog listing
+current development schema version stays at 1 unless a migration is explicitly requested
 real local lyrics
 real system localization
 real predictive back
@@ -5036,7 +4786,7 @@ Do not combine unrelated module ownership changes into one commit when they can 
 
 ---
 
-# 108. FOLDER FILTER HEADER CONTRACT
+# 109. FOLDER FILTER HEADER CONTRACT
 
 `FolderFilterScreen` follows the same header geometry rules as Settings.
 
@@ -5076,7 +4826,7 @@ back/action positions.
 
 ---
 
-# 109. KOTLIN-ONLY SOURCE TREE CONTRACT
+# 110. KOTLIN-ONLY SOURCE TREE CONTRACT
 
 The Rovia source migration is complete.
 
@@ -5122,7 +4872,7 @@ Keep the package declaration unchanged unless the developer explicitly requests 
 
 ---
 
-# 110. SOURCE TREE MIGRATION RECORD
+# 111. SOURCE TREE MIGRATION RECORD
 
 The Kotlin source migration was completed in this sequence:
 
@@ -5171,7 +4921,7 @@ No feature behavior was intentionally changed by the source-tree migration.
 
 ---
 
-# 111. FINAL SOURCE-TREE AUDIT CONTRACT
+# 112. FINAL SOURCE-TREE AUDIT CONTRACT
 
 Before declaring a source-tree migration complete, verify:
 
@@ -5230,7 +4980,7 @@ The source audit, not the task name alone, determines whether Java source is pre
 
 ---
 
-# 112. UI ALIGNMENT REGRESSION CHECKLIST
+# 113. UI ALIGNMENT REGRESSION CHECKLIST
 
 Whenever Library, Settings, Folder Filter, or shared playback UI spacing is modified, verify:
 
@@ -5258,9 +5008,9 @@ contract was violated.
 
 ---
 
-# 113. CHANGE LOG: CURRENT UI AND ARCHITECTURE REFINEMENT
+# 114. CHANGE LOG: CURRENT UI AND ARCHITECTURE REFINEMENT
 
-The current README update records the following intentional changes made during the latest
+This engineering record documents the following intentional changes made during the latest
 implementation pass.
 
 ## UI spacing and positioning
@@ -5372,58 +5122,47 @@ implementation pass.
 - Kept all changes within the existing `:app`, `:core:ui`, and `:feature:player` module boundaries;
   no additional dependency or architecture layer was introduced.
 
-## Database integration
+## Database and synchronized catalog integration
 
-- Added the dedicated `:data:database` module.
-- Added Room 3 with KSP and the Android framework SQLite driver.
-- Added persistent `recent_plays` storage with a maximum of 10 records.
-- Added persistent `excluded_folders` storage for Folder Filter selections.
-- Added Core repository abstractions for Recent Play and folder scanning.
-- Removed the obsolete `SessionRecentPlayStore`.
-- Kept MediaStore as the source of truth for local audio data.
-- Added Room schema export configuration.
-- Established database schema version `1`.
-- Added and version-controlled the exported schema baseline:
-  `data/database/schemas/com.rovia.music.data.database.RoviaDatabase/1.json`.
-- Added Room migration-testing support.
-- Added `RoviaDatabaseMigrationTest` as the version-1 migration baseline test.
-- Verified the migration test passes on the Android 16 emulator.
-- Verified Recent Play survives force-stop and application restart on the Android 16 test device.
-- Verified Folder Filter selections survive force-stop and application restart on the Android 16 test device.
-- Verified the SQLite schema contains `recent_plays` and `excluded_folders`.
-- Verified Debug build succeeds.
-- Verified Release build succeeds with R8/resource shrinking enabled.
-- Migration policy explicitly prohibits destructive database resets for normal schema evolution.
+- Room 3 remains the database layer in `:data:database`, backed by Android framework SQLite.
+- Current schema version remains `1` during active development; the exported `1.json` is kept aligned with
+  `RoviaDatabase.kt` and its entities.
+- Persisted tables are `music_tracks`, `media_store_sync_state`, `recent_plays`, and `excluded_folders`.
+- `music_tracks` is the synchronized local audio catalog used by Home, Library, Search, and active-player
+  metadata observation. Its composite key is `(volume_name, track_id)`.
+- `media_store_sync_state` stores per-volume MediaStore version/generation checkpoints.
+- `recent_plays` is keyed by content URI, includes real track metadata fields when available, and remains
+  limited to the latest 10 distinct URIs.
+- `excluded_folders` remains the persistent store for Folder Filter selections.
+- `AppContainer` wires `MusicRepository` to `RoomMusicCatalogRepository`, not to the legacy
+  `MediaStoreMusicRepository` implementation.
+- `MediaStoreCatalogDataSource` queries available volumes, source version/generation, indexed audio rows,
+  and lightweight IDs for reconciliation. It does not open each audio file during catalog listing.
+- `MediaCatalogSyncCoordinator` performs full sync for first/invalidated checkpoints, incremental sync when
+  generation advances, skips unchanged volume scans, and reconciles removed track IDs. An unavailable volume
+  is not treated as an empty catalog.
+- `EmbeddedMetadataEnrichmentProcessor` separately extracts selected embedded tags in bounded batches
+  (currently 24). It records a source signature and processing status so completed/failed sources are not
+  blindly reopened on every startup. Missing embedded tags remain missing values.
+- Embedded `releaseDate` and `copyright` updates also refresh an existing Recent Play snapshot by URI.
+- `PlayerViewModel` observes the active track's catalog metadata by URI. The UI uses the refreshed `Track` for
+  presentation without restarting playback or rebuilding the Media3 queue; playback controls/state remain
+  sourced from `PlaybackController`.
+- `MusicRepository` exposes snapshot compatibility methods plus `observeRecentlyAdded`, `observeAllTracks`,
+  and `observeTrackByUri`; the Room implementation supplies reactive catalog Flows and a URI-scoped lookup.
+- Artwork stays on the existing Android thumbnail path. `artworkUri` is not altered by embedded metadata
+  enrichment; artwork/cache behavior should only be changed for a separately verified artwork issue.
 
-## Database migration contract
+### Current development schema policy
 
-The current database is version `1`. Future schema changes must evolve incrementally:
+During active development, keep `RoviaDatabase` at version `1` and do not add migrations/automigrations unless
+explicitly requested. When incompatible schema changes require a clean local test database, clearing app data
+or reinstalling is acceptable. This is a development convenience, not a policy to discard real users' data on
+production upgrades. Before shipping schema evolution to existing users, define the released baseline and add
+migrations/tests that preserve their data. Do not introduce destructive fallback migrations as a production
+recovery strategy.
 
-```text
-v1 → v2 → v3 → ...
-```
-
-Existing exported schema versions remain unchanged and are never replaced by newer schema files.
-
-Each migration must be implemented and tested before the corresponding application version is considered
-complete.
-
-At minimum, migration tests must prove:
-
-```text
-old schema opens
-        ↓
-migration executes
-        ↓
-new schema is valid
-        ↓
-existing user data remains intact
-```
-
-Adding a feature without changing the database schema does not require a migration.
-
-Adding Favorites, Playlists, Play History, or another future persistent feature will require a new schema
-version only when its database schema actually changes.
+---
 
 ## Navigation contract verification
 
@@ -5454,29 +5193,27 @@ Predictive Back gesture
 Future navigation work must keep this contract and update the Navigation 3 sections of this README whenever
 the implementation intentionally changes.
 
-## Verification
+## Verification status for the current catalog work
 
-The database and architecture were verified through:
-
-```text
-:data:database:compileDebugKotlin
-:data:database:connectedDebugAndroidTest
-:app:assembleDebug
-:app:assembleRelease
-```
-
-The Android 16 runtime verification also confirmed:
+Verified during the current implementation session:
 
 ```text
-Recent Play persistence       -> PASS
-Folder Filter persistence     -> PASS
-Room database creation        -> PASS
-SQLite schema                 -> PASS
-Room v1 migration baseline    -> PASS
+:app:assembleDebug -> BUILD SUCCESSFUL after the catalog and active-player metadata wiring changes
+Track Info releaseDate -> developer confirmed it appears for tracks that have the embedded tag
+Missing copyright tag -> valid missing metadata; do not fabricate a value
+Git history -> catalog changes split into one-file commits by module prefix
+Working tree -> clean and local main matched origin/main in the reported status
 ```
 
-The database migration test uses a dedicated test database and does not modify the real user database.
+A missing copyright value is expected when the source file does not contain that tag. It is not by itself a
+processing failure. Artwork code was not changed as part of embedded metadata enrichment; a separate runtime
+artwork regression should be investigated only if an actual artwork issue is observed.
 
-The existing source-tree migration rules remain unchanged. This database integration is an intentional
-architecture change required to support persistent application-owned state while preserving MediaStore as
-the local-media source of truth.
+Do not claim that the latest full catalog schema has passed `connectedDebugAndroidTest` or Release verification
+unless those commands have actually been run against this exact schema and build. The instrumentation test
+must be kept aligned with the current table set, and it must use a dedicated test database rather than the
+developer's real `rovia.db`.
+
+The existing source-tree migration rules remain unchanged. The current catalog integration intentionally adds
+a synchronized Room-backed index while keeping MediaStore authoritative for the underlying local media.
+Every successfully implemented and verified change must be committed.
