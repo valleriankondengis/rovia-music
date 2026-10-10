@@ -5,13 +5,14 @@
 
 package com.rovia.music.feature.home
 
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,9 +22,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -51,10 +52,17 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
 import com.rovia.music.core.ui.component.AlbumArtwork
 import com.rovia.music.core.ui.component.TrackRow
+
+private val HomeArtworkSize = 156.dp
+private val HomeArtworkRowHeight = 204.dp
+private val HomeSectionHorizontalPadding = 16.dp
+private val HomeArtworkSpacing = 12.dp
+private val HomeSectionBottomSpacing = 28.dp
 
 @Composable
 fun HomeScreen(
@@ -64,6 +72,9 @@ fun HomeScreen(
     currentTrackId: Long?,
     onOpenSettings: () -> Unit,
     hasMiniPlayer: Boolean = false,
+    onOpenArtist: (String) -> Unit = {},
+    onOpenAlbum: (String, String?) -> Unit = { _, _ -> },
+    onOpenGenre: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (uiState) {
@@ -79,6 +90,12 @@ fun HomeScreen(
                     uiState.recentlyAdded,
                 recentPlays =
                     uiState.recentPlays,
+                recentArtists =
+                    uiState.recentArtists,
+                recentAlbums =
+                    uiState.recentAlbums,
+                recentGenres =
+                    uiState.recentGenres,
                 onTrackClick =
                     onTrackClick,
                 onRestartCurrentTrack =
@@ -89,6 +106,12 @@ fun HomeScreen(
                     onOpenSettings,
                 hasMiniPlayer =
                     hasMiniPlayer,
+                onOpenArtist =
+                    onOpenArtist,
+                onOpenAlbum =
+                    onOpenAlbum,
+                onOpenGenre =
+                    onOpenGenre,
                 modifier =
                     modifier,
             )
@@ -122,18 +145,22 @@ private fun LoadingContent(
 private fun HomeContent(
     recentlyAdded: List<Track>,
     recentPlays: List<Track>,
+    recentArtists: List<RecentArtist>,
+    recentAlbums: List<RecentAlbum>,
+    recentGenres: List<RecentGenre>,
     onTrackClick: (List<Track>, Int) -> Unit,
     onRestartCurrentTrack: () -> Unit,
     currentTrackId: Long?,
     onOpenSettings: () -> Unit,
     hasMiniPlayer: Boolean,
+    onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (String, String?) -> Unit,
+    onOpenGenre: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     /*
-     * MainNavigation keeps NavDisplay full-height.
-     *
-     * NavigationBar is an overlay layer, so the LazyColumn
-     * needs its own bottom clearance.
+     * NavigationBar is an overlay in MainNavigation.
+     * Reserve enough bottom space for the player and navigation.
      */
     val bottomContentPadding =
         if (hasMiniPlayer) {
@@ -160,9 +187,7 @@ private fun HomeContent(
                             shape =
                                 CircleShape,
                             pressedShape =
-                                MaterialTheme
-                                    .shapes
-                                    .medium,
+                                MaterialTheme.shapes.medium,
                         ),
                     colors =
                         IconButtonDefaults
@@ -199,28 +224,92 @@ private fun HomeContent(
             contentPadding =
                 PaddingValues(
                     top = 8.dp,
-                    bottom =
-                        bottomContentPadding,
+                    bottom = bottomContentPadding,
                 ),
         ) {
+            /*
+             * Home shows at most ten Recent Play tracks.
+             * The stored collection remains unrestricted.
+             */
             if (recentPlays.isNotEmpty()) {
-                item {
+                item(
+                    key = "recent_play_section",
+                ) {
                     RecentPlaySection(
                         tracks =
-                            recentPlays,
+                            recentPlays.take(10),
                         onTrackClick =
                             onTrackClick,
                         modifier =
                             Modifier.padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 28.dp,
+                                start = HomeSectionHorizontalPadding,
+                                end = HomeSectionHorizontalPadding,
+                                bottom = HomeSectionBottomSpacing,
                             ),
                     )
                 }
             }
 
-            item {
+            if (recentArtists.isNotEmpty()) {
+                item(
+                    key = "recent_artists_section",
+                ) {
+                    RecentArtistsSection(
+                        artists =
+                            recentArtists,
+                        onArtistClick =
+                            onOpenArtist,
+                        modifier =
+                            Modifier.padding(
+                                start = HomeSectionHorizontalPadding,
+                                end = HomeSectionHorizontalPadding,
+                                bottom = HomeSectionBottomSpacing,
+                            ),
+                    )
+                }
+            }
+
+            if (recentAlbums.isNotEmpty()) {
+                item(
+                    key = "recent_albums_section",
+                ) {
+                    RecentAlbumsSection(
+                        albums =
+                            recentAlbums,
+                        onAlbumClick =
+                            onOpenAlbum,
+                        modifier =
+                            Modifier.padding(
+                                start = HomeSectionHorizontalPadding,
+                                end = HomeSectionHorizontalPadding,
+                                bottom = HomeSectionBottomSpacing,
+                            ),
+                    )
+                }
+            }
+
+            if (recentGenres.isNotEmpty()) {
+                item(
+                    key = "recent_genres_section",
+                ) {
+                    RecentGenresSection(
+                        genres =
+                            recentGenres,
+                        onGenreClick =
+                            onOpenGenre,
+                        modifier =
+                            Modifier.padding(
+                                start = HomeSectionHorizontalPadding,
+                                end = HomeSectionHorizontalPadding,
+                                bottom = HomeSectionBottomSpacing,
+                            ),
+                    )
+                }
+            }
+
+            item(
+                key = "recently_added_section",
+            ) {
                 RecentlyAddedSection(
                     tracks =
                         recentlyAdded,
@@ -236,41 +325,130 @@ private fun HomeContent(
     }
 }
 
+/**
+ * Morphs between predefined Material 3 Expressive polygons.
+ * No crossfade or scale animation is applied.
+ */
+@Composable
+private fun ExpressiveMorphArtwork(
+    artworkUri: String?,
+    fallbackText: String,
+    contentDescription: String,
+    sizeDp: androidx.compose.ui.unit.Dp,
+    isPressed: Boolean,
+    startShape: RoundedPolygon,
+    endShape: RoundedPolygon,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    val morph = remember(startShape, endShape) {
+        Morph(
+            start = startShape,
+            end = endShape,
+        )
+    }
+
+    val morphProgress by
+        animateFloatAsState(
+            targetValue =
+                if (isPressed) {
+                    1f
+                } else {
+                    0f
+                },
+            animationSpec =
+                tween(
+                    durationMillis = 140,
+                    easing = FastOutSlowInEasing,
+                ),
+            label = "${label}_progress",
+        )
+
+    Box(
+        modifier = modifier,
+    ) {
+        AlbumArtwork(
+            artworkUri = artworkUri,
+            fallbackText = fallbackText,
+            contentDescription = contentDescription,
+            modifier =
+                Modifier.fillMaxSize(),
+            size = sizeDp,
+            shape =
+                MorphPolygonShape(
+                    morph = morph,
+                    percentage = morphProgress,
+                ),
+        )
+    }
+}
+
+/**
+ * Compose Shape adapter for the result of AndroidX graphics-shapes Morph.
+ * The source geometries are MaterialShapes; this adapter maps the
+ * generated path to the artwork bounds.
+ */
+private class MorphPolygonShape(
+    private val morph: Morph,
+    private val percentage: Float,
+) : Shape {
+
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val matrix =
+            Matrix().apply {
+                scale(
+                    x = size.width,
+                    y = size.height,
+                )
+            }
+
+        val path =
+            morph.toPath(
+                progress = percentage,
+            )
+
+        path.transform(matrix)
+
+        val bounds =
+            path.getBounds()
+
+        val offsetX =
+            size.width / 2f -
+                bounds.center.x
+
+        val offsetY =
+            size.height / 2f -
+                bounds.center.y
+
+        path.translate(
+            Offset(
+                x = offsetX,
+                y = offsetY,
+            ),
+        )
+
+        return Outline.Generic(path)
+    }
+}
+
 @Composable
 private fun RecentPlaySection(
     tracks: List<Track>,
     onTrackClick: (List<Track>, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rowCount =
-        if (tracks.size == 1) {
-            1
-        } else {
-            2
-        }
-
-    val artworkSize =
-        156.dp
-
-    val itemHeight =
-        204.dp
-
-    val rowSpacing =
-        12.dp
-
-    val gridHeight =
-        (itemHeight * rowCount) +
-            (
-                rowSpacing *
-                    (rowCount - 1)
-            )
+    val artworkSize = HomeArtworkSize
+    val itemHeight = HomeArtworkRowHeight
+    val visibleTracks = tracks.take(10)
 
     Column(
         modifier = modifier,
         verticalArrangement =
-            Arrangement.spacedBy(
-                12.dp,
-            ),
+            Arrangement.spacedBy(HomeArtworkSpacing),
     ) {
         Text(
             text =
@@ -278,43 +456,28 @@ private fun RecentPlaySection(
                     R.string.section_recent_play,
                 ),
             style =
-                MaterialTheme
-                    .typography
-                    .titleLarge,
+                MaterialTheme.typography.titleLarge,
         )
 
-        LazyHorizontalGrid(
-            rows =
-                GridCells.Fixed(
-                    rowCount,
-                ),
+        LazyRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(
-                        gridHeight,
-                    ),
+                    .height(itemHeight),
             contentPadding =
                 PaddingValues(
-                    end = 12.dp,
+                    end = HomeArtworkSpacing,
                 ),
             horizontalArrangement =
-                Arrangement.spacedBy(
-                    12.dp,
-                ),
-            verticalArrangement =
-                Arrangement.spacedBy(
-                    rowSpacing,
-                ),
+                Arrangement.spacedBy(HomeArtworkSpacing),
         ) {
             itemsIndexed(
-                items = tracks,
+                items = visibleTracks,
                 key = { _, track ->
                     track.id
                 },
             ) { index, track ->
-                val artist =
-                    track.artist
+                val artist = track.artist
 
                 val interactionSource =
                     remember {
@@ -325,43 +488,13 @@ private fun RecentPlaySection(
                     interactionSource
                         .collectIsPressedAsState()
 
-                val morphProgress by
-                    animateFloatAsState(
-                        targetValue =
-                            if (isPressed) {
-                                1f
-                            } else {
-                                0f
-                            },
-                        animationSpec =
-                            spring(
-                                dampingRatio =
-                                    0.4f,
-                                stiffness =
-                                    Spring
-                                        .StiffnessMedium,
-                            ),
-                        label =
-                            "recent_play_shape_morph",
-                    )
-
-                val artworkMorph =
-                    remember {
-                        Morph(
-                            start =
-                                MaterialShapes.Circle,
-                            end =
-                                MaterialShapes.Cookie4Sided,
-                        )
-                    }
-
                 Column(
                     modifier =
                         Modifier.width(
                             artworkSize,
                         ),
                 ) {
-                    AlbumArtwork(
+                    ExpressiveMorphArtwork(
                         artworkUri =
                             track.artworkUri,
                         fallbackText =
@@ -371,42 +504,36 @@ private fun RecentPlaySection(
                                 R.string.action_play_track,
                                 track.title,
                             ),
+                        sizeDp =
+                            artworkSize,
+                        isPressed =
+                            isPressed,
+                        startShape =
+                            MaterialShapes.Cookie4Sided,
+                        endShape =
+                            MaterialShapes.Circle,
+                        label =
+                            "recent_play_morph",
                         modifier =
                             Modifier
-                                .width(
-                                    artworkSize,
-                                )
-                                .aspectRatio(
-                                    1f,
-                                )
+                                .width(artworkSize)
+                                .aspectRatio(1f)
                                 .clickable(
                                     interactionSource =
                                         interactionSource,
                                     indication = null,
                                 ) {
                                     onTrackClick(
-                                        tracks,
+                                        visibleTracks,
                                         index,
                                     )
                                 },
-                        size =
-                            artworkSize,
-                        shape =
-                            MorphPolygonShape(
-                                morph =
-                                    artworkMorph,
-                                percentage =
-                                    morphProgress,
-                            ),
                     )
 
                     Text(
-                        text =
-                            track.title,
+                        text = track.title,
                         style =
-                            MaterialTheme
-                                .typography
-                                .bodyMedium,
+                            MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow =
                             TextOverflow.Ellipsis,
@@ -416,16 +543,11 @@ private fun RecentPlaySection(
                             ),
                     )
 
-                    if (
-                        !artist.isNullOrBlank()
-                    ) {
+                    if (!artist.isNullOrBlank()) {
                         Text(
-                            text =
-                                artist,
+                            text = artist,
                             style =
-                                MaterialTheme
-                                    .typography
-                                    .bodySmall,
+                                MaterialTheme.typography.bodySmall,
                             color =
                                 MaterialTheme
                                     .colorScheme
@@ -435,6 +557,338 @@ private fun RecentPlaySection(
                                 TextOverflow.Ellipsis,
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentArtistsSection(
+    artists: List<RecentArtist>,
+    onArtistClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier.fillMaxWidth(),
+        verticalArrangement =
+            Arrangement.spacedBy(HomeArtworkSpacing),
+    ) {
+        Text(
+            text =
+                stringResource(
+                    R.string.section_recent_artists,
+                ),
+            style =
+                MaterialTheme.typography.titleLarge,
+        )
+
+        LazyRow(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(HomeArtworkRowHeight),
+            contentPadding =
+                PaddingValues(
+                    end = HomeArtworkSpacing,
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(HomeArtworkSpacing),
+        ) {
+            items(
+                items = artists,
+                key = { artist ->
+                    artist.name.trim().lowercase()
+                },
+            ) { artist ->
+                val interactionSource =
+                    remember {
+                        MutableInteractionSource()
+                    }
+
+                val isPressed by
+                    interactionSource
+                        .collectIsPressedAsState()
+
+                Column(
+                    modifier =
+                        Modifier
+                            .width(HomeArtworkSize)
+                            .clickable(
+                                interactionSource =
+                                    interactionSource,
+                                indication = null,
+                            ) {
+                                onArtistClick(
+                                    artist.name,
+                                )
+                            },
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp),
+                ) {
+                    ExpressiveMorphArtwork(
+                        artworkUri =
+                            artist.artworkUri,
+                        fallbackText =
+                            artist.name,
+                        contentDescription =
+                            stringResource(
+                                R.string.action_open_artist,
+                                artist.name,
+                            ),
+                        sizeDp =
+                            HomeArtworkSize,
+                        isPressed =
+                            isPressed,
+                        startShape =
+                            MaterialShapes.Circle,
+                        endShape =
+                            MaterialShapes.Cookie4Sided,
+                        label =
+                            "recent_artist_morph",
+                        modifier =
+                            Modifier
+                                .width(HomeArtworkSize)
+                                .aspectRatio(1f),
+                    )
+
+                    Text(
+                        text = artist.name,
+                        style =
+                            MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentAlbumsSection(
+    albums: List<RecentAlbum>,
+    onAlbumClick: (String, String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier.fillMaxWidth(),
+        verticalArrangement =
+            Arrangement.spacedBy(HomeArtworkSpacing),
+    ) {
+        Text(
+            text =
+                stringResource(
+                    R.string.section_recent_albums,
+                ),
+            style =
+                MaterialTheme.typography.titleLarge,
+        )
+
+        LazyRow(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(HomeArtworkRowHeight),
+            contentPadding =
+                PaddingValues(
+                    end = HomeArtworkSpacing,
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(HomeArtworkSpacing),
+        ) {
+            items(
+                items = albums,
+                key = { album ->
+                    "${album.title.trim().lowercase()}|" +
+                        album.artist
+                            ?.trim()
+                            ?.lowercase()
+                            .orEmpty()
+                },
+            ) { album ->
+                val interactionSource =
+                    remember {
+                        MutableInteractionSource()
+                    }
+
+                val isPressed by
+                    interactionSource
+                        .collectIsPressedAsState()
+
+                Column(
+                    modifier =
+                        Modifier
+                            .width(HomeArtworkSize)
+                            .clickable(
+                                interactionSource =
+                                    interactionSource,
+                                indication = null,
+                            ) {
+                                onAlbumClick(
+                                    album.title,
+                                    album.artist,
+                                )
+                            },
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp),
+                ) {
+                    ExpressiveMorphArtwork(
+                        artworkUri =
+                            album.artworkUri,
+                        fallbackText =
+                            album.title,
+                        contentDescription =
+                            stringResource(
+                                R.string.action_open_album,
+                                album.title,
+                            ),
+                        sizeDp =
+                            HomeArtworkSize,
+                        isPressed =
+                            isPressed,
+                        startShape =
+                            MaterialShapes.Square,
+                        endShape =
+                            MaterialShapes.Cookie4Sided,
+                        label =
+                            "recent_album_morph",
+                        modifier =
+                            Modifier
+                                .width(HomeArtworkSize)
+                                .aspectRatio(1f),
+                    )
+
+                    Text(
+                        text = album.title,
+                        style =
+                            MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis,
+                    )
+
+                    if (!album.artist.isNullOrBlank()) {
+                        Text(
+                            text = album.artist,
+                            style =
+                                MaterialTheme.typography.bodySmall,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentGenresSection(
+    genres: List<RecentGenre>,
+    onGenreClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier.fillMaxWidth(),
+        verticalArrangement =
+            Arrangement.spacedBy(HomeArtworkSpacing),
+    ) {
+        Text(
+            text =
+                stringResource(
+                    R.string.section_recent_genres,
+                ),
+            style =
+                MaterialTheme.typography.titleLarge,
+        )
+
+        LazyRow(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(HomeArtworkRowHeight),
+            contentPadding =
+                PaddingValues(
+                    end = HomeArtworkSpacing,
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(HomeArtworkSpacing),
+        ) {
+            items(
+                items = genres,
+                key = { genre ->
+                    genre.name.trim().lowercase()
+                },
+            ) { genre ->
+                val interactionSource =
+                    remember {
+                        MutableInteractionSource()
+                    }
+
+                val isPressed by
+                    interactionSource
+                        .collectIsPressedAsState()
+
+                Column(
+                    modifier =
+                        Modifier
+                            .width(HomeArtworkSize)
+                            .clickable(
+                                interactionSource =
+                                    interactionSource,
+                                indication = null,
+                            ) {
+                                onGenreClick(
+                                    genre.name,
+                                )
+                            },
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp),
+                ) {
+                    ExpressiveMorphArtwork(
+                        artworkUri =
+                            genre.artworkUri,
+                        fallbackText =
+                            genre.name,
+                        contentDescription =
+                            stringResource(
+                                R.string.action_open_genre,
+                                genre.name,
+                            ),
+                        sizeDp =
+                            HomeArtworkSize,
+                        isPressed =
+                            isPressed,
+                        startShape =
+                            MaterialShapes.Cookie9Sided,
+                        endShape =
+                            MaterialShapes.Cookie4Sided,
+                        label =
+                            "recent_genre_morph",
+                        modifier =
+                            Modifier
+                                .width(HomeArtworkSize)
+                                .aspectRatio(1f),
+                    )
+
+                    Text(
+                        text = genre.name,
+                        style =
+                            MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -452,9 +906,7 @@ private fun RecentlyAddedSection(
         modifier =
             Modifier.fillMaxWidth(),
         verticalArrangement =
-            Arrangement.spacedBy(
-                12.dp,
-            ),
+            Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text =
@@ -462,9 +914,7 @@ private fun RecentlyAddedSection(
                     R.string.section_recently_added,
                 ),
             style =
-                MaterialTheme
-                    .typography
-                    .titleLarge,
+                MaterialTheme.typography.titleLarge,
             modifier =
                 Modifier.padding(
                     start = 20.dp,
@@ -490,8 +940,7 @@ private fun RecentlyAddedSection(
             ) {
                 tracks.forEachIndexed { index, track ->
                     val isCurrentTrack =
-                        track.id ==
-                            currentTrackId
+                        track.id == currentTrackId
 
                     TrackRow(
                         track = track,
@@ -523,9 +972,7 @@ private fun EmptySectionText(
     Text(
         text = text,
         style =
-            MaterialTheme
-                .typography
-                .bodyLarge,
+            MaterialTheme.typography.bodyLarge,
         color =
             MaterialTheme
                 .colorScheme
@@ -555,59 +1002,5 @@ private fun ErrorContent(
                     R.string.home_error,
                 ),
         )
-    }
-}
-
-private class MorphPolygonShape(
-    private val morph: Morph,
-    private val percentage: Float,
-) : Shape {
-
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density,
-    ): Outline {
-        val matrix =
-            Matrix().apply {
-                scale(
-                    x = size.width,
-                    y = size.height,
-                )
-            }
-
-        val path =
-            morph.toPath(
-                progress =
-                    percentage,
-            )
-
-        path.transform(matrix)
-
-        val bounds =
-            path.getBounds()
-
-        val targetCenterX =
-            size.width / 2f
-
-        val targetCenterY =
-            size.height / 2f
-
-        val offsetX =
-            targetCenterX -
-                bounds.center.x
-
-        val offsetY =
-            targetCenterY -
-                bounds.center.y
-
-        path.translate(
-            Offset(
-                x = offsetX,
-                y = offsetY,
-            ),
-        )
-
-        return Outline.Generic(path)
     }
 }
