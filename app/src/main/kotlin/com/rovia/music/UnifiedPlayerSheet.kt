@@ -107,6 +107,15 @@ fun UnifiedPlayerSheet(
             mutableStateOf<Job?>(null)
         }
 
+    /*
+     * PlayerRoute registers its normal close action here.
+     * The action hides fullscreen lyrics and collapses the sheet.
+     */
+    val playerCloseActionState =
+        remember {
+            mutableStateOf<(() -> Unit)?>(null)
+        }
+
     val progress =
         progressState.floatValue
 
@@ -310,6 +319,18 @@ fun UnifiedPlayerSheet(
     PredictiveBackHandler(
         enabled = progress > 0f,
     ) { backProgress ->
+        /*
+         * Capture the close action before consuming the gesture.
+         *
+         * The progress can reach zero during the final gesture
+         * event, causing PlayerRoute to leave composition before
+         * the event stream finishes. Keeping this local reference
+         * ensures the completed gesture can still hide fullscreen
+         * lyrics and close the sheet.
+         */
+        val closePlayerAction =
+            playerCloseActionState.value
+
         try {
             backProgress.collect { backEvent ->
                 cancelSheetAnimation()
@@ -326,7 +347,16 @@ fun UnifiedPlayerSheet(
                 setProgress(nextProgress)
             }
 
-            collapse()
+            /*
+             * Only a completed predictive Back gesture invokes
+             * the close action. A cancelled gesture uses the
+             * CancellationException branch below instead.
+             */
+            if (closePlayerAction != null) {
+                closePlayerAction()
+            } else {
+                collapse()
+            }
         } catch (_: CancellationException) {
             settleTo(1f)
         }
@@ -778,6 +808,10 @@ fun UnifiedPlayerSheet(
                                     musicRepository,
                                 onClose = {
                                     collapse()
+                                },
+                                onCloseActionAvailable = { closeAction ->
+                                    playerCloseActionState.value =
+                                        closeAction
                                 },
                                 modifier =
                                     Modifier
