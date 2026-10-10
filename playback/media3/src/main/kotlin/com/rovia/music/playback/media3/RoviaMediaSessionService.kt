@@ -1,6 +1,7 @@
+
 package com.rovia.music.playback.media3
 
-import android.os.Bundle
+import android.app.PendingIntent
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -19,8 +20,25 @@ class RoviaMediaSessionService : MediaSessionService() {
                 .setHandleAudioBecomingNoisy(true)
                 .build()
 
+        val sessionActivityIntent =
+            checkNotNull(
+                packageManager.getLaunchIntentForPackage(packageName),
+            ) {
+                "Rovia launcher Activity could not be found."
+            }
+
+        val sessionActivityPendingIntent =
+            PendingIntent.getActivity(
+                this,
+                SESSION_ACTIVITY_REQUEST_CODE,
+                sessionActivityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                    PendingIntent.FLAG_IMMUTABLE,
+            )
+
         mediaSession =
             MediaSession.Builder(this, player)
+                .setSessionActivity(sessionActivityPendingIntent)
                 .build()
     }
 
@@ -32,5 +50,9 @@ class RoviaMediaSessionService : MediaSessionService() {
         mediaSession.release()
         player.release()
         super.onDestroy()
+    }
+
+    private companion object {
+        const val SESSION_ACTIVITY_REQUEST_CODE = 0
     }
 }
