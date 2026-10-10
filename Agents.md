@@ -50,9 +50,12 @@ The current application contains these real features:
 - Separate bounded enrichment of selected embedded metadata; catalog listing does not open every audio file with `MediaMetadataRetriever`.
 - Home screen.
 - Recently Added section, limited to 10 real tracks.
-- Persistent Recent Play history, limited to 10 tracks.
+- Persistent Recent Play history keyed by distinct content URI, with no hard 10-record database cap; Home previews at most 10 recent entries.
+- Home Recent Play collections grouped by Artist, Album, and Genre, with dedicated detail pages and real track lists.
 - Library screen containing the complete local audio collection.
 - Library All Songs / Folders mode selector using Material 3 Expressive `ButtonGroup`.
+- Context-aware Library sorting through `LibrarySortBottomSheet`, with options filtered by the current browse mode.
+- Artist, Album, and Genre collection rows with type-appropriate real artwork.
 - MediaStore-derived folder browsing without triggering filesystem/media rescans.
 - Tapable folder navigation path / breadcrumb for moving between root and nested folders.
 - Folder parent navigation and explicit root/all-songs state handling.
@@ -91,7 +94,7 @@ The current application contains these real features:
 - Material 3 Expressive controls and motion.
 - System dynamic color / Monet.
 - English and Indonesian localization through Android resources.
-- A Settings destination shell containing a title and back action.
+- Settings destination, Folder Filter screen, and About destination.
 
 Features that are not implemented must not be added as fake UI.
 
@@ -124,7 +127,7 @@ Current database tables:
 
 - `music_tracks`: the synchronized local catalog used by Home, Library, Search, and track metadata observation;
 - `media_store_sync_state`: per-volume MediaStore version/generation checkpoints;
-- `recent_plays`: the latest 10 playback-history records;
+- `recent_plays`: persistent Recent Play records keyed by distinct content URI, with no hard 10-record cap;
 - `excluded_folders`: persisted Folder Filter selections.
 
 **MediaStore remains authoritative for which local media files exist and for indexed MediaStore values.**
@@ -189,25 +192,36 @@ Feature modules should depend on API/model layers and shared UI, not concrete Me
 
 # 4. TOOLCHAIN BASELINE
 
-Current version catalog baseline:
+Current version catalog baseline, checked against `gradle/libs.versions.toml`:
 
 ```text
-Android Gradle Plugin : 9.4.0
-Kotlin                : 2.4.20
-Compose BOM           : 2026.09.00
-Material 3            : 1.5.0-alpha29
-Navigation 3          : 1.2.0
-Media3                : 1.11.1
-Coroutines            : 1.10.2
-Room 3                : 3.0.3
-AndroidX SQLite       : 2.7.1
-KSP                   : 2.3.12
-JDK                   : 17
-Java source/target    : 17
-compileSdk            : 37
-minSdk                : 36
-targetSdk             : 36
+Android Gradle Plugin       : 9.4.0
+Kotlin                      : 2.4.20
+AndroidX Core KTX           : 1.19.1
+AndroidX Activity Compose   : 1.13.0
+AndroidX Lifecycle          : 2.11.0
+AndroidX Navigation 3       : 1.2.0
+Compose BOM                 : 2026.09.00
+Material 3                  : 1.5.0-alpha29
+AndroidX Graphics Shapes    : 1.1.0
+AndroidX Media3              : 1.11.1
+Kotlin Coroutines            : 1.10.2
+AndroidX Test Core           : 1.7.0
+AndroidX Test Ext JUnit      : 1.3.0
+AndroidX Test Runner          : 1.7.0
+AndroidX Test Espresso Core  : 3.7.0
+JUnit                       : 4.13.2
+KSP                         : 2.3.12
+Room 3                      : 3.0.3
+AndroidX SQLite              : 2.7.1
+JDK                         : 17
+Java source/target           : 17
+compileSdk                  : 37
+minSdk                      : 36
+targetSdk                   : 36
 ```
+
+The library and plugin versions above mirror the version keys currently declared in `gradle/libs.versions.toml`. The SDK levels and JDK/source compatibility values are build configuration and toolchain settings, not version-catalog keys.
 
 Source of versions:
 
@@ -336,7 +350,10 @@ Rovia/
     │       ├── HomeScreen.kt
     │       ├── HomeUiState.kt
     │       ├── HomeViewModel.kt
-    │       └── HomeViewModelFactory.kt
+    │       ├── HomeViewModelFactory.kt
+    │       ├── RecentCollectionRoute.kt
+    │       ├── RecentCollectionScreen.kt
+    │       └── RecentPlayCollection.kt
     │
     ├── search/
     │   └── src/main/kotlin/com/rovia/music/feature/search/
@@ -350,6 +367,8 @@ Rovia/
     │   └── src/main/kotlin/com/rovia/music/feature/library/
     │       ├── LibraryRoute.kt
     │       ├── LibraryScreen.kt
+    │       ├── LibrarySort.kt
+    │       ├── LibrarySortBottomSheet.kt
     │       ├── LibraryUiState.kt
     │       ├── LibraryViewModel.kt
     │       └── LibraryViewModelFactory.kt
@@ -471,6 +490,8 @@ recent_plays
 excluded_folders
 ```
 
+`recent_plays` retains one most-recent record per distinct content URI. It is not capped at 10 rows; the Home screen's 10-item preview is a UI-only limit.
+
 This module is the only module that should depend directly on Room 3 and SQLite implementation APIs.
 
 ## `:data:media-store`
@@ -505,7 +526,7 @@ The playback module does not know about Room or SQLite.
 
 ## `:feature:home`
 
-Owns Home UI and Home ViewModel state.
+Owns Home UI and Home ViewModel state, including the 10-entry Recent Play preview, Artist/Album/Genre grouping derived from persisted Recent Play records, collection detail navigation, and collection detail track lists. The collection UI must not fabricate metadata or silently switch its source to the full library catalog.
 
 ## `:feature:search`
 
@@ -521,6 +542,9 @@ Owns full Library UI and Library ViewModel state, including:
 - folder breadcrumb/navigation path;
 - parent-folder navigation;
 - folder-derived track lists;
+- context-aware sorting and its mode-specific option sheet;
+- Artist / Album / Genre collection-list artwork and sorting where those browse contexts are displayed;
+- track sorting inside a selected collection;
 - MiniPlayer-aware content spacing.
 
 ## `:feature:player`
@@ -685,11 +709,8 @@ advance a checkpoint before all changes represented by it have been handled succ
 
 ### `recent_plays`
 
-Stores a bounded playback-history snapshot with a maximum of 10 distinct URIs. The primary key is `uri`;
-`track_id` is additional metadata, not the unique key, because track IDs can overlap across volumes. Stored
-track metadata includes real values when available, such as release date, label, copyright, and release type.
-When embedded release date/copyright metadata is enriched later, the matching Recent Play snapshot is updated
-by URI. Missing tags remain null; do not fabricate values.
+Stores the persistent Recent Play recency list without a hard 10-row cap. The primary key is `uri`;
+`track_id` is additional metadata, not the unique key, because track IDs can overlap across volumes. Replaying a URI updates that URI's record and last-played timestamp instead of creating a duplicate row for the same URI. Stored track metadata includes real values when available, such as release date, label, copyright, and release type. When embedded release date/copyright metadata is enriched later, the matching Recent Play snapshot is updated by URI. Missing tags remain null; do not fabricate values. The Home preview limit is applied in UI state, not by deleting database history.
 
 ### `excluded_folders`
 
@@ -1138,7 +1159,7 @@ MiniPlayerNavigationSpacing = 8dp
 ```
 
 These values are geometry contracts for Rovia. They should not be casually changed to
-"something that looks better" without updating the README and testing the affected screens.
+"something that looks better" without updating `Agents.md` and testing the affected screens.
 
 Explicit dp geometry is therefore allowed for:
 
@@ -1457,7 +1478,7 @@ For UI changes, an AI coding agent must follow this exact priority:
 4. Prefer official component defaults before explicit overrides.
 5. Use explicit dp values only for documented geometry contracts.
 6. Use custom Shape / Canvas only for justified application-specific UI.
-7. Document any new geometry or shape contract in this README.
+7. Document any new geometry or shape contract in `Agents.md`.
 8. Compile immediately after the change.
 9. Test the affected interaction on the real device.
 10. Do not "simplify" native Expressive behavior into static shapes.
@@ -1508,7 +1529,7 @@ Animation changes are behavior changes and must not be introduced during unrelat
 
 # 14. NAVIGATION 3 DESTINATIONS
 
-The active main Navigation 3 destinations are:
+The active Navigation 3 destinations are:
 
 ```text
 Home
@@ -1517,7 +1538,10 @@ Library
 Settings
 FolderFilter
 About
+RecentCollection detail (Artist / Album / Genre)
 ```
+
+Recent collection detail is opened from the corresponding Artist, Album, or Genre collection on Home. It is a child page, not a fourth bottom-navigation tab. Back returns to the originating Home context. The currently supported top-level bottom-navigation siblings remain Home, Search, and Library.
 
 The bottom navigation exposes exactly these top-level siblings:
 
@@ -1544,7 +1568,13 @@ Top-level siblings:
     Search
     Library
 
-Child navigation from the active top-level page:
+Child navigation:
+    Home
+        └── RecentCollection detail
+                ├── Artist
+                ├── Album
+                └── Genre
+
     Settings
         ├── FolderFilter
         └── About
@@ -1743,6 +1773,7 @@ Library
 Settings
 FolderFilter
 About
+RecentCollection detail (Artist / Album / Genre)
 ```
 
 This is required for Predictive Back so the destination is animated as a complete surface. Without an
@@ -1768,6 +1799,9 @@ Future navigation changes must preserve:
 ```text
 Home / Search / Library
     = top-level siblings
+
+RecentCollection detail (Artist / Album / Genre)
+    = child route opened from Home's recent collection sections
 
 Settings
     = child of the active top-level destination
@@ -1797,7 +1831,8 @@ When adding a new navigation destination:
 1. Add the destination key.
 2. Register the destination in Navigation 3.
 3. Wrap it in NavigationDestinationSurface.
-4. Keep forward navigation instantaneous.
+4. Define the parent/back-stack behavior explicitly (recent collection details are child pages opened from Home).
+5. Keep forward navigation instantaneous.
 5. Keep normal/programmatic Back instantaneous.
 6. Preserve the existing Predictive Back motion.
 7. Make the destination hierarchy explicit.
@@ -1853,6 +1888,16 @@ FolderFilter
 ```
 
 Back removes FolderFilter first, then Settings.
+
+Recent collection details follow the same child-page principle:
+
+```text
+Home
+   ↓
+RecentCollection detail (Artist / Album / Genre)
+```
+
+Back returns from the collection detail to Home; the collection is not a bottom-navigation sibling.
 
 Do not add special-case logic that makes Home behave differently from Search or Library.
 
@@ -2548,17 +2593,13 @@ The selector uses Material 3 Expressive `ButtonGroup` APIs rather than a custom 
 All Songs mode observes the complete synchronized local audio catalog through `MusicRepository.observeAllTracks()`.
 Room provides the reactive read model; MediaStore synchronization is handled separately in `:data:media-store`.
 
-Current all-song sort:
-
-```text
-TITLE COLLATE NOCASE ASC
-```
+The Library sort control is context-aware. `LibrarySortBottomSheet` shows only the options supported by the active `LibraryBrowseMode`; sorting is applied to the real Room-backed catalog/collection data and must not trigger a MediaStore rescan. The exact sort option matrix is documented in Section 38.3.
 
 Folders mode uses `FolderBrowserRepository` and renders the MediaStore-derived folder hierarchy.
 
 The Library does not rescan the filesystem when switching between these modes.
 
-The Library renders real tracks through `TrackRow`.
+The Library renders real tracks through `TrackRow`. Context-specific sort options and Artist/Album/Genre artwork rules are specified in Section 38.3; that section is the authoritative Library sorting contract.
 
 The current Library header is a native Material 3 `TopAppBar`, kept outside the scrolling list so
 the app bar remains stable while folder contents change.
@@ -2692,10 +2733,36 @@ The same no-fake-data rule applies to folder artwork, names, and track counts.
 
 ---
 
+# 38.3. LIBRARY SORTING AND COLLECTION ARTWORK
+
+The available sort options are defined by `LibrarySort.kt` and presented by `LibrarySortBottomSheet.kt`. Do not reintroduce Duration as a sort option.
+
+| Browse context | Supported options |
+|---|---|
+| All Songs and Folder | Default, Title, Artist, Album, Genre, Date added, Date modified |
+| Artist collection list | Default, Artist, Date added, Date modified |
+| Album collection list | Default, Album, Date added, Date modified |
+| Genre collection list | Default, Genre, Date added, Date modified |
+| Songs inside a selected Artist / Album / Genre collection | Default, Title, Artist, Album, Genre, Date added, Date modified |
+
+Rules:
+
+- The sort sheet must filter its visible options to match the current browse context; do not show unsupported options just because they exist in the global enum.
+- `Genre` sorting must use the actual genre metadata on the track/collection, not title, album, or a fabricated genre label.
+- Date added and Date modified must use their respective available source metadata.
+- `Default` preserves the default ordering implemented by the current Library logic. Do not redefine it based solely on the appearance of one screen.
+- Artist, Album, and Genre collection entries use real associated artwork when it is available. Artist artwork is circular; Album artwork uses its established rounded-rectangle presentation; Genre artwork uses the established `Cookie9Sided` expressive shape. Keep the established 56dp artwork slot where this list contract applies.
+- Missing artwork or metadata must remain a real unavailable state; do not generate placeholder images or labels.
+- Sorting must remain UI/data transformation over repository results. Opening a sort sheet or changing sort order must not rescan MediaStore or open every audio file.
+- Preserve the context-specific options when adding a new sort value. Update the enum, comparator, and filtering/UI labels together.
+
+---
+
 # 39. RECENT PLAY
 
-Recent Play is persistent across application restarts and is limited to the latest 10 distinct content URIs.
-The primary key is `uri`, not `track_id`, because MediaStore IDs can overlap across storage volumes.
+Recent Play is persistent across application restarts and retains the latest-played record for every distinct content URI known to the history. There is no hard 10-record cap in the database. The primary key is `uri`, not `track_id`, because MediaStore IDs can overlap across storage volumes.
+
+This is a per-track recency list, not an event ledger: playing the same URI again updates/replaces its record and its `last_played_at_epoch_millis` rather than adding another row for every playback occurrence. The Home preview is separately limited to 10 entries; do not apply that UI limit to persistence.
 
 The playback flow is:
 
@@ -2715,12 +2782,11 @@ SQLite
 
 Recording behavior:
 
-1. Remove/replace the existing entry with the same content URI.
-2. Update `last_played_at_epoch_millis`.
-3. Trim the table so only the latest 10 distinct URI records remain.
-4. Expose database-backed state through the existing Recent Play repository/Flow.
-5. When embedded `releaseDate`/`copyright` metadata is later extracted for the same URI, update those fields
-   in the Recent Play snapshot without creating a new playback event.
+1. Upsert the record for the content URI, replacing/updating any existing record for that URI.
+2. Update `last_played_at_epoch_millis` so the URI returns to the newest position in the recency ordering.
+3. Retain all distinct-URI records; do not trim the database to the Home preview size.
+4. Expose the complete database-backed history through the existing Recent Play repository/Flow. Home applies its own 10-entry presentation limit.
+5. When embedded `releaseDate`/`copyright` metadata is later extracted for the same URI, update those fields in the Recent Play snapshot without creating a new playback event.
 
 Recent Play is an application-owned playback-history snapshot. It does not modify the underlying media file;
 MediaStore remains authoritative for media availability and indexed source metadata.
@@ -2765,6 +2831,8 @@ fun seekTo(positionMs: Long)
 fun skipToNext()
 fun skipToPrevious()
 ```
+
+`recentPlays` exposes the complete persistent Recent Play recency list (one record per distinct content URI), not the 10-entry Home preview. Presentation layers apply any display limit themselves.
 
 Feature modules should depend on this interface.
 
@@ -2963,11 +3031,14 @@ Home contains:
 
 ```text
 Settings button
-Recent Play
+Recent Play preview (latest 10 distinct-URI records)
+Recent Play collections: Artist / Album / Genre
 Recently Added
 ```
 
-Recent Play uses a horizontal two-row artwork grid when enough entries exist.
+The Recent Play preview is a presentation limit only. The persisted history and the Artist/Album/Genre collections are derived from the complete database-backed distinct-URI history. Opening a collection leads to a dedicated detail page whose track list is derived from real Recent Play records for that collection.
+
+The Home Recent Play preview uses a horizontal two-row artwork grid when enough entries exist. Collection group entries use the actual collection label and associated artwork when available. Do not invent artists, albums, genres, artwork, or track counts.
 
 Recently Added uses `TrackRow`.
 
@@ -3225,7 +3296,7 @@ The Folder Filter screen uses the native Material 3 / Expressive component defau
 
 There is no language picker in Settings.
 
-Settings currently has no persistent settings state beyond explicitly implemented application data such as Folder Filter selections and Recent Play.
+Settings itself does not persist a general set of preference values. Application-level persistent data includes Folder Filter selections and the Recent Play history; those are not Settings preference records.
 
 The application language follows Android system resources automatically.
 
@@ -3502,9 +3573,7 @@ MusicRepository.observeRecentlyAdded(limit = 10)
 PlaybackController.recentPlays
 ```
 
-and exposes a `HomeUiState` through `StateFlow`. Recently Added comes from Room's synchronized catalog;
-Recent Play remains backed by the dedicated Recent Play repository exposed through playback state. Errors are
-represented as actual error states.
+and exposes a `HomeUiState` through `StateFlow`. Recently Added comes from Room's synchronized catalog. `PlaybackController.recentPlays` exposes the complete persistent distinct-URI Recent Play history; `HomeViewModel` limits only the Home preview to 10 and derives Artist/Album/Genre collection groups from the history records. Collection detail state is based on the same persisted history. Errors are represented as actual error states.
 
 ---
 
@@ -3569,7 +3638,7 @@ Keep Rovia intentionally lightweight.
 Current important constraints:
 
 - Home Recently Added is limited to 10.
-- Recent Play is limited to 10 distinct content URIs.
+- Recent Play persistence retains every distinct content URI; only the Home preview is limited to 10 entries.
 - Search exposes at most 50 results.
 - Home, Library, Search, and active-player metadata read from Room-backed catalog Flows.
 - MediaStore remains the source of truth for media availability and indexed source values; `music_tracks` is
@@ -3578,7 +3647,7 @@ Current important constraints:
   changed and use incremental synchronization when supported by the current checkpoint.
 - Do not run `MediaMetadataRetriever` as part of catalog listing for every track. Enrich selected embedded tags
   separately in bounded batches.
-- Recent Play stores only the latest 10 entries.
+- Recent Play is ordered by last-played time and is not trimmed to the Home preview size.
 - Album artwork uses Android thumbnail loading.
 - There is only one playback service/player path.
 - The app does not continuously scan the raw filesystem.
@@ -3611,7 +3680,6 @@ The following must remain absent unless explicitly requested and implemented as 
 
 ```text
 Persistent favorites
-Extended listening history beyond the bounded Recent Play feature
 Persistent playlists
 Most Played
 Streaming
@@ -3681,7 +3749,7 @@ Responsibilities:
 
 - `music_tracks`: synchronized local audio catalog and metadata/enrichment state;
 - `media_store_sync_state`: per-volume MediaStore version/generation checkpoints;
-- `recent_plays`: bounded history of the latest 10 distinct content URIs;
+- `recent_plays`: persistent history keyed by distinct content URI, with no hard 10-record cap;
 - `excluded_folders`: persisted Folder Filter selections.
 
 The catalog is intentionally persisted in Room for fast/reactive reads. MediaStore remains the authority for
@@ -3767,51 +3835,53 @@ Before modifying an existing file, inspect its latest full contents. If those co
 
 For a new file, provide a PowerShell command to create its parent directory/file and a `code <relative-path>` command to open it in VS Code. Always provide the complete source file, ready to paste. For an existing file, provide the complete updated file rather than isolated fragments unless the developer explicitly asks for a minimal diff.
 
-## Step 4 — One file-level change per build checkpoint
+## Step 4 — One source-file change per build checkpoint
 
-Keep the requested change small and file-scoped. A checkpoint is a workflow step, not a Git commit or tag. Do not create an interim commit merely because a build checkpoint has been reached.
+Keep the requested change small and file-scoped. For application source/code changes, use one file per build checkpoint. Markdown-only documentation changes do not require a Gradle checkpoint. A checkpoint is a workflow step, not a Git commit or tag. Do not create an interim commit merely because a build checkpoint has been reached.
 
 ## Step 5 — Preserve unrelated behavior
 
 Do not touch unrelated architecture, files, modules, UI behavior, or dependencies. Prefer the smallest change that fulfils the requested behavior.
 
-## Step 6 — Build after each file-level change
+## Step 6 — Build after each source-file change
 
-After the developer pastes/saves the changed file, ask them to run:
+After the developer pastes/saves an application source/code change, ask them to run:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
 ```
 
-Stop and wait for the actual build output before proceeding to another file. Do not make further source changes while that checkpoint is unresolved.
+Stop and wait for the actual build output before proceeding to another source file. Do not make further source changes while that checkpoint is unresolved. A documentation-only edit such as `Agents.md` does not need this Gradle build.
 
 ## Step 7 — Resolve errors before continuing
 
 If the build fails, fix the actual reported error in the current step. Do not proceed to another planned change, install the APK, or claim success while the build fails.
 
-## Step 8 — Install after all intended changes compile
+## Step 8 — Install after all intended code changes compile
 
-After all intended file-level changes pass their build checkpoints, run:
+After all intended application source/code changes pass their build checkpoints, run:
 
 ```powershell
 .\gradlew.bat :app:installDebug
 ```
 
+Do not install an APK for a documentation-only change.
+
 ## Step 9 — Verify runtime behavior
 
 Run the relevant runtime/regression checks on the Android device or emulator. Do not claim runtime behavior is verified until the user reports the observed result or an actual test provides it.
 
-## Step 10 — Commit verified files individually
+## Step 10 — Commit only when explicitly requested
 
-After the changes pass the required verification, use the PowerShell Git workflow in Section 90.1. The current project preference is one changed file per commit, using an accurate module prefix and an English message.
+Do not create Git commits automatically. When the developer explicitly asks for commits, use the PowerShell Git workflow in Section 90.1. The project preference is one changed file per commit, with an accurate ownership prefix and an English message.
 
 ## Step 11 — Keep staging precise
 
-Stage only the exact file being committed. Do not use `git add .` or `git commit -a` for the per-file workflow.
+When committing is requested, stage only the exact file being committed. Do not use `git add .` or `git commit -a` for the per-file workflow.
 
-## Step 12 — Final synchronization
+## Step 12 — Synchronize only when explicitly requested
 
-After the individual commits are complete, inspect the commit history and `git status -sb`. Push/sync only after the full local commit set has been checked and the developer requests or confirms it.
+Inspect the commit history and `git status -sb` when needed. Do not push or sync automatically; run `git push origin main` only when the developer explicitly requests it.
 
 A failed build or failed runtime verification is a checkpoint for fixing the current step, not a reason to make unrelated changes or create a misleading successful commit.
 
@@ -3838,6 +3908,12 @@ data/database/src/main/kotlin/com/rovia/music/data/database/dao/MediaStoreSyncSt
 data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomMusicCatalogRepository.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomRecentPlayRepository.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/repository/RoomFolderFilterRepository.kt
+feature/home/src/main/kotlin/com/rovia/music/feature/home/HomeViewModel.kt
+feature/home/src/main/kotlin/com/rovia/music/feature/home/RecentCollectionRoute.kt
+feature/home/src/main/kotlin/com/rovia/music/feature/home/RecentCollectionScreen.kt
+feature/library/src/main/kotlin/com/rovia/music/feature/library/LibraryScreen.kt
+feature/library/src/main/kotlin/com/rovia/music/feature/library/LibrarySort.kt
+feature/library/src/main/kotlin/com/rovia/music/feature/library/LibrarySortBottomSheet.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreMusicRepository.kt (legacy; not the AppContainer catalog read path)
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaStoreCatalogDataSource.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaCatalogSyncCoordinator.kt
@@ -3876,7 +3952,7 @@ code $path
 
 The AI agent must then provide the complete source contents for the developer to paste into the opened file.
 
-For an existing file, inspect the latest complete contents before modifying it. Return the full updated file so the developer can replace it without accidentally leaving stale code. Use `code <relative-path>` to open the target file.
+For an existing source file, inspect the latest complete contents before modifying it. Return the full updated source file so the developer can replace it without accidentally leaving stale code. Use `code <relative-path>` to open the target file. For a very large documentation file such as this one, provide the complete updated `Agents.md` artifact rather than a truncated partial document; do not package the project as a ZIP unless the developer explicitly asks for a ZIP.
 
 The preferred source-change workflow is incremental and observable:
 
@@ -3907,13 +3983,13 @@ A build checkpoint is a workflow pause, not a Git commit, stash, branch, or tag.
 
 # 89. BUILD VERIFICATION
 
-The mandatory application-wide Debug verification command after every source change is:
+The mandatory application-wide Debug verification command after every application source/code change is:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
 ```
 
-This command must be run after the requested change has been implemented, before the change is considered complete.
+This command must be run after the requested application source/code change has been implemented, before that code change is considered complete. Markdown-only documentation changes do not require a Gradle build unless they also change source, resources, or build configuration.
 
 A successful build must end with:
 
@@ -3973,16 +4049,16 @@ BUILD SUCCESSFUL
     ↓
 runtime/regression verification
     ↓
-Git commit
+finish implementation; commit only if explicitly requested
 ```
 
-Do not skip the install step when a successful application-wide Debug build was produced for a runtime-affecting change.
+Do not skip the install step when a successful application-wide Debug build was produced for a runtime-affecting change. Documentation-only changes do not need APK installation.
 
 ---
 
-# 90.1. MANDATORY GIT COMMIT POLICY
+# 90.1. EXPLICIT GIT COMMIT POLICY
 
-Every successfully implemented and verified change must be committed. The current Rovia workflow creates **one commit per changed file**, even when several files belong to the same larger feature. This keeps each commit narrowly reviewable.
+Git commits are created only when the developer explicitly requests them. When requested, the Rovia workflow creates **one commit per changed file**, even when several files belong to the same larger feature. This keeps each commit narrowly reviewable without silently changing Git history.
 
 For runtime-affecting changes, the normal verification sequence is:
 
@@ -3997,7 +4073,7 @@ all intended changes compile
         ↓
 relevant runtime/regression verification -> PASS
         ↓
-one commit per changed file
+implementation complete; commits only if explicitly requested
 ```
 
 Do not claim full runtime verification unless the developer has confirmed it or the relevant tests have actually run.
@@ -4052,7 +4128,7 @@ A message must describe the actual file change, be specific enough to understand
 Run these commands from the repository root, repeating them for each changed file:
 
 ```powershell
-git add -- "path/to/one/file.kt"
+git add -- "path/to/one/file"
 git diff --cached --check
 git diff --cached --name-only
 git commit -m "PREFIX: Specific English description"
@@ -4067,9 +4143,9 @@ git log -N --oneline
 git status -sb
 ```
 
-Replace `N` with the number of commits created. Do not push/sync midway through the series. Once the whole series is reviewed, push with `git push origin main` when requested or confirmed by the developer.
+Replace `N` with the number of commits created. Do not push/sync midway through the series. Run `git push origin main` only when the developer explicitly requests the push.
 
-The AI agent must not silently finish a verified task without stating which file commits, if any, remain.
+When the developer asks for commits, report which per-file commits have completed and which remain. If commits were not requested, leave the working tree uncommitted and say so clearly.
 
 ---
 
@@ -4128,6 +4204,12 @@ Verify:
 [ ] Search opens
 [ ] Library opens
 [ ] Settings opens
+[ ] Home Recent Play shows no more than 10 preview entries
+[ ] Recent Play Artist collection opens and Back returns to Home
+[ ] Recent Play Album collection opens and Back returns to Home
+[ ] Recent Play Genre collection opens and Back returns to Home
+[ ] Collection detail lists only real matching Recent Play records
+[ ] Collection play-all/track selection uses the expected real tracks
 [ ] Home is root
 [ ] Search back behavior works
 [ ] Library back behavior works
@@ -4138,6 +4220,31 @@ Verify:
 [ ] NavigationBar follows system Monet/dynamic color
 [ ] NavigationBar does not become pure black on the tested custom ROM
 [ ] NavigationBar selected/unselected icons remain theme-aware
+```
+
+---
+
+# 92.1. HOME COLLECTION AND LIBRARY SORT REGRESSION CHECKLIST
+
+After changing Home Recent Play collections or Library sorting, verify:
+
+```text
+[ ] Home Recent Play preview shows no more than 10 entries
+[ ] Recent Play Artist, Album, and Genre collections open their detail pages
+[ ] Back from each collection detail returns to Home
+[ ] Detail track rows come from persisted Recent Play records for the selected collection
+[ ] Play-all / track selection uses the expected real tracks
+[ ] Recent Play history is not trimmed to the Home preview size
+[ ] Library sort sheet exposes only options allowed for the current browse mode
+[ ] All Songs / Folder options: Default, Title, Artist, Album, Genre, Date added, Date modified
+[ ] Artist collection options: Default, Artist, Date added, Date modified
+[ ] Album collection options: Default, Album, Date added, Date modified
+[ ] Genre collection options: Default, Genre, Date added, Date modified
+[ ] Songs inside a selected collection support track-level sort options
+[ ] Genre sorting uses real genre metadata
+[ ] Artist / Album / Genre rows use real artwork and expected shapes when artwork exists
+[ ] Duration is not offered as a sort option
+[ ] Changing sorting does not trigger a MediaStore rescan
 ```
 
 ---
@@ -4306,6 +4413,11 @@ native ButtonGroup controls
 native ListItem rows
 tappable folder breadcrumb/path
 MediaStore-derived folder browsing
+context-aware Library sorting with a mode-specific option matrix
+Artist / Album / Genre collection artwork and sorting
+persistent distinct-URI Recent Play history without a hard 10-row cap
+Home Recent Play preview limited to 10 entries
+Home Recent Play collection detail pages for Artist / Album / Genre
 Room-backed synchronized music catalog
 per-volume MediaStore generation/version synchronization
 separate bounded embedded-metadata enrichment
@@ -4457,7 +4569,7 @@ When modifying one of these surfaces:
 2. change all dependent layout calculations together;
 3. compile immediately;
 4. test on the real Android device;
-5. update this README when the intentional geometry changes.
+5. update `Agents.md` when the intentional geometry changes.
 
 Do not "eyeball" a replacement such as `6dp`, `10dp`, `16dp`, or `24dp` merely because it looks close.
 
@@ -5122,6 +5234,27 @@ implementation pass.
 - Kept all changes within the existing `:app`, `:core:ui`, and `:feature:player` module boundaries;
   no additional dependency or architecture layer was introduced.
 
+## Recent Play history and collection pages
+
+- Removed the old database-side trim that capped Recent Play at 10 records. `recent_plays` retains one latest-played record per distinct content URI; replaying the same URI updates its recency instead of creating duplicate rows for that URI.
+- Kept the Home Recent Play preview bounded to 10 entries as a UI-only performance/presentation rule.
+- Added Home collection grouping for Artist, Album, and Genre, using real metadata from persisted Recent Play records.
+- Added the `RecentPlayCollection` model layer and dedicated `RecentCollectionRoute` / `RecentCollectionScreen` implementation in `:feature:home`.
+- Added Navigation 3 keys and destinations for the collection detail flow while keeping Home, Search, and Library as the only bottom-navigation siblings.
+- Collection pages display actual matching Recent Play tracks and reuse the established native Material 3 / `TrackRow` presentation. Empty or missing values must not be replaced with invented entries.
+
+## Library sorting and collection artwork
+
+- Added `LibrarySort.kt` and `LibrarySortBottomSheet.kt` to `:feature:library`.
+- Made visible sort options depend on the current browsing context instead of showing one universal list.
+- Added actual Genre-based sorting and removed Duration from the sort menu.
+- Added/retained type-appropriate artwork for Artist, Album, and Genre collection entries, using the existing visual contracts and Material 3 Expressive shape behavior.
+
+## Workflow correction
+
+- Build checkpoints apply after application source/code changes; documentation-only Markdown edits do not require Gradle compilation or APK installation.
+- Git commits are not automatic. Commit one file at a time only when explicitly requested; never stage the whole tree or push without an explicit request.
+
 ## Database and synchronized catalog integration
 
 - Room 3 remains the database layer in `:data:database`, backed by Android framework SQLite.
@@ -5131,8 +5264,9 @@ implementation pass.
 - `music_tracks` is the synchronized local audio catalog used by Home, Library, Search, and active-player
   metadata observation. Its composite key is `(volume_name, track_id)`.
 - `media_store_sync_state` stores per-volume MediaStore version/generation checkpoints.
-- `recent_plays` is keyed by content URI, includes real track metadata fields when available, and remains
-  limited to the latest 10 distinct URIs.
+- `recent_plays` is keyed by content URI, includes real track metadata fields when available, and retains one latest-played record per distinct URI without a hard 10-row cap.
+- The Home Recent Play preview is limited to 10 entries; Artist/Album/Genre collection groups and detail track lists derive from the persisted history.
+- Library sorting is context-aware: All Songs/Folder and selected-collection track lists support Default, Title, Artist, Album, Genre, Date added, and Date modified; Artist/Album/Genre collection lists expose their mode-specific subsets. Duration is not a sort option.
 - `excluded_folders` remains the persistent store for Folder Filter selections.
 - `AppContainer` wires `MusicRepository` to `RoomMusicCatalogRepository`, not to the legacy
   `MediaStoreMusicRepository` implementation.
@@ -5172,6 +5306,9 @@ The current navigation contract is:
 Home / Search / Library
     = top-level siblings
 
+RecentCollection detail (Artist / Album / Genre)
+    = child route opened from Home's recent collection sections
+
 Settings
     = child of active top-level destination
 
@@ -5190,7 +5327,7 @@ Predictive Back gesture
     = no fade
 ```
 
-Future navigation work must keep this contract and update the Navigation 3 sections of this README whenever
+Future navigation work must keep this contract and update the Navigation 3 sections of `Agents.md` whenever
 the implementation intentionally changes.
 
 ## Verification status for the current catalog work
@@ -5202,7 +5339,7 @@ Verified during the current implementation session:
 Track Info releaseDate -> developer confirmed it appears for tracks that have the embedded tag
 Missing copyright tag -> valid missing metadata; do not fabricate a value
 Git history -> catalog changes split into one-file commits by module prefix
-Working tree -> clean and local main matched origin/main in the reported status
+Git working-tree and ahead/behind status are transient. Check `git status -sb` in the live repository instead of relying on a previously recorded status.
 ```
 
 A missing copyright value is expected when the source file does not contain that tag. It is not by itself a
@@ -5216,4 +5353,4 @@ developer's real `rovia.db`.
 
 The existing source-tree migration rules remain unchanged. The current catalog integration intentionally adds
 a synchronized Room-backed index while keeping MediaStore authoritative for the underlying local media.
-Every successfully implemented and verified change must be committed.
+Git commits are created only when the developer explicitly requests them; when requested, use one file per commit and do not push unless explicitly asked.
