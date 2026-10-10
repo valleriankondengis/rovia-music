@@ -1,9 +1,11 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
 
 package com.rovia.music.feature.player
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
@@ -54,188 +55,167 @@ internal fun PlaybackButtonGroup(
             MutableInteractionSource()
         }
 
-    Box(
-        modifier =
-            Modifier.fillMaxWidth(),
-        contentAlignment =
-            Alignment.Center,
+    ButtonGroup(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        overflowIndicator = { menuState ->
+            ButtonGroupDefaults.OverflowIndicator(
+                menuState = menuState,
+            )
+        },
     ) {
-        ButtonGroup(
-            horizontalArrangement =
-                Arrangement.spacedBy(16.dp),
-            overflowIndicator = { menuState ->
-                ButtonGroupDefaults.OverflowIndicator(
-                    menuState = menuState,
-                )
-            },
-        ) {
-            customItem(
-                buttonGroupContent = {
-                    FilledIconButton(
-                        onClick = onPrevious,
-                        interactionSource =
-                            previousSource,
-                        modifier =
-                            Modifier
-                                .size(64.dp)
-                                .animateWidth(
-                                    interactionSource =
-                                        previousSource,
-                                    compressionLimit =
-                                        16.dp,
-                                ),
-                        colors =
-                            IconButtonDefaults
-                                .filledIconButtonColors(
-                                    containerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceContainerHigh,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                ),
-                        shapes =
-                            IconButtonDefaults.shapes(),
-                    ) {
-                        Icon(
-                            painter =
-                                painterResource(
-                                    CoreUiR.drawable
-                                        .ic_skip_previous,
-                                ),
-                            contentDescription =
-                                stringResource(
-                                    R.string.player_previous,
-                                ),
-                            modifier =
-                                Modifier.size(30.dp),
-                        )
-                    }
-                },
-                menuContent = {},
-            )
-
-            customItem(
-                buttonGroupContent = {
-                    FilledIconToggleButton(
-                        checked = isPlaying,
-                        onCheckedChange = {
-                            onPlayPause()
-                        },
-                        interactionSource =
-                            playPauseSource,
-                        modifier =
-                            Modifier
-                                .size(64.dp)
-                                .animateWidth(
-                                    interactionSource =
-                                        playPauseSource,
-                                    compressionLimit =
-                                        16.dp,
-                                ),
-                        colors =
-                            IconButtonDefaults
-                                .filledIconToggleButtonColors(
-                                    containerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceContainerHigh,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                    checkedContainerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primaryContainer,
-                                    checkedContentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onPrimaryContainer,
-                                ),
-                        shapes =
-                            IconButtonDefaults
-                                .toggleableShapes(),
-                    ) {
-                        Icon(
-                            painter =
-                                painterResource(
-                                    if (isPlaying) {
-                                        CoreUiR.drawable
-                                            .ic_pause
-                                    } else {
-                                        CoreUiR.drawable
-                                            .ic_play_arrow
-                                    },
-                                ),
-                            contentDescription =
+        // Play/Pause expands into the remaining available width.
+        customItem(
+            buttonGroupContent = {
+                FilledIconToggleButton(
+                    checked = isPlaying,
+                    onCheckedChange = {
+                        onPlayPause()
+                    },
+                    interactionSource = playPauseSource,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .animateWidth(
+                                interactionSource = playPauseSource,
+                                compressionLimit = 16.dp,
+                            ),
+                    colors =
+                        IconButtonDefaults
+                            .filledIconToggleButtonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceContainerHigh,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                                checkedContainerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .primaryContainer,
+                                checkedContentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimaryContainer,
+                            ),
+                    shapes =
+                        IconButtonDefaults
+                            .toggleableShapes(),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
                                 if (isPlaying) {
-                                    stringResource(
-                                        R.string.player_pause,
-                                    )
+                                    CoreUiR.drawable.ic_pause
                                 } else {
-                                    stringResource(
-                                        R.string.player_play,
-                                    )
+                                    CoreUiR.drawable.ic_play_arrow
                                 },
-                            modifier =
-                                Modifier.size(32.dp),
-                        )
-                    }
-                },
-                menuContent = {},
-            )
-
-            customItem(
-                buttonGroupContent = {
-                    FilledIconButton(
-                        onClick = onNext,
-                        interactionSource =
-                            nextSource,
-                        modifier =
-                            Modifier
-                                .size(64.dp)
-                                .animateWidth(
-                                    interactionSource =
-                                        nextSource,
-                                    compressionLimit =
-                                        16.dp,
-                                ),
-                        colors =
-                            IconButtonDefaults
-                                .filledIconButtonColors(
-                                    containerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceContainerHigh,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                ),
-                        shapes =
-                            IconButtonDefaults.shapes(),
-                    ) {
-                        Icon(
-                            painter =
-                                painterResource(
-                                    CoreUiR.drawable
-                                        .ic_skip_next,
-                                ),
-                            contentDescription =
+                            ),
+                        contentDescription =
+                            if (isPlaying) {
                                 stringResource(
-                                    R.string.player_next,
-                                ),
-                            modifier =
-                                Modifier.size(30.dp),
-                        )
-                    }
-                },
-                menuContent = {},
-            )
-        }
+                                    R.string.player_pause,
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.player_play,
+                                )
+                            },
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            },
+            menuContent = {},
+        )
+
+        // Previous retains its original size.
+        customItem(
+            buttonGroupContent = {
+                FilledIconButton(
+                    onClick = onPrevious,
+                    interactionSource = previousSource,
+                    modifier =
+                        Modifier
+                            .size(64.dp)
+                            .animateWidth(
+                                interactionSource = previousSource,
+                                compressionLimit = 16.dp,
+                            ),
+                    colors =
+                        IconButtonDefaults
+                            .filledIconButtonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceContainerHigh,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                            ),
+                    shapes = IconButtonDefaults.shapes(),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                CoreUiR.drawable.ic_skip_previous,
+                            ),
+                        contentDescription =
+                            stringResource(
+                                R.string.player_previous,
+                            ),
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+            },
+            menuContent = {},
+        )
+
+        // Next retains its original size.
+        customItem(
+            buttonGroupContent = {
+                FilledIconButton(
+                    onClick = onNext,
+                    interactionSource = nextSource,
+                    modifier =
+                        Modifier
+                            .size(64.dp)
+                            .animateWidth(
+                                interactionSource = nextSource,
+                                compressionLimit = 16.dp,
+                            ),
+                    colors =
+                        IconButtonDefaults
+                            .filledIconButtonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceContainerHigh,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                            ),
+                    shapes = IconButtonDefaults.shapes(),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                CoreUiR.drawable.ic_skip_next,
+                            ),
+                        contentDescription =
+                            stringResource(
+                                R.string.player_next,
+                            ),
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+            },
+            menuContent = {},
+        )
     }
 }
 
@@ -295,15 +275,13 @@ internal fun PlaybackOptionsButtonGroup(
             bottomEnd = 32.dp,
         )
 
+    // Keep Repeat and Shuffle aligned to the end.
     Box(
-        modifier =
-            Modifier.fillMaxWidth(),
-        contentAlignment =
-            Alignment.Center,
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterEnd,
     ) {
         ButtonGroup(
-            horizontalArrangement =
-                Arrangement.spacedBy(0.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
             overflowIndicator = { menuState ->
                 ButtonGroupDefaults.OverflowIndicator(
                     menuState = menuState,
@@ -325,10 +303,8 @@ internal fun PlaybackOptionsButtonGroup(
                                 .width(112.dp)
                                 .height(64.dp)
                                 .animateWidth(
-                                    interactionSource =
-                                        repeatSource,
-                                    compressionLimit =
-                                        16.dp,
+                                    interactionSource = repeatSource,
+                                    compressionLimit = 16.dp,
                                 ),
                         colors =
                             ToggleButtonDefaults.colors(
@@ -352,58 +328,43 @@ internal fun PlaybackOptionsButtonGroup(
                         shapes =
                             ButtonGroupDefaults
                                 .connectedLeadingButtonShapes(
-                                    shape =
-                                        leadingNormalShape,
-                                    pressedShape =
-                                        leadingPressedShape,
-                                    checkedShape =
-                                        leadingNormalShape,
+                                    shape = leadingNormalShape,
+                                    pressedShape = leadingPressedShape,
+                                    checkedShape = leadingNormalShape,
                                 ),
-                        contentPadding =
-                            PaddingValues(0.dp),
+                        contentPadding = PaddingValues(0.dp),
                     ) {
                         Box(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            contentAlignment =
-                                Alignment.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 painter =
                                     painterResource(
-                                        if (
-                                            repeatMode ==
-                                                RepeatMode.ONE
-                                        ) {
-                                            CoreUiR.drawable
-                                                .ic_repeat_one
+                                        if (repeatMode == RepeatMode.ONE) {
+                                            CoreUiR.drawable.ic_repeat_one
                                         } else {
-                                            CoreUiR.drawable
-                                                .ic_repeat
+                                            CoreUiR.drawable.ic_repeat
                                         },
                                     ),
                                 contentDescription =
                                     when (repeatMode) {
                                         RepeatMode.OFF ->
                                             stringResource(
-                                                R.string
-                                                    .player_repeat_off,
+                                                R.string.player_repeat_off,
                                             )
 
                                         RepeatMode.ALL ->
                                             stringResource(
-                                                R.string
-                                                    .player_repeat_all,
+                                                R.string.player_repeat_all,
                                             )
 
                                         RepeatMode.ONE ->
                                             stringResource(
-                                                R.string
-                                                    .player_repeat_one,
+                                                R.string.player_repeat_one,
                                             )
                                     },
-                                modifier =
-                                    Modifier.size(28.dp),
+                                modifier = Modifier.size(28.dp),
                             )
                         }
                     }
@@ -415,18 +376,15 @@ internal fun PlaybackOptionsButtonGroup(
                 buttonGroupContent = {
                     ToggleButton(
                         checked = shuffleEnabled,
-                        onCheckedChange =
-                            onShuffleEnabledChange,
+                        onCheckedChange = onShuffleEnabledChange,
                         interactionSource = shuffleSource,
                         modifier =
                             Modifier
                                 .width(112.dp)
                                 .height(64.dp)
                                 .animateWidth(
-                                    interactionSource =
-                                        shuffleSource,
-                                    compressionLimit =
-                                        16.dp,
+                                    interactionSource = shuffleSource,
+                                    compressionLimit = 16.dp,
                                 ),
                         colors =
                             ToggleButtonDefaults.colors(
@@ -450,42 +408,32 @@ internal fun PlaybackOptionsButtonGroup(
                         shapes =
                             ButtonGroupDefaults
                                 .connectedTrailingButtonShapes(
-                                    shape =
-                                        trailingNormalShape,
-                                    pressedShape =
-                                        trailingPressedShape,
-                                    checkedShape =
-                                        trailingNormalShape,
+                                    shape = trailingNormalShape,
+                                    pressedShape = trailingPressedShape,
+                                    checkedShape = trailingNormalShape,
                                 ),
-                        contentPadding =
-                            PaddingValues(0.dp),
+                        contentPadding = PaddingValues(0.dp),
                     ) {
                         Box(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            contentAlignment =
-                                Alignment.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 painter =
                                     painterResource(
-                                        CoreUiR.drawable
-                                            .ic_shuffle,
+                                        CoreUiR.drawable.ic_shuffle,
                                     ),
                                 contentDescription =
                                     if (shuffleEnabled) {
                                         stringResource(
-                                            R.string
-                                                .player_shuffle_on,
+                                            R.string.player_shuffle_on,
                                         )
                                     } else {
                                         stringResource(
-                                            R.string
-                                                .player_shuffle_off,
+                                            R.string.player_shuffle_off,
                                         )
                                     },
-                                modifier =
-                                    Modifier.size(28.dp),
+                                modifier = Modifier.size(28.dp),
                             )
                         }
                     }
