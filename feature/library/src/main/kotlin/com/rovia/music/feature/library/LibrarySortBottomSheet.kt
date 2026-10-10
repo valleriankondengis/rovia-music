@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
@@ -41,7 +42,48 @@ fun LibrarySortBottomSheet(
     onDismissRequest: () -> Unit,
     onSortOptionChange: (LibrarySortOption) -> Unit,
     onToggleSortOrder: () -> Unit,
+    browseMode: LibraryBrowseMode = LibraryBrowseMode.ALL_SONGS,
 ) {
+    val visibleOptions =
+        when (browseMode) {
+            LibraryBrowseMode.ALL_SONGS,
+            LibraryBrowseMode.FOLDER,
+            ->
+                listOf(
+                    LibrarySortOption.DEFAULT,
+                    LibrarySortOption.TITLE,
+                    LibrarySortOption.ARTIST,
+                    LibrarySortOption.ALBUM,
+                    LibrarySortOption.GENRE,
+                    LibrarySortOption.DATE_ADDED,
+                    LibrarySortOption.DATE_MODIFIED,
+                )
+
+            LibraryBrowseMode.ARTIST ->
+                listOf(
+                    LibrarySortOption.DEFAULT,
+                    LibrarySortOption.ARTIST,
+                    LibrarySortOption.DATE_ADDED,
+                    LibrarySortOption.DATE_MODIFIED,
+                )
+
+            LibraryBrowseMode.ALBUM ->
+                listOf(
+                    LibrarySortOption.DEFAULT,
+                    LibrarySortOption.ALBUM,
+                    LibrarySortOption.DATE_ADDED,
+                    LibrarySortOption.DATE_MODIFIED,
+                )
+
+            LibraryBrowseMode.GENRE ->
+                listOf(
+                    LibrarySortOption.DEFAULT,
+                    LibrarySortOption.GENRE,
+                    LibrarySortOption.DATE_ADDED,
+                    LibrarySortOption.DATE_MODIFIED,
+                )
+        }
+
     val sheetState =
         rememberBottomSheetState(
             initialValue = SheetValue.PartiallyExpanded,
@@ -54,22 +96,16 @@ fun LibrarySortBottomSheet(
         )
 
     ModalBottomSheet(
-        modifier =
-            Modifier.fillMaxHeight(),
-        onDismissRequest =
-            onDismissRequest,
-        sheetState =
-            sheetState,
-        scrimColor =
-            Color.Transparent,
+        modifier = Modifier.fillMaxHeight(),
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        scrimColor = Color.Transparent,
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(
-                        bottom = 24.dp,
-                    ),
+                    .padding(bottom = 24.dp),
         ) {
             Row(
                 modifier =
@@ -80,135 +116,56 @@ fun LibrarySortBottomSheet(
                             end = 16.dp,
                             bottom = 8.dp,
                         ),
-                horizontalArrangement =
-                    Arrangement.SpaceBetween,
-                verticalAlignment =
-                    Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text =
-                        stringResource(
-                            R.string.library_sort_title,
-                        ),
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineSmall,
+                    text = stringResource(R.string.library_sort_title),
+                    style = MaterialTheme.typography.headlineSmall,
                 )
 
                 SortOrderButton(
                     sortOrder = sortOrder,
                     enabled =
-                        selectedOption !=
-                            LibrarySortOption.DEFAULT,
+                        selectedOption in visibleOptions &&
+                            selectedOption != LibrarySortOption.DEFAULT,
                     onClick = onToggleSortOrder,
                 )
             }
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.DEFAULT,
-                label =
-                    stringResource(
-                        R.string.library_sort_default,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.DEFAULT,
-                    )
-                },
-            )
+            visibleOptions.forEach { option ->
+                val label =
+                    when (option) {
+                        LibrarySortOption.DEFAULT ->
+                            stringResource(R.string.library_sort_default)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.TITLE,
-                label =
-                    stringResource(
-                        R.string.library_sort_title_name,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.TITLE,
-                    )
-                },
-            )
+                        LibrarySortOption.TITLE ->
+                            stringResource(R.string.library_sort_title_name)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.ARTIST,
-                label =
-                    stringResource(
-                        R.string.library_sort_artist,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.ARTIST,
-                    )
-                },
-            )
+                        LibrarySortOption.ARTIST ->
+                            stringResource(R.string.library_sort_artist)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.ALBUM,
-                label =
-                    stringResource(
-                        R.string.library_sort_album,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.ALBUM,
-                    )
-                },
-            )
+                        LibrarySortOption.ALBUM ->
+                            stringResource(R.string.library_sort_album)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.DATE_ADDED,
-                label =
-                    stringResource(
-                        R.string.library_sort_date_added,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.DATE_ADDED,
-                    )
-                },
-            )
+                        LibrarySortOption.GENRE ->
+                            stringResource(R.string.library_genre)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.DATE_MODIFIED,
-                label =
-                    stringResource(
-                        R.string.library_sort_date_modified,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.DATE_MODIFIED,
-                    )
-                },
-            )
+                        LibrarySortOption.DATE_ADDED ->
+                            stringResource(R.string.library_sort_date_added)
 
-            LibrarySortOptionItem(
-                selected =
-                    selectedOption ==
-                        LibrarySortOption.DURATION,
-                label =
-                    stringResource(
-                        R.string.library_sort_duration,
-                    ),
-                onClick = {
-                    onSortOptionChange(
-                        LibrarySortOption.DURATION,
-                    )
-                },
-            )
+                        LibrarySortOption.DATE_MODIFIED ->
+                            stringResource(R.string.library_sort_date_modified)
+                    }
+
+                LibrarySortOptionItem(
+                    selected = selectedOption == option,
+                    label = label,
+                    onClick = {
+                        onSortOptionChange(option)
+                    },
+                )
+            }
         }
     }
 }
@@ -221,60 +178,34 @@ private fun SortOrderButton(
 ) {
     val targetRotation =
         when (sortOrder) {
-            LibrarySortOrder.ASCENDING ->
-                0f
-
-            LibrarySortOrder.DESCENDING ->
-                180f
+            LibrarySortOrder.ASCENDING -> 0f
+            LibrarySortOrder.DESCENDING -> 180f
         }
 
     val arrowRotation by
         animateFloatAsState(
             targetValue = targetRotation,
-            animationSpec =
-                MaterialTheme
-                    .motionScheme
-                    .defaultSpatialSpec(),
+            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
             label = "sortOrderArrowRotation",
         )
 
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        shapes =
-            IconButtonDefaults.shapes(),
+        shapes = IconButtonDefaults.shapes(),
         colors =
-            IconButtonDefaults
-                .filledIconButtonColors(
-                    containerColor =
-                        MaterialTheme
-                            .colorScheme
-                            .surfaceContainerHigh,
-                    contentColor =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurface,
-                    disabledContainerColor =
-                        MaterialTheme
-                            .colorScheme
-                            .surfaceContainer,
-                    disabledContentColor =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant,
-                ),
+            IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
     ) {
         Icon(
-            painter =
-                painterResource(
-                    CoreUiR.drawable.ic_sort_arrow,
-                ),
+            painter = painterResource(CoreUiR.drawable.ic_sort_arrow),
             contentDescription =
                 stringResource(
-                    if (
-                        sortOrder ==
-                            LibrarySortOrder.ASCENDING
-                    ) {
+                    if (sortOrder == LibrarySortOrder.ASCENDING) {
                         R.string.library_sort_order_ascending
                     } else {
                         R.string.library_sort_order_descending
@@ -296,10 +227,8 @@ private fun LibrarySortOptionItem(
 ) {
     ListItem(
         onClick = onClick,
-        modifier =
-            Modifier.fillMaxWidth(),
-        shapes =
-            ListItemDefaults.shapes(),
+        modifier = Modifier.fillMaxWidth(),
+        shapes = ListItemDefaults.shapes(),
         colors =
             ListItemDefaults.colors(
                 containerColor = Color.Transparent,
@@ -311,8 +240,6 @@ private fun LibrarySortOptionItem(
             )
         },
     ) {
-        Text(
-            text = label,
-        )
+        Text(text = label)
     }
 }
