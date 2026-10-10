@@ -2,8 +2,26 @@
 <resources>
     <string name="section_recent_play">Recent Play</string>
     <string name="section_recently_added">Recently Added</string>
+    <string name="section_recent_artists">Recent Artists</string>
+    <string name="section_recent_albums">Recent Albums</string>
+    <string name="section_recent_genres">Recent Genres</string>
+
     <string name="recently_added_empty">No music found.</string>
     <string name="home_error">Unable to load music.</string>
+
     <string name="action_play_track">Play %1$s</string>
+    <string name="action_open_artist">Open artist %1$s</string>
+    <string name="action_open_album">Open album %1$s</string>
+    <string name="action_open_genre">Open genre %1$s</string>
     <string name="action_settings">Settings</string>
+
+    <string name="recent_collection_back">Back</string>
+    <string name="recent_collection_play_all">Play all</string>
+    <string name="recent_collection_tracks">Tracks</string>
+    <string name="recent_collection_empty">No matching songs found in this collection.</string>
+
+    <plurals name="recent_collection_track_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
 </resources>
