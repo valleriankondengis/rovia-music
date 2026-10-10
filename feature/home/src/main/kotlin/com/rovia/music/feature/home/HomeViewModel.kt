@@ -26,10 +26,55 @@ class HomeViewModel(
         combine(
             recentlyAdded,
             playbackController.recentPlays,
-        ) { recentlyAddedTracks, recentPlays ->
+        ) { recentlyAddedTracks, allRecentPlays ->
+
+            /*
+             * Build Artist, Album, and Genre collections from
+             * the complete Recent Play source.
+             *
+             * The source is expected to be ordered by most recently
+             * played first. The collection builders preserve that
+             * order and use the latest matching track's artwork.
+             */
+            val recentArtists =
+                buildRecentArtists(
+                    recentPlays = allRecentPlays,
+                )
+
+            val recentAlbums =
+                buildRecentAlbums(
+                    recentPlays = allRecentPlays,
+                )
+
+            val recentGenres =
+                buildRecentGenres(
+                    recentPlays = allRecentPlays,
+                )
+
             HomeUiState.Content(
                 recentlyAdded = recentlyAddedTracks,
-                recentPlays = recentPlays,
+
+                /*
+                 * Keep the Home Recent Play section compact.
+                 */
+                recentPlays =
+                    allRecentPlays.take(10),
+
+                /*
+                 * Preserve the complete Recent Play list for
+                 * collection browsing and future detail pages.
+                 */
+                allRecentPlays =
+                    allRecentPlays,
+
+                recentArtists =
+                    recentArtists,
+
+                recentAlbums =
+                    recentAlbums,
+
+                recentGenres =
+                    recentGenres,
             )
         }
 
