@@ -49,6 +49,8 @@ import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.feature.home.HomeRoute
+import com.rovia.music.feature.home.RecentCollectionRoute
+import com.rovia.music.feature.home.RecentCollectionType
 import com.rovia.music.feature.library.LibraryRoute
 import com.rovia.music.feature.search.SearchRoute
 import com.rovia.music.feature.settings.AboutScreen
@@ -146,8 +148,8 @@ fun MainNavigation(
                 /*
                  * Home, Search, and Library are top-level destinations.
                  *
-                 * They do not participate in the navigation back stack.
-                 * Back is only consumed when a child destination is open.
+                 * Detail destinations are added to the back stack
+                 * and removed when Back is pressed.
                  */
                 if (backStack.size > 1) {
                     backStack.removeLastOrNull()
@@ -162,23 +164,13 @@ fun MainNavigation(
             },
             /*
              * Normal/programmatic Back is also completely instantaneous.
-             *
-             * This is intentionally different from predictivePopTransitionSpec.
-             * Therefore pressing a Back button does not trigger the
-             * scale-down animation.
              */
             popTransitionSpec = {
                 EnterTransition.None togetherWith
                     ExitTransition.None
             },
             /*
-             * Predictive Back keeps the Android-like surface motion:
-             *
-             * - surface scales down to 90%
-             * - surface moves slightly to the right
-             * - no fade
-             *
-             * This animation is driven by the predictive-back gesture.
+             * Predictive Back keeps the existing surface motion.
              */
             predictivePopTransitionSpec = {
                 EnterTransition.None togetherWith
@@ -224,6 +216,87 @@ fun MainNavigation(
                                     backStack.add(
                                         Settings,
                                     )
+                                },
+                                onOpenArtist = { artistName ->
+                                    backStack.add(
+                                        ArtistDetail(
+                                            artistName = artistName,
+                                        ),
+                                    )
+                                },
+                                onOpenAlbum = {
+                                        albumTitle,
+                                        artistName,
+                                    ->
+                                    backStack.add(
+                                        AlbumDetail(
+                                            albumTitle = albumTitle,
+                                            artistName = artistName,
+                                        ),
+                                    )
+                                },
+                                onOpenGenre = { genreName ->
+                                    backStack.add(
+                                        GenreDetail(
+                                            genreName = genreName,
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    entry<ArtistDetail> { key ->
+                        NavigationDestinationSurface {
+                            RecentCollectionRoute(
+                                musicRepository =
+                                    musicRepository,
+                                playbackController =
+                                    playbackController,
+                                collectionType =
+                                    RecentCollectionType.ARTIST,
+                                collectionName =
+                                    key.artistName,
+                                onBack = {
+                                    backStack.removeLastOrNull()
+                                },
+                            )
+                        }
+                    }
+
+                    entry<AlbumDetail> { key ->
+                        NavigationDestinationSurface {
+                            RecentCollectionRoute(
+                                musicRepository =
+                                    musicRepository,
+                                playbackController =
+                                    playbackController,
+                                collectionType =
+                                    RecentCollectionType.ALBUM,
+                                collectionName =
+                                    key.albumTitle,
+                                albumArtist =
+                                    key.artistName,
+                                onBack = {
+                                    backStack.removeLastOrNull()
+                                },
+                            )
+                        }
+                    }
+
+                    entry<GenreDetail> { key ->
+                        NavigationDestinationSurface {
+                            RecentCollectionRoute(
+                                musicRepository =
+                                    musicRepository,
+                                playbackController =
+                                    playbackController,
+                                collectionType =
+                                    RecentCollectionType.GENRE,
+                                collectionName =
+                                    key.genreName,
+                                onBack = {
+                                    backStack.removeLastOrNull()
                                 },
                             )
                         }
