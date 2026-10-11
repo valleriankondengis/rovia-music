@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.SyncedLyrics
@@ -36,6 +38,7 @@ internal fun PlayerLyricsFullscreenContent(
     onSeekPositionChange: (Float) -> Unit,
     onSeekFinished: (Long) -> Unit,
     onLyricSeek: (Long) -> Unit,
+    artworkColor: Color? = null,
 ) {
     Column(
         modifier =
@@ -90,6 +93,7 @@ internal fun PlayerLyricsFullscreenContent(
             onNext = onNext,
             modifier =
                 Modifier.fillMaxWidth(),
+            artworkColor = artworkColor,
         )
     }
 }
