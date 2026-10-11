@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -37,6 +38,7 @@ fun PlayerScreen(
     onSeek: (Long) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    audioOutputIndicator: (@Composable () -> Unit)? = null,
 ) {
     val track = playbackState.currentTrack
 
@@ -189,6 +191,7 @@ fun PlayerScreen(
                     onRepeatModeChange = onRepeatModeChange,
                     onShuffleEnabledChange = onShuffleEnabledChange,
                     onLyricSeek = onSeek,
+                    audioOutputIndicator = audioOutputIndicator,
                 )
             }
 
@@ -233,6 +236,7 @@ fun PlayerScreen(
                     onRepeatModeChange = onRepeatModeChange,
                     onShuffleEnabledChange = onShuffleEnabledChange,
                     onLyricSeek = onSeek,
+                    audioOutputIndicator = audioOutputIndicator,
                 )
             }
         }
