@@ -225,6 +225,7 @@ internal fun PlaybackOptionsButtonGroup(
     shuffleEnabled: Boolean,
     onRepeatModeChange: (RepeatMode) -> Unit,
     onShuffleEnabledChange: (Boolean) -> Unit,
+    compact: Boolean = false,
 ) {
     val repeatSource =
         remember {
@@ -275,9 +276,18 @@ internal fun PlaybackOptionsButtonGroup(
             bottomEnd = 32.dp,
         )
 
-    // Keep Repeat and Shuffle aligned to the end.
+    /*
+     * Default mode preserves full-width end alignment.
+     * Compact mode wraps the two buttons at their natural width,
+     * allowing landscape to place them near the output control.
+     */
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            if (compact) {
+                Modifier
+            } else {
+                Modifier.fillMaxWidth()
+            },
         contentAlignment = Alignment.CenterEnd,
     ) {
         ButtonGroup(
