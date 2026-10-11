@@ -20,4 +20,12 @@
     <string name="player_shuffle_on">Acak aktif</string>
     <string name="player_shuffle_off">Acak mati</string>
 
+    <string name="audio_output_button_content_description">Output audio dan volume</string>
+    <string name="audio_output_sheet_title">Output audio</string>
+    <string name="audio_output_local_device">Perangkat ini</string>
+    <string name="audio_output_bluetooth_audio">Audio Bluetooth</string>
+    <string name="audio_output_media_volume">Volume media</string>
+    <string name="audio_output_volume_slider_content_description">Volume media</string>
+    <string name="audio_output_fixed_volume_message">Volume sistem tidak dapat diubah melalui kontrol ini.</string>
+
 </resources>
