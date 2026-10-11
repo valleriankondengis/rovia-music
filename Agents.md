@@ -87,8 +87,9 @@ The current application contains these real features:
 - Audio technical information such as sample rate, bitrate, and MIME-derived format when metadata exists.
 - Additional real track metadata fields such as release date, label, copyright, and release type when the
   source exposes them; missing values remain missing and are not fabricated.
-- Embedded local lyrics parsing.
-- Line-synced and word-synced lyrics.
+- Embedded local lyrics parsing through the official AndroidX Media3 Inspector API first, followed by the existing native Kotlin parser fallback. The Media3 path inspects extractor metadata exposed in track `Format.metadata`; current entry handling includes `VorbisComment` and ID3-style `TextInformationFrame` lyric fields.
+- Existing native lyric fallback for ID3 `USLT`/`ULT` frames and FLAC Vorbis-comment blocks.
+- Line-synced and word-synced lyrics from the lyric text formats the current parser recognizes.
 - Automatic lyric scrolling and active-word highlighting.
 - Active lyric-line scaling with adaptive handling for long lyric lines.
 - Fullscreen lyrics mode that replaces the Player artwork area with the lyric viewer.
@@ -168,7 +169,7 @@ Do not add networking, remote metadata, online lyrics, streaming, accounts, or c
 
 Do not add FFmpeg, FFprobe, another decoder framework, or a second playback engine.
 
-Media3 + ExoPlayer is the playback foundation.
+Media3 + ExoPlayer is the playback foundation. `androidx.media3:media3-inspector` is an official AndroidX Media3 metadata-inspection artifact, not an alternate audio engine or decoder. Metadata inspection may work for a source even when playback codec support is unavailable; never infer codec playback support from successful metadata extraction.
 
 ## 3.5 No DI framework
 
@@ -214,7 +215,7 @@ AndroidX Navigation 3       : 1.2.0
 Compose BOM                 : 2026.09.00
 Material 3                  : 1.5.0-alpha29
 AndroidX Graphics Shapes    : 1.1.0
-AndroidX Media3              : 1.11.1
+AndroidX Media3 (ExoPlayer / Session / Inspector) : 1.11.1
 Kotlin Coroutines            : 1.10.2
 AndroidX Test Core           : 1.7.0
 AndroidX Test Ext JUnit      : 1.3.0
@@ -239,7 +240,13 @@ Source of versions:
 gradle/libs.versions.toml
 ```
 
-Module build files should use version-catalog aliases instead of hardcoded library versions.
+Current Media3 artifacts declared in the version catalog use the same `androidxMedia3 = "1.11.1"` version: 
+
+- `androidx-media3-exoplayer` → `androidx.media3:media3-exoplayer`; playback implementation in `:playback:media3`.
+- `androidx-media3-session` → `androidx.media3:media3-session`; MediaSession/service support in `:playback:media3`.
+- `androidx-media3-inspector` → `androidx.media3:media3-inspector`; metadata inspection dependency used by `:data:media-store`.
+
+`:data:media-store` declares `implementation(libs.androidx.media3.inspector)`. `EmbeddedLyricsRepository` uses the Inspector API for a best-effort metadata pass before its existing native parser fallback. The Inspector dependency does not add another playback engine, a software decoder, or a guarantee that every format/tag is supported. Module build files must use version-catalog aliases instead of hardcoded library versions.
 
 ---
 
@@ -343,6 +350,7 @@ Rovia/
 │   │       └── RoviaDatabaseMigrationTest.kt
 │   │
 │   └── media-store/
+│       ├── build.gradle.kts
 │       └── src/main/kotlin/com/rovia/music/data/media/store/
 │           ├── EmbeddedLyricsRepository.kt
 │           ├── ExternalAudioMetadataResolver.kt
@@ -541,8 +549,10 @@ Owns:
 - local artwork access and embedded artwork extraction/caching for an explicitly opened external audio URI;
 - direct external audio metadata resolution through `ExternalAudioMetadataResolver`;
 - selected embedded metadata enrichment for catalog tracks;
-- embedded lyric parsing;
+- embedded lyric parsing, with a Media3 Inspector metadata pass followed by a native ID3/FLAC fallback;
 - MediaStore-backed folder scanning.
+
+The `media3-inspector` dependency is used only for best-effort lyric metadata inspection in the current implementation. It does not mean the module has a universal metadata parser or that all artwork, lyrics, codecs, and container variants are supported.
 
 `ExternalAudioMetadataResolver` is deliberately a direct-URI utility, not another catalog repository. It must not query Room, `MusicRepository`, Folder Filter, or Recent Play persistence.
 
@@ -3027,6 +3037,12 @@ The regular controller keeps its regular-library queue of `Track` objects and tr
 
 Keep the implementation based on the official Media3 API. Do not instantiate ExoPlayer inside `MainActivity`, `PlayerScreen`, or a feature ViewModel.
 
+### Media3 dependency and responsibility boundary
+
+The current version catalog declares `media3-exoplayer`, `media3-session`, and `media3-inspector` at Media3 `1.11.1`. Playback uses ExoPlayer and MediaSession from `:playback:media3`. The lyric repository in `:data:media-store` uses `androidx.media3.inspector.MetadataRetriever` to inspect extractor metadata without starting playback. Do not move concrete Media3 classes into `:core:library-api` or feature UI modules.
+
+`MetadataRetriever` is a metadata inspection path, not an assurance that all container tags are recognized. It only exposes information provided by the extractor and the current code only consumes selected metadata-entry types. A successful metadata read also does not prove the media's audio codec can be decoded by the device.
+
 ---
 
 # 45. MEDIASESSION SERVICE
@@ -3131,13 +3147,43 @@ The regular `Track.uri` is a MediaStore audio content URI. The current `MediaSto
 
 `ExternalAudioMetadataResolver` resolves one explicitly supplied `content://` audio URI on `Dispatchers.IO`, independently from the catalog. It can query optional `OpenableColumns.DISPLAY_NAME` and `OpenableColumns.SIZE` values, then uses `MediaMetadataRetriever.setDataSource(context, uri)` to read metadata from that exact source.
 
-The resolver currently reads supported embedded fields such as title, artist, album, album artist, genre, composer, author, writer, release date/year, track/disc numbers, compilation, duration, MIME type, bitrate, and embedded picture when available. MIME type prefers `ContentResolver.getType(uri)` and falls back to retriever metadata. Display name and size are optional provider metadata; a provider can omit them.
+The resolver currently reads supported embedded fields such as title, artist, album, album artist, genre, composer, author, writer, release date/year, track/disc numbers, compilation, duration, MIME type, bitrate, and embedded picture when available, using Android's `MediaMetadataRetriever`. MIME type prefers `ContentResolver.getType(uri)` and falls back to retriever metadata. Display name and size are optional provider metadata; a provider can omit them. The external lyrics request is handled separately by `EmbeddedLyricsRepository`, which first tries Media3 Inspector metadata and then the native ID3/FLAC fallback; do not describe `ExternalAudioMetadataResolver` itself as using Media3 Inspector.
 
 Title selection uses the embedded title first, then a usable display name without its extension, then the URI's last path segment, and finally the URI string. This is a non-null `Track.title` fallback, not fabricated artist/album metadata. Values the resolver does not obtain (for example sample rate and bits per sample in the current implementation) remain null.
 
 External `Track` identity and catalog-only fields are transient: the current resolver derives `id` from the URI string, sets `dateAddedEpochSeconds` to `0L`, and leaves `relativePath` and `volumeName` null. Do not present these defaults as real MediaStore values. The original external audio URI stays in `Track.uri` and is used for playback and embedded lyric reading. The external `Track` is not inserted into Room.
 
 Do not make `ExternalAudioMetadataResolver` depend on `MusicRepository`, Room/SQLite, `FolderBrowserRepository`, `FolderFilterRepository`, catalog synchronization, or Recent Play persistence. External playback must continue to work if the item is missing from Rovia's catalog or is located inside a folder excluded from the regular library.
+
+## 47.3. EMBEDDED LYRIC METADATA INSPECTION
+
+`EmbeddedLyricsRepository` is the current shared implementation for regular and external track lyric reads. It runs its work on `Dispatchers.IO`. The current read order is:
+
+```text
+Track.uri
+    ↓
+Media3 MetadataRetriever (from media3-inspector 1.11.1)
+    ↓
+retrieveTrackGroups()
+    ↓
+inspect each Format.metadata entry
+    ├── VorbisComment
+    └── TextInformationFrame
+    ↓
+parse the selected lyric text into SyncedLyrics
+    ↓ if no usable result is found
+native ContentResolver stream fallback
+    ├── leading ID3 tag: USLT / ULT
+    └── FLAC metadata block type 4: Vorbis comments
+```
+
+The Media3 pass uses `MediaItem.fromUri(track.uri)` and `MetadataRetriever.retrieveTrackGroups()` without starting an ExoPlayer playback session. It currently recognizes `VorbisComment` keys including `LYRICS`, common unsynchronized-lyrics keys and their supported suffix variants, `TextInformationFrame` IDs `USLT`/`ULT`, and matching `TXXX` lyric descriptions. It scans metadata supplied on track `Format.metadata`; it does not parse arbitrary bytes or guarantee support for every tag variant.
+
+If Media3 metadata extraction fails, is unavailable, or contains no recognized lyric entry, the implementation falls back to the current native stream reader. That fallback recognizes an ID3 tag at the start of the stream and the FLAC signature followed by a Vorbis-comment metadata block. It is not a general MP4 atom parser and is not a direct Ogg/Opus comment parser independent of Media3. Do not claim these fallback branches cover every container/tag arrangement.
+
+M4A/MP4 lyric retrieval has been confirmed by the developer for the specific test files that previously failed. This is not a guarantee for all M4A variants, fragmented MP4, ALAC files, or every tagging application's custom metadata. Opus/Vorbis-comment lyrics may be returned when the Media3 extractor exposes compatible `VorbisComment` entries; this remains subject to format-specific testing.
+
+`MetadataRetriever` work must remain off the main thread. Keep its close/release lifecycle correct and propagate coroutine cancellation. If no supported lyric entry is found, return unavailable lyrics; do not use network services or fabricate text.
 
 ---
 
@@ -3154,6 +3200,10 @@ There is no Coil, Glide, or third-party image-loading dependency. If artwork is 
 ### External embedded artwork lifecycle
 
 `ExternalAudioMetadataResolver` reads `MediaMetadataRetriever.embeddedPicture` from the external audio URI. When embedded artwork is available, it writes only the image bytes to an app-private temporary cache directory (`cache/external-artwork`) and returns a `file://` URI as `Track.artworkUri`. The audio itself continues to be played from the original `content://` URI; Rovia does not copy or move the audio file. Temporary art is deleted during external-playback cleanup. Artwork is optional and its absence must not prevent audio playback.
+
+### Media3 Inspector and artwork boundary
+
+The current `media3-inspector` integration is used by `EmbeddedLyricsRepository` to inspect lyric-related metadata entries; it is not yet the application's unified artwork extraction path. Displayed artwork continues to use `AlbumArtwork` (`ContentResolver.loadThumbnail()` then `ArtworkBitmapLoader` fallback), the external resolver uses Android `MediaMetadataRetriever.embeddedPicture` to create its temporary artwork file, and Player/MiniPlayer palette extraction reads the active audio URI through `MediaMetadataRetriever` before using `artworkUri` as fallback. Do not claim that `MediaMetadata.artworkData` or Media3 Inspector currently supplies all artwork for these code paths unless the implementation is explicitly changed and tested.
 
 ## 48.1. Artwork-derived Player and MiniPlayer colors
 
@@ -3366,18 +3416,16 @@ PlayerScreen
     ↑
 PlayerViewModel
     ↑
-LyricsRepository
+LyricsRepository (core API)
     ↑
-EmbeddedLyricsRepository
-    ↑
-local audio file
+EmbeddedLyricsRepository (:data:media-store)
+    ├── Media3 Inspector metadata retrieval (first attempt)
+    └── Android ContentResolver stream parser (fallback)
 ```
 
-`LyricsRepository` is an API interface.
+`LyricsRepository` is an API interface. `EmbeddedLyricsRepository` is the current implementation shared by regular and external playback. It tries the official AndroidX Media3 Inspector API against the audio URI first, then falls back to its native Kotlin ID3/FLAC stream parser. Both attempts are local and are performed off the main thread.
 
-`EmbeddedLyricsRepository` is the current implementation.
-
-Do not add network lyrics.
+Do not add network lyrics or a third-party metadata/lyrics parser.
 
 ---
 
@@ -3407,18 +3455,25 @@ This supports both line-level and word-level synchronization.
 
 # 58. LYRIC PARSING
 
-The embedded parser recognizes timestamped lyrics and handles relevant embedded lyric metadata.
+`EmbeddedLyricsRepository` uses a Media3-first, native-fallback strategy. The Media3 pass obtains track groups from `androidx.media3.inspector.MetadataRetriever`, scans metadata entries on each `Format`, and currently handles these entry types:
 
-Current timestamp model includes:
+- `VorbisComment`: `LYRICS`, common unsynchronized lyric tag names, and the language/variant suffix forms explicitly recognized in the current code.
+- `TextInformationFrame`: IDs `USLT` and `ULT`, plus `TXXX` entries whose description matches one of the recognized lyric labels.
+
+If that pass does not return usable lyrics, the native fallback inspects the start of the stream for an ID3 tag and reads `USLT`/`ULT`, or recognizes a FLAC signature and reads the Vorbis-comment metadata block. These are targeted reader paths, not a universal parser for all media containers.
+
+The resulting lyric text is then parsed into the existing `SyncedLyrics` model. Current timestamp model includes:
 
 ```text
-[line timestamp]
-<word timestamp>
+[line timestamp]  e.g. [01:23.45]
+<word timestamp>  e.g. <01:23.45>
 ```
 
-The parser ignores relevant LRC metadata/header lines when appropriate and normalizes milliseconds.
+Plain text without recognized line timestamps is represented as one lyric line starting at zero. LRC metadata/header lines such as title, artist, album, and offset are ignored when the parser recognizes them. Milliseconds are normalized to three digits. The current ID3 stream fallback recognizes `USLT` and `ULT`; do not document `SYLT` as implemented unless support is added and tested.
 
-Do not replace it with a generic online lyric service.
+A format being playable does not mean its lyric tags are necessarily exposed by Media3. Likewise, a successful Media3 metadata inspection does not imply that the device's audio decoder supports the codec. M4A lyric retrieval has been confirmed only for the test files reported by the developer. `VorbisComment`-based Opus/Ogg lyrics are a candidate path when exposed by the extractor, not a blanket guarantee. ALAC metadata/playback remains unverified.
+
+Do not replace it with a generic online lyric service or a third-party parser.
 
 ---
 
@@ -3995,13 +4050,15 @@ The existence of a Settings page does not mean these features belong in Settings
 
 # 82. AUDIO FORMAT POLICY
 
-Rovia uses the normal Media3/ExoPlayer/Android decoder path.
+Rovia uses the normal Media3/ExoPlayer/Android decoder path. The currently declared Media3 version is `1.11.1`; `media3-inspector` is used for best-effort metadata extraction by `EmbeddedLyricsRepository`, not as an audio decoder.
 
 Do not silently transcode unsupported audio.
 
-Do not add FFmpeg just to broaden codec coverage.
+Do not add FFmpeg/FFprobe or a third-party decoder just to broaden codec coverage.
 
-Actual device capability should determine playback behavior.
+Keep these capabilities separate: (1) container/extractor recognition, (2) metadata/artwork/lyrics extraction, and (3) audio codec decoding/playback. A file may expose metadata while its audio codec remains unsupported by the device's normal decoder path. Successful playback also does not guarantee every embedded metadata tag is exposed.
+
+Actual device and file capability should determine playback behavior. Formats and metadata variants not verified with real sample files must be documented as unverified, not guaranteed. In particular, do not claim ALAC playback support merely because MP4/M4A metadata extraction works, and do not claim broad Opus/ALAC metadata coverage without tests.
 
 The application must not label an audio file as Hi-Res/Bit-Perfect/DSD merely because metadata looks high quality.
 
@@ -4607,7 +4664,11 @@ Test representative local tracks covering:
 [ ] different MIME types
 [ ] embedded release date/copyright present
 [ ] one or both embedded release tags missing
-[ ] embedded lyrics
+[ ] embedded lyrics via Media3 Inspector when a recognized entry is exposed
+[ ] embedded lyrics via native ID3/FLAC fallback when Inspector has no usable entry
+[ ] M4A/MP4 lyric test case verified on the actual device
+[ ] Ogg/Opus metadata tested when a real sample is available
+[ ] ALAC metadata and playback tested separately when a real sample is available
 [ ] no embedded lyrics
 ```
 
@@ -4639,11 +4700,20 @@ No metadata should be fabricated. Missing embedded copyright/release-date tags a
 Test:
 
 ```text
-[ ] no lyrics
+[ ] no lyrics / unsupported lyric tag returns a real unavailable state
 [ ] line-synced lyrics
 [ ] word-synced lyrics
+[ ] plain embedded lyric text
 [ ] metadata/header lines
-[ ] unusual spacing
+[ ] unusual spacing / multiple encodings
+[ ] Media3 Inspector returns recognized `VorbisComment` entries
+[ ] Media3 Inspector returns recognized `TextInformationFrame` lyric entries where supported
+[ ] native ID3 `USLT`/`ULT` fallback remains functional when Inspector does not return lyrics
+[ ] native FLAC Vorbis-comment fallback remains functional when Inspector does not return lyrics
+[ ] M4A/MP4 lyric tag works for the real tested file (other variants remain unverified until tested)
+[ ] Ogg/Opus Vorbis-comment lyric tags are tested when a representative file is available
+[ ] ALAC metadata inspection is tested separately from playback if a sample file becomes available
+[ ] metadata inspection failure does not stop audio playback
 [ ] pause/resume while lyrics are visible
 [ ] seek while lyrics are visible
 [ ] track change while lyrics are visible
@@ -4838,7 +4908,7 @@ When a feature does not exist:
 
 When Android or AndroidX already provides the capability:
 
-> **Prefer the existing official API instead of introducing another dependency.**
+> **Prefer an already-declared official API first. If the required capability is packaged in a separate official AndroidX artifact, add it only when needed, align its version with the existing stack, and document its specific responsibility. Do not add a third-party library by default.**
 
 When the requested milestone is complete:
 
