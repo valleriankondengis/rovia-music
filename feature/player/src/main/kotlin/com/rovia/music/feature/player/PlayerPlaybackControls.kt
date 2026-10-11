@@ -5,6 +5,7 @@
 
 package com.rovia.music.feature.player
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,11 +28,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.ui.R as CoreUiR
+
+private const val IDLE_CONTROL_TINT_FRACTION = 0.12f
+private const val ACTIVE_CONTROL_TINT_FRACTION = 0.46f
 
 @Composable
 internal fun PlaybackButtonGroup(
@@ -39,7 +47,46 @@ internal fun PlaybackButtonGroup(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    artworkColor: Color? = null,
 ) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val artworkAccent =
+        resolvePlayerControlArtworkAccent(
+            artworkColor = artworkColor,
+        )
+
+    val idleContainerColor =
+        artworkAccent?.let { accent ->
+            lerp(
+                start = colorScheme.surfaceContainerHigh,
+                stop = accent,
+                fraction = IDLE_CONTROL_TINT_FRACTION,
+            )
+        } ?: colorScheme.surfaceContainerHigh
+
+    val activePlayContainerColor =
+        artworkAccent?.let { accent ->
+            lerp(
+                start = colorScheme.primaryContainer,
+                stop = accent,
+                fraction = ACTIVE_CONTROL_TINT_FRACTION,
+            )
+        } ?: colorScheme.primaryContainer
+
+    val idleContentColor =
+        colorScheme.onSurface
+
+    val activePlayContentColor =
+        if (artworkAccent != null) {
+            contrastingControlContentColor(
+                activePlayContainerColor,
+            )
+        } else {
+            colorScheme.onPrimaryContainer
+        }
+
     val previousSource =
         remember {
             MutableInteractionSource()
@@ -85,21 +132,13 @@ internal fun PlaybackButtonGroup(
                         IconButtonDefaults
                             .filledIconToggleButtonColors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
+                                    idleContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                    idleContentColor,
                                 checkedContainerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primaryContainer,
+                                    activePlayContainerColor,
                                 checkedContentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimaryContainer,
+                                    activePlayContentColor,
                             ),
                     shapes =
                         IconButtonDefaults
@@ -147,14 +186,8 @@ internal fun PlaybackButtonGroup(
                     colors =
                         IconButtonDefaults
                             .filledIconButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                containerColor = idleContainerColor,
+                                contentColor = idleContentColor,
                             ),
                     shapes = IconButtonDefaults.shapes(),
                 ) {
@@ -190,14 +223,8 @@ internal fun PlaybackButtonGroup(
                     colors =
                         IconButtonDefaults
                             .filledIconButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                containerColor = idleContainerColor,
+                                contentColor = idleContentColor,
                             ),
                     shapes = IconButtonDefaults.shapes(),
                 ) {
@@ -226,7 +253,43 @@ internal fun PlaybackOptionsButtonGroup(
     onRepeatModeChange: (RepeatMode) -> Unit,
     onShuffleEnabledChange: (Boolean) -> Unit,
     compact: Boolean = false,
+    artworkColor: Color? = null,
 ) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val artworkAccent =
+        resolvePlayerControlArtworkAccent(
+            artworkColor = artworkColor,
+        )
+
+    val idleContainerColor =
+        artworkAccent?.let { accent ->
+            lerp(
+                start = colorScheme.surfaceContainerHigh,
+                stop = accent,
+                fraction = IDLE_CONTROL_TINT_FRACTION,
+            )
+        } ?: colorScheme.surfaceContainerHigh
+
+    val activeRepeatContainerColor =
+        artworkAccent?.let { accent ->
+            lerp(
+                start = colorScheme.secondaryContainer,
+                stop = accent,
+                fraction = ACTIVE_CONTROL_TINT_FRACTION,
+            )
+        } ?: colorScheme.secondaryContainer
+
+    val activeRepeatContentColor =
+        if (artworkAccent != null) {
+            contrastingControlContentColor(
+                activeRepeatContainerColor,
+            )
+        } else {
+            colorScheme.onSecondaryContainer
+        }
+
     val repeatSource =
         remember {
             MutableInteractionSource()
@@ -319,21 +382,13 @@ internal fun PlaybackOptionsButtonGroup(
                         colors =
                             ToggleButtonDefaults.colors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
+                                    idleContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                    colorScheme.onSurface,
                                 checkedContainerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .secondaryContainer,
+                                    activeRepeatContainerColor,
                                 checkedContentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSecondaryContainer,
+                                    activeRepeatContentColor,
                             ),
                         shapes =
                             ButtonGroupDefaults
@@ -399,21 +454,13 @@ internal fun PlaybackOptionsButtonGroup(
                         colors =
                             ToggleButtonDefaults.colors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
+                                    idleContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                    colorScheme.onSurface,
                                 checkedContainerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .secondaryContainer,
+                                    activeRepeatContainerColor,
                                 checkedContentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSecondaryContainer,
+                                    activeRepeatContentColor,
                             ),
                         shapes =
                             ButtonGroupDefaults
@@ -451,5 +498,96 @@ internal fun PlaybackOptionsButtonGroup(
                 menuContent = {},
             )
         }
+    }
+}
+
+/**
+ * Returns the shared artwork control accent whenever PlayerScreen
+ * has provided one. The optional artworkColor remains a fallback
+ * for callers rendered outside LocalPlayerArtworkPalette.
+ */
+@Composable
+private fun resolvePlayerControlArtworkAccent(
+    artworkColor: Color?,
+): Color? {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val isDarkSurface =
+        colorScheme.surface.luminance() < 0.5f
+
+    val sharedControlAccent =
+        playerArtworkControlAccentColor()
+
+    val fallbackAccent =
+        remember(
+            artworkColor,
+            isDarkSurface,
+        ) {
+            resolvePastelArtworkAccent(
+                artworkColor = artworkColor,
+                isDarkSurface = isDarkSurface,
+            )
+        }
+
+    return sharedControlAccent ?: fallbackAccent
+}
+
+/**
+ * Compatibility fallback for components outside the shared
+ * artwork palette. Controls use a lower saturation than the
+ * vivid active-lyrics and seekbar accent.
+ */
+private fun resolvePastelArtworkAccent(
+    artworkColor: Color?,
+    isDarkSurface: Boolean,
+): Color? {
+    artworkColor ?: return null
+
+    val hsv =
+        FloatArray(3)
+
+    AndroidColor.colorToHSV(
+        artworkColor.toArgb(),
+        hsv,
+    )
+
+    if (
+        hsv[1] < 0.12f ||
+        hsv[2] < 0.08f
+    ) {
+        return null
+    }
+
+    val softerSaturation =
+        (hsv[1] * 0.48f)
+            .coerceIn(0.22f, 0.42f)
+
+    val controlBrightness =
+        if (isDarkSurface) {
+            0.92f
+        } else {
+            0.68f
+        }
+
+    return Color.hsv(
+        hue = hsv[0],
+        saturation = softerSaturation,
+        value = controlBrightness,
+        alpha = 1f,
+    )
+}
+
+/**
+ * Select a readable foreground based on the final blended
+ * container color, not the original artwork seed color.
+ */
+private fun contrastingControlContentColor(
+    containerColor: Color,
+): Color {
+    return if (containerColor.luminance() > 0.45f) {
+        Color(0xFF202124)
+    } else {
+        Color.White
     }
 }
