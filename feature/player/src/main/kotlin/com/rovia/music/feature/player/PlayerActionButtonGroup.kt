@@ -24,14 +24,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
 import com.rovia.music.core.ui.component.TrackInfoBottomSheet
+
+private const val IDLE_CONTROL_TINT_FRACTION = 0.12f
+private const val ACTIVE_LYRICS_TINT_FRACTION = 0.46f
 
 @Composable
 internal fun PlayerActionButtonGroup(
@@ -50,19 +54,65 @@ internal fun PlayerActionButtonGroup(
         mutableStateOf(false)
     }
 
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    /*
+     * Use the softer artwork accent for idle controls.
+     * Vivid artwork color remains reserved for active elements.
+     */
+    val controlAccent =
+        playerArtworkControlAccentColor()
+
+    val idleContainerColor =
+        controlAccent?.let { accent ->
+            lerp(
+                start = colorScheme.surfaceContainerHigh,
+                stop = accent,
+                fraction = IDLE_CONTROL_TINT_FRACTION,
+            )
+        } ?: colorScheme.surfaceContainerHigh
+
+    val idleContentColor =
+        controlAccent
+            ?: colorScheme.onSurface
+
+    /*
+     * Lyrics uses a distinct active surface blended from the
+     * Material primary container and the softer artwork accent.
+     */
+    val lyricsActiveContainerColor =
+        controlAccent?.let { accent ->
+            lerp(
+                start = colorScheme.primaryContainer,
+                stop = accent,
+                fraction = ACTIVE_LYRICS_TINT_FRACTION,
+            )
+        } ?: colorScheme.primaryContainer
+
+    val lyricsActiveContentColor =
+        if (controlAccent != null) {
+            if (lyricsActiveContainerColor.luminance() > 0.45f) {
+                androidx.compose.ui.graphics.Color(0xFF202124)
+            } else {
+                androidx.compose.ui.graphics.Color.White
+            }
+        } else {
+            colorScheme.onPrimaryContainer
+        }
+
     Row(
         modifier =
             Modifier.fillMaxWidth(),
         verticalAlignment =
-            Alignment.CenterVertically,
+            androidx.compose.ui.Alignment.CenterVertically,
         horizontalArrangement =
             Arrangement.SpaceBetween,
     ) {
         ButtonGroup(
             horizontalArrangement =
                 Arrangement.spacedBy(
-                    ButtonGroupDefaults
-                        .ConnectedSpaceBetween,
+                    ButtonGroupDefaults.ConnectedSpaceBetween,
                 ),
             overflowIndicator = { menuState ->
                 ButtonGroupDefaults.OverflowIndicator(
@@ -74,20 +124,12 @@ internal fun PlayerActionButtonGroup(
                 buttonGroupContent = {
                     FilledIconButton(
                         onClick = onClose,
-                        modifier =
-                            Modifier.size(48.dp),
+                        modifier = Modifier.size(48.dp),
                         colors =
-                            IconButtonDefaults
-                                .filledIconButtonColors(
-                                    containerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceContainerHigh,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                ),
+                            IconButtonDefaults.filledIconButtonColors(
+                                containerColor = idleContainerColor,
+                                contentColor = idleContentColor,
+                            ),
                         shapes =
                             IconButtonDefaults.shapes(
                                 shape =
@@ -108,8 +150,7 @@ internal fun PlayerActionButtonGroup(
                                 stringResource(
                                     R.string.player_close,
                                 ),
-                            modifier =
-                                Modifier.size(22.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 },
@@ -123,27 +164,16 @@ internal fun PlayerActionButtonGroup(
                         onCheckedChange = {
                             onToggleLyrics()
                         },
-                        modifier =
-                            Modifier.size(48.dp),
+                        modifier = Modifier.size(48.dp),
                         colors =
                             IconButtonDefaults
                                 .filledIconToggleButtonColors(
-                                    containerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceContainerHigh,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
+                                    containerColor = idleContainerColor,
+                                    contentColor = idleContentColor,
                                     checkedContainerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primaryContainer,
+                                        lyricsActiveContainerColor,
                                     checkedContentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onPrimaryContainer,
+                                        lyricsActiveContentColor,
                                 ),
                         shapes =
                             IconButtonDefaults.toggleableShapes(
@@ -171,8 +201,7 @@ internal fun PlayerActionButtonGroup(
                                         R.string.player_show_lyrics
                                     },
                                 ),
-                            modifier =
-                                Modifier.size(22.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 },
@@ -185,22 +214,13 @@ internal fun PlayerActionButtonGroup(
                 onClick = {
                     isMenuExpanded = true
                 },
-                modifier =
-                    Modifier.size(48.dp),
+                modifier = Modifier.size(48.dp),
                 colors =
-                    IconButtonDefaults
-                        .filledIconButtonColors(
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surfaceContainerHigh,
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
-                        ),
-                shapes =
-                    IconButtonDefaults.shapes(),
+                    IconButtonDefaults.filledIconButtonColors(
+                        containerColor = idleContainerColor,
+                        contentColor = idleContentColor,
+                    ),
+                shapes = IconButtonDefaults.shapes(),
             ) {
                 Icon(
                     painter =
@@ -211,8 +231,7 @@ internal fun PlayerActionButtonGroup(
                         stringResource(
                             CoreUiR.string.track_action_more,
                         ),
-                    modifier =
-                        Modifier.size(24.dp),
+                    modifier = Modifier.size(24.dp),
                 )
             }
 
@@ -252,4 +271,3 @@ internal fun PlayerActionButtonGroup(
         }
     }
 }
-
