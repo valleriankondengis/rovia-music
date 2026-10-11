@@ -15,16 +15,16 @@ import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.playback.AudioOutputController
 import com.rovia.music.core.playback.AudioOutputState
-import com.rovia.music.core.playback.PlaybackController
+import com.rovia.music.core.playback.PlayerPlaybackController
 import com.rovia.music.core.ui.R as CoreUiR
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun PlayerRoute(
-    playbackController: PlaybackController,
+    playbackController: PlayerPlaybackController,
     lyricsRepository: LyricsRepository,
-    musicRepository: MusicRepository,
+    musicRepository: MusicRepository?,
     onClose: () -> Unit,
     onCloseActionAvailable: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier,
