@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -8,8 +9,10 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,6 +67,7 @@ internal fun PortraitPlayerContent(
     onRepeatModeChange: (RepeatMode) -> Unit,
     onShuffleEnabledChange: (Boolean) -> Unit,
     onLyricSeek: (Long) -> Unit,
+    audioOutputIndicator: (@Composable () -> Unit)? = null,
 ) {
     val showInlineLyrics =
         hasLyrics &&
@@ -246,12 +250,44 @@ internal fun PortraitPlayerContent(
             modifier = Modifier.height(16.dp),
         )
 
-        PlaybackOptionsButtonGroup(
-            repeatMode = playbackState.repeatMode,
-            shuffleEnabled = playbackState.shuffleEnabled,
-            onRepeatModeChange = onRepeatModeChange,
-            onShuffleEnabledChange = onShuffleEnabledChange,
-        )
+        if (audioOutputIndicator != null) {
+            /*
+             * Audio output occupies the left side.
+             * Repeat and Shuffle remain aligned to the right.
+             */
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.spacedBy(8.dp),
+            ) {
+                audioOutputIndicator()
+
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    PlaybackOptionsButtonGroup(
+                        repeatMode =
+                            playbackState.repeatMode,
+                        shuffleEnabled =
+                            playbackState.shuffleEnabled,
+                        onRepeatModeChange =
+                            onRepeatModeChange,
+                        onShuffleEnabledChange =
+                            onShuffleEnabledChange,
+                    )
+                }
+            }
+        } else {
+            // Preserve the existing layout until the indicator is connected.
+            PlaybackOptionsButtonGroup(
+                repeatMode = playbackState.repeatMode,
+                shuffleEnabled = playbackState.shuffleEnabled,
+                onRepeatModeChange = onRepeatModeChange,
+                onShuffleEnabledChange = onShuffleEnabledChange,
+            )
+        }
     }
 }
 
