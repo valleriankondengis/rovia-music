@@ -8,6 +8,7 @@ import com.rovia.music.core.library.FolderFilterRepository
 import com.rovia.music.core.library.FolderScannerRepository
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
+import com.rovia.music.core.playback.AudioOutputController
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.core.playback.PlaybackSettingsRepository
 import com.rovia.music.core.playback.RecentPlayRepository
@@ -20,6 +21,7 @@ import com.rovia.music.data.media.store.MediaCatalogSyncCoordinator
 import com.rovia.music.data.media.store.MediaStoreCatalogDataSource
 import com.rovia.music.data.media.store.MediaStoreFolderBrowserRepository
 import com.rovia.music.data.media.store.MediaStoreFolderScannerRepository
+import com.rovia.music.playback.media3.AndroidAudioOutputController
 import com.rovia.music.playback.media3.Media3PlaybackController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -129,6 +131,16 @@ class AppContainer(
                 recentPlayRepository,
             playbackSettingsRepository =
                 playbackSettingsRepository,
+        )
+
+    /**
+     * Application-scoped controller for the active audio output
+     * information and Android system media volume.
+     */
+    val audioOutputController:
+        AudioOutputController =
+        AndroidAudioOutputController(
+            context = applicationContext,
         )
 
     /**
