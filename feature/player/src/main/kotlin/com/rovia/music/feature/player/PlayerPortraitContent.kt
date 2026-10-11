@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -57,8 +58,7 @@ internal fun PortraitPlayerContent(
     seekPosition: Float,
     duration: Long,
     displayedIsPlaying: Boolean,
-    motionEffectsSpec:
-        FiniteAnimationSpec<Float>,
+    motionEffectsSpec: FiniteAnimationSpec<Float>,
     onSeekPositionChange: (Float) -> Unit,
     onSeekFinished: () -> Unit,
     onPrevious: () -> Unit,
@@ -68,6 +68,7 @@ internal fun PortraitPlayerContent(
     onShuffleEnabledChange: (Boolean) -> Unit,
     onLyricSeek: (Long) -> Unit,
     audioOutputIndicator: (@Composable () -> Unit)? = null,
+    artworkColor: Color? = null,
 ) {
     val showInlineLyrics =
         hasLyrics &&
@@ -224,6 +225,7 @@ internal fun PortraitPlayerContent(
                 Modifier
                     .fillMaxWidth()
                     .padding(top = 28.dp),
+            artworkColor = artworkColor,
         )
 
         TrackTechnicalInfo(
@@ -337,6 +339,15 @@ private fun PlayerCurrentLyricLine(
     val activeColor =
         MaterialTheme.colorScheme.onSurface
 
+    /*
+     * Use the shared artwork accent for the active word.
+     * If artwork is unavailable or too neutral, use the
+     * normal Material 3 primary color.
+     */
+    val activeWordColor =
+        playerArtworkAccentColor()
+            ?: MaterialTheme.colorScheme.primary
+
     val lyricText =
         buildAnnotatedString {
             activeLine.words.forEachIndexed {
@@ -349,9 +360,7 @@ private fun PlayerCurrentLyricLine(
                             activeColor
 
                         index == activeWordIndex ->
-                            MaterialTheme
-                                .colorScheme
-                                .primary
+                            activeWordColor
 
                         index < activeWordIndex ->
                             activeColor
