@@ -1,4 +1,3 @@
-
 package com.rovia.music
 
 import androidx.compose.animation.EnterTransition
@@ -48,7 +47,10 @@ import com.rovia.music.core.library.FolderFilterRepository
 import com.rovia.music.core.library.FolderScannerRepository
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
+import com.rovia.music.core.model.PlaybackState
+import com.rovia.music.core.playback.AudioOutputController
 import com.rovia.music.core.playback.PlaybackController
+import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.home.HomeRoute
 import com.rovia.music.feature.home.RecentCollectionRoute
 import com.rovia.music.feature.home.RecentCollectionType
@@ -58,6 +60,7 @@ import com.rovia.music.feature.settings.AboutScreen
 import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import kotlin.math.roundToInt
+
 
 internal val NavigationBarHeight =
     80.dp
@@ -92,6 +95,7 @@ fun MainNavigation(
     folderScannerRepository: FolderScannerRepository,
     playbackController: PlaybackController,
     lyricsRepository: LyricsRepository,
+    audioOutputController: AudioOutputController? = null,
 ) {
     val backStack =
         rememberNavBackStack(Home)
@@ -379,6 +383,8 @@ fun MainNavigation(
             },
             modifier =
                 Modifier.fillMaxSize(),
+            audioOutputController =
+                audioOutputController,
         )
     }
 }
