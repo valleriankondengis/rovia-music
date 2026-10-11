@@ -20,4 +20,12 @@
     <string name="player_shuffle_on">Shuffle on</string>
     <string name="player_shuffle_off">Shuffle off</string>
 
+    <string name="audio_output_button_content_description">Audio output and volume</string>
+    <string name="audio_output_sheet_title">Audio output</string>
+    <string name="audio_output_local_device">This device</string>
+    <string name="audio_output_bluetooth_audio">Bluetooth audio</string>
+    <string name="audio_output_media_volume">Media volume</string>
+    <string name="audio_output_volume_slider_content_description">Media volume</string>
+    <string name="audio_output_fixed_volume_message">System volume cannot be changed by this control.</string>
+
 </resources>
