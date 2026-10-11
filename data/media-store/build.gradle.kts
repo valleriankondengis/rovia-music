@@ -27,4 +27,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Official AndroidX Media3 metadata inspection API.
+    implementation(libs.androidx.media3.inspector)
 }
