@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -58,6 +59,7 @@ internal fun LandscapePlayerContent(
     onRepeatModeChange: (RepeatMode) -> Unit,
     onShuffleEnabledChange: (Boolean) -> Unit,
     onLyricSeek: (Long) -> Unit,
+    audioOutputIndicator: (@Composable () -> Unit)? = null,
 ) {
     val showInlineLyrics =
         hasLyrics &&
@@ -301,16 +303,41 @@ internal fun LandscapePlayerContent(
                             ),
                     )
 
-                    PlaybackOptionsButtonGroup(
-                        repeatMode =
-                            playbackState.repeatMode,
-                        shuffleEnabled =
-                            playbackState.shuffleEnabled,
-                        onRepeatModeChange =
-                            onRepeatModeChange,
-                        onShuffleEnabledChange =
-                            onShuffleEnabledChange,
-                    )
+                    if (audioOutputIndicator != null) {
+                        Row(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.spacedBy(8.dp),
+                            verticalAlignment =
+                                Alignment.CenterVertically,
+                        ) {
+                            audioOutputIndicator()
+
+                            PlaybackOptionsButtonGroup(
+                                repeatMode =
+                                    playbackState.repeatMode,
+                                shuffleEnabled =
+                                    playbackState.shuffleEnabled,
+                                onRepeatModeChange =
+                                    onRepeatModeChange,
+                                onShuffleEnabledChange =
+                                    onShuffleEnabledChange,
+                                compact = true,
+                            )
+                        }
+                    } else {
+                        PlaybackOptionsButtonGroup(
+                            repeatMode =
+                                playbackState.repeatMode,
+                            shuffleEnabled =
+                                playbackState.shuffleEnabled,
+                            onRepeatModeChange =
+                                onRepeatModeChange,
+                            onShuffleEnabledChange =
+                                onShuffleEnabledChange,
+                        )
+                    }
                 }
             }
         }
