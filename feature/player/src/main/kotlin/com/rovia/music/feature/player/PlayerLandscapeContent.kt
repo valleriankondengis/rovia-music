@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +61,7 @@ internal fun LandscapePlayerContent(
     onShuffleEnabledChange: (Boolean) -> Unit,
     onLyricSeek: (Long) -> Unit,
     audioOutputIndicator: (@Composable () -> Unit)? = null,
+    artworkColor: Color? = null,
 ) {
     val showInlineLyrics =
         hasLyrics &&
@@ -259,6 +261,7 @@ internal fun LandscapePlayerContent(
                                             28.dp
                                         },
                                 ),
+                        artworkColor = artworkColor,
                     )
 
                     TrackTechnicalInfo(
@@ -388,6 +391,15 @@ private fun PlayerCurrentLyricLine(
     val activeColor =
         MaterialTheme.colorScheme.onSurface
 
+    /*
+     * Use the same shared artwork accent as portrait lyrics.
+     * Fall back to Material 3 when artwork is unavailable
+     * or does not provide a sufficiently chromatic accent.
+     */
+    val activeWordColor =
+        playerArtworkAccentColor()
+            ?: MaterialTheme.colorScheme.primary
+
     val lyricText =
         buildAnnotatedString {
             activeLine.words.forEachIndexed {
@@ -400,9 +412,7 @@ private fun PlayerCurrentLyricLine(
                             activeColor
 
                         index == activeWordIndex ->
-                            MaterialTheme
-                                .colorScheme
-                                .primary
+                            activeWordColor
 
                         index < activeWordIndex ->
                             activeColor
