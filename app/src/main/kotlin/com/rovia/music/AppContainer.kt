@@ -9,6 +9,7 @@ import com.rovia.music.core.library.FolderScannerRepository
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.playback.AudioOutputController
+import com.rovia.music.core.playback.PlaybackContextState
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.core.playback.PlaybackSettingsRepository
 import com.rovia.music.core.playback.RecentPlayRepository
@@ -32,6 +33,10 @@ import kotlinx.coroutines.launch
 class AppContainer(
     context: Context,
     private val applicationScope: CoroutineScope,
+    val playbackContextState: PlaybackContextState =
+        PlaybackContextState(),
+    private val sharedAudioOutputController:
+        AudioOutputController? = null,
 ) {
 
     private val applicationContext =
@@ -81,10 +86,13 @@ class AppContainer(
         )
 
     /*
-     * The UI reads the persistent Room catalog.
+     * The regular UI reads the persistent Room catalog.
      *
      * MediaStore is accessed separately by the synchronization
      * pipeline below.
+     *
+     * External playback must not use this repository to resolve
+     * its selected content URI.
      */
     val musicRepository:
         MusicRepository =
@@ -131,17 +139,24 @@ class AppContainer(
                 recentPlayRepository,
             playbackSettingsRepository =
                 playbackSettingsRepository,
+            playbackContextState =
+                playbackContextState,
         )
 
     /**
-     * Application-scoped controller for the active audio output
-     * information and Android system media volume.
+     * Shared audio-output controller.
+     *
+     * RoviaApplication supplies its application-scoped instance
+     * when constructing AppContainer. The fallback preserves
+     * compatibility with any existing construction sites until
+     * they are updated to inject the shared instance.
      */
     val audioOutputController:
         AudioOutputController =
-        AndroidAudioOutputController(
-            context = applicationContext,
-        )
+        sharedAudioOutputController
+            ?: AndroidAudioOutputController(
+                context = applicationContext,
+            )
 
     /**
      * Starts catalog synchronization without blocking the caller.
@@ -150,7 +165,8 @@ class AppContainer(
      * The Room catalog remains available to readers while synchronization
      * and embedded-metadata enrichment run in the application scope.
      *
-     * This method must only be invoked after audio permission is granted.
+     * This method must only be invoked after audio permission is granted
+     * and must not be triggered by external file playback.
      */
     fun synchronizeMusicCatalog() {
         synchronized(catalogSyncLock) {
