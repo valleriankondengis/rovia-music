@@ -1,39 +1,261 @@
-﻿package com.rovia.music.data.media.store
+﻿
+package com.rovia.music.data.media.store
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.extractor.metadata.vorbis.VorbisComment
+import androidx.media3.inspector.MetadataRetriever
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.model.LyricLine
 import com.rovia.music.core.model.LyricWord
 import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.Locale
 import kotlin.math.min
 
+@OptIn(UnstableApi::class)
 class EmbeddedLyricsRepository(
     context: Context,
 ) : LyricsRepository {
 
+    private val applicationContext =
+        context.applicationContext
+
     private val contentResolver =
-        context.applicationContext.contentResolver
+        applicationContext.contentResolver
 
     override suspend fun getEmbeddedLyrics(
         track: Track,
     ): SyncedLyrics? =
         withContext(Dispatchers.IO) {
-            runCatching {
+            val uri =
+                try {
+                    Uri.parse(track.uri)
+                } catch (_: Exception) {
+                    return@withContext null
+                }
+
+            val media3RawLyrics =
+                try {
+                    readLyricsFromMedia3(uri)
+                } catch (
+                    cancelled: CancellationException,
+                ) {
+                    throw cancelled
+                } catch (
+                    interrupted: InterruptedException,
+                ) {
+                    Thread.currentThread().interrupt()
+
+                    throw CancellationException(
+                        "Media3 lyrics retrieval was interrupted.",
+                    ).apply {
+                        initCause(interrupted)
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+
+            val media3Lyrics =
+                media3RawLyrics
+                    ?.let(::parseLyrics)
+
+            if (media3Lyrics != null) {
+                return@withContext media3Lyrics
+            }
+
+            try {
                 contentResolver
-                    .openInputStream(
-                        Uri.parse(track.uri),
-                    )
+                    .openInputStream(uri)
                     ?.use { input ->
                         readEmbeddedLyrics(input)
                     }
-            }.getOrNull()
+            } catch (
+                cancelled: CancellationException,
+            ) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
         }
+
+    private fun readLyricsFromMedia3(
+        uri: Uri,
+    ): String? {
+        return MetadataRetriever
+            .Builder(
+                applicationContext,
+                MediaItem.fromUri(uri),
+            )
+            .build()
+            .use { retriever ->
+
+                val trackGroups =
+                    retriever
+                        .retrieveTrackGroups()
+                        .get()
+
+                var fallbackLyrics: String? = null
+
+                for (
+                    groupIndex in
+                    0 until trackGroups.length
+                ) {
+                    val group =
+                        trackGroups.get(groupIndex)
+
+                    for (
+                        formatIndex in
+                        0 until group.length
+                    ) {
+                        val metadata =
+                            group
+                                .getFormat(formatIndex)
+                                .metadata
+                                ?: continue
+
+                        for (
+                            entryIndex in
+                            0 until metadata.length()
+                        ) {
+                            val entry =
+                                metadata.get(entryIndex)
+
+                            when (entry) {
+                                is VorbisComment -> {
+                                    val key =
+                                        entry.key
+                                            .trim()
+                                            .uppercase(Locale.ROOT)
+
+                                    val value =
+                                        entry.value.trim()
+
+                                    if (value.isBlank()) {
+                                        continue
+                                    }
+
+                                    when {
+                                        key == "LYRICS" -> {
+                                            return@use value
+                                        }
+
+                                        isFallbackLyricsKey(key) -> {
+                                            if (
+                                                fallbackLyrics == null
+                                            ) {
+                                                fallbackLyrics = value
+                                            }
+                                        }
+                                    }
+                                }
+
+                                is TextInformationFrame -> {
+                                    val value =
+                                        entry.values
+                                            .joinToString("\n")
+                                            .trim()
+
+                                    if (value.isBlank()) {
+                                        continue
+                                    }
+
+                                    when {
+                                        entry.id.equals(
+                                            "USLT",
+                                            ignoreCase = true,
+                                        ) ||
+                                            entry.id.equals(
+                                                "ULT",
+                                                ignoreCase = true,
+                                            ) -> {
+                                            return@use value
+                                        }
+
+                                        entry.id.equals(
+                                            "TXXX",
+                                            ignoreCase = true,
+                                        ) &&
+                                            isLyricsDescription(
+                                                entry.description,
+                                            ) -> {
+                                            val description =
+                                                entry.description
+                                                    ?.trim()
+                                                    ?.uppercase(
+                                                        Locale.ROOT,
+                                                    )
+
+                                            if (
+                                                description == "LYRICS"
+                                            ) {
+                                                return@use value
+                                            }
+
+                                            if (
+                                                fallbackLyrics == null
+                                            ) {
+                                                fallbackLyrics = value
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                fallbackLyrics
+            }
+    }
+
+    private fun isFallbackLyricsKey(
+        key: String,
+    ): Boolean {
+        return key == "UNSYNCEDLYRICS" ||
+            key == "UNSYNCED_LYRICS" ||
+            key == "UNSYNCED-LYRICS" ||
+            key.startsWith("LYRICS-") ||
+            key.startsWith("LYRICS_") ||
+            key.startsWith("UNSYNCEDLYRICS-") ||
+            key.startsWith("UNSYNCEDLYRICS_") ||
+            key.startsWith("UNSYNCED_LYRICS-") ||
+            key.startsWith("UNSYNCED_LYRICS_") ||
+            key.startsWith("UNSYNCED-LYRICS-") ||
+            key.startsWith("UNSYNCED-LYRICS_")
+    }
+
+    private fun isLyricsDescription(
+        description: String?,
+    ): Boolean {
+        val key =
+            description
+                ?.trim()
+                ?.uppercase(Locale.ROOT)
+                ?: return false
+
+        return key == "LYRICS" ||
+            key == "UNSYNCEDLYRICS" ||
+            key == "UNSYNCED_LYRICS" ||
+            key == "UNSYNCED-LYRICS" ||
+            key.startsWith("LYRICS-") ||
+            key.startsWith("LYRICS_") ||
+            key.startsWith("UNSYNCEDLYRICS-") ||
+            key.startsWith("UNSYNCEDLYRICS_") ||
+            key.startsWith("UNSYNCED_LYRICS-") ||
+            key.startsWith("UNSYNCED_LYRICS_") ||
+            key.startsWith("UNSYNCED-LYRICS-") ||
+            key.startsWith("UNSYNCED-LYRICS_")
+    }
 
     private fun readEmbeddedLyrics(
         input: InputStream,
@@ -42,7 +264,7 @@ class EmbeddedLyricsRepository(
 
         if (
             input.readFully(header) !=
-                header.size
+            header.size
         ) {
             return null
         }
@@ -92,7 +314,7 @@ class EmbeddedLyricsRepository(
 
         if (
             input.readFully(tagHeader) !=
-                tagHeader.size
+            tagHeader.size
         ) {
             return null
         }
@@ -117,7 +339,7 @@ class EmbeddedLyricsRepository(
 
         if (
             input.readFully(tagData) !=
-                tagData.size
+            tagData.size
         ) {
             return null
         }
@@ -134,7 +356,7 @@ class EmbeddedLyricsRepository(
             if (version == 2) {
                 if (
                     offset + 6 >
-                        tagData.size
+                    tagData.size
                 ) {
                     break
                 }
@@ -166,7 +388,7 @@ class EmbeddedLyricsRepository(
                 if (
                     frameSize <= 0 ||
                     offset + frameSize >
-                        tagData.size
+                    tagData.size
                 ) {
                     break
                 }
@@ -186,7 +408,7 @@ class EmbeddedLyricsRepository(
             } else {
                 if (
                     offset + 10 >
-                        tagData.size
+                    tagData.size
                 ) {
                     break
                 }
@@ -225,7 +447,7 @@ class EmbeddedLyricsRepository(
                 if (
                     frameSize <= 0 ||
                     offset + frameSize >
-                        tagData.size
+                    tagData.size
                 ) {
                     break
                 }
@@ -258,9 +480,7 @@ class EmbeddedLyricsRepository(
 
         val data =
             if (unsynchronised) {
-                removeUnsynchronisation(
-                    frameData,
-                )
+                removeUnsynchronisation(frameData)
             } else {
                 frameData
             }
@@ -270,23 +490,13 @@ class EmbeddedLyricsRepository(
 
         val descriptorEnd =
             when (encoding) {
-                1,
-                2 ->
-                    findUtf16Terminator(
-                        data,
-                        4,
-                    )
+                1, 2 ->
+                    findUtf16Terminator(data, 4)
 
-                0,
-                3 ->
-                    findSingleByteTerminator(
-                        data,
-                        4,
-                    )
+                0, 3 ->
+                    findSingleByteTerminator(data, 4)
 
-                else -> {
-                    return null
-                }
+                else -> return null
             }
 
         if (descriptorEnd < 0) {
@@ -295,36 +505,21 @@ class EmbeddedLyricsRepository(
 
         val lyricsStart =
             when (encoding) {
-                1,
-                2 ->
-                    descriptorEnd + 2
-
-                else ->
-                    descriptorEnd + 1
+                1, 2 -> descriptorEnd + 2
+                else -> descriptorEnd + 1
             }
 
-        if (
-            lyricsStart >= data.size
-        ) {
+        if (lyricsStart >= data.size) {
             return null
         }
 
         val charset =
             when (encoding) {
-                0 ->
-                    Charsets.ISO_8859_1
-
-                1 ->
-                    Charsets.UTF_16
-
-                2 ->
-                    Charsets.UTF_16BE
-
-                3 ->
-                    Charsets.UTF_8
-
-                else ->
-                    return null
+                0 -> Charsets.ISO_8859_1
+                1 -> Charsets.UTF_16
+                2 -> Charsets.UTF_16BE
+                3 -> Charsets.UTF_8
+                else -> return null
             }
 
         return runCatching {
@@ -346,9 +541,8 @@ class EmbeddedLyricsRepository(
             val blockHeader = ByteArray(4)
 
             if (
-                input.readFully(
-                    blockHeader,
-                ) != blockHeader.size
+                input.readFully(blockHeader) !=
+                blockHeader.size
             ) {
                 return null
             }
@@ -375,20 +569,16 @@ class EmbeddedLyricsRepository(
             }
 
             if (blockType == 4) {
-                val blockData =
-                    ByteArray(blockSize)
+                val blockData = ByteArray(blockSize)
 
                 if (
-                    input.readFully(
-                        blockData,
-                    ) != blockData.size
+                    input.readFully(blockData) !=
+                    blockData.size
                 ) {
                     return null
                 }
 
-                return parseVorbisComments(
-                    blockData,
-                )
+                return parseVorbisComments(blockData)
             }
 
             skipFully(
@@ -410,35 +600,25 @@ class EmbeddedLyricsRepository(
         var offset = 0
 
         val vendorLength =
-            readLittleEndianInt(
-                data,
-                offset,
-            )
+            readLittleEndianInt(data, offset)
 
         offset += 4
 
         if (
             vendorLength < 0 ||
-            offset + vendorLength >
-                data.size
+            offset + vendorLength > data.size
         ) {
             return null
         }
 
         offset += vendorLength
 
-        if (
-            offset + 4 >
-                data.size
-        ) {
+        if (offset + 4 > data.size) {
             return null
         }
 
         val commentCount =
-            readLittleEndianInt(
-                data,
-                offset,
-            )
+            readLittleEndianInt(data, offset)
 
         offset += 4
 
@@ -452,25 +632,18 @@ class EmbeddedLyricsRepository(
         var fallbackLyrics: String? = null
 
         repeat(commentCount) {
-            if (
-                offset + 4 >
-                    data.size
-            ) {
+            if (offset + 4 > data.size) {
                 return@repeat
             }
 
             val length =
-                readLittleEndianInt(
-                    data,
-                    offset,
-                )
+                readLittleEndianInt(data, offset)
 
             offset += 4
 
             if (
                 length <= 0 ||
-                offset + length >
-                    data.size
+                offset + length > data.size
             ) {
                 return@repeat
             }
@@ -500,18 +673,13 @@ class EmbeddedLyricsRepository(
 
             val key =
                 comment
-                    .substring(
-                        0,
-                        separator,
-                    )
+                    .substring(0, separator)
                     .trim()
-                    .uppercase()
+                    .uppercase(Locale.ROOT)
 
             val value =
                 comment
-                    .substring(
-                        separator + 1,
-                    )
+                    .substring(separator + 1)
                     .trim()
 
             if (value.isBlank()) {
@@ -522,30 +690,8 @@ class EmbeddedLyricsRepository(
                 key == "LYRICS" ->
                     return value
 
-                key == "UNSYNCEDLYRICS" ->
-                    if (
-                        fallbackLyrics == null
-                    ) {
-                        fallbackLyrics = value
-                    }
-
-                key.startsWith("LYRICS-") ||
-                    key.startsWith("LYRICS_") ->
-                    if (
-                        fallbackLyrics == null
-                    ) {
-                        fallbackLyrics = value
-                    }
-
-                key.startsWith(
-                    "UNSYNCEDLYRICS-",
-                ) ||
-                    key.startsWith(
-                        "UNSYNCEDLYRICS_",
-                    ) ->
-                    if (
-                        fallbackLyrics == null
-                    ) {
+                isFallbackLyricsKey(key) ->
+                    if (fallbackLyrics == null) {
                         fallbackLyrics = value
                     }
             }
@@ -559,14 +705,8 @@ class EmbeddedLyricsRepository(
     ): SyncedLyrics? {
         val normalized =
             rawLyrics
-                .replace(
-                    "\r\n",
-                    "\n",
-                )
-                .replace(
-                    '\r',
-                    '\n',
-                )
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
 
         val lines =
             normalized
@@ -576,8 +716,7 @@ class EmbeddedLyricsRepository(
 
         if (lines.isEmpty()) {
             val plainText =
-                normalized
-                    .trim()
+                normalized.trim()
 
             if (plainText.isEmpty()) {
                 return null
@@ -619,41 +758,19 @@ class EmbeddedLyricsRepository(
         }
 
         if (
-            line.startsWith(
-                "[ti:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[ar:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[al:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[by:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[re:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[ve:",
-                ignoreCase = true,
-            ) ||
-            line.startsWith(
-                "[offset:",
-                ignoreCase = true,
-            )
+            line.startsWith("[ti:", ignoreCase = true) ||
+            line.startsWith("[ar:", ignoreCase = true) ||
+            line.startsWith("[al:", ignoreCase = true) ||
+            line.startsWith("[by:", ignoreCase = true) ||
+            line.startsWith("[re:", ignoreCase = true) ||
+            line.startsWith("[ve:", ignoreCase = true) ||
+            line.startsWith("[offset:", ignoreCase = true)
         ) {
             return null
         }
 
         val lineTimestamp =
-            LINE_TIMESTAMP_REGEX
-                .find(line)
+            LINE_TIMESTAMP_REGEX.find(line)
                 ?: return null
 
         val lineStartTimeMs =
@@ -694,8 +811,7 @@ class EmbeddedLyricsRepository(
                 words =
                     listOf(
                         LyricWord(
-                            startTimeMs =
-                                lineStartTimeMs,
+                            startTimeMs = lineStartTimeMs,
                             text = text,
                         ),
                     ),
@@ -704,10 +820,7 @@ class EmbeddedLyricsRepository(
 
         val words = mutableListOf<LyricWord>()
 
-        wordMatches.forEachIndexed {
-            index,
-            match,
-            ->
+        wordMatches.forEachIndexed { index, match ->
             val timestamp =
                 parseTimestamp(
                     match.groupValues[1],
@@ -721,29 +834,19 @@ class EmbeddedLyricsRepository(
                 match.range.last + 1
 
             val textEndExclusive =
-                if (
-                    index + 1 <
-                        wordMatches.size
-                ) {
-                    wordMatches[index + 1]
-                        .range
-                        .first
+                if (index + 1 < wordMatches.size) {
+                    wordMatches[index + 1].range.first
                 } else {
                     lyricText.length
                 }
 
-            if (
-                textStart >= textEndExclusive
-            ) {
+            if (textStart >= textEndExclusive) {
                 return@forEachIndexed
             }
 
             val text =
                 lyricText
-                    .substring(
-                        textStart,
-                        textEndExclusive,
-                    )
+                    .substring(textStart, textEndExclusive)
                     .trim()
 
             if (text.isEmpty()) {
@@ -775,49 +878,33 @@ class EmbeddedLyricsRepository(
         timestamp: String,
     ): Long {
         val parts =
-            timestamp.split(
-                ":",
-                limit = 3,
-            )
+            timestamp.split(":", limit = 3)
 
         if (parts.size != 2) {
             return -1L
         }
 
         val minutes =
-            parts[0]
-                .toLongOrNull()
+            parts[0].toLongOrNull()
                 ?: return -1L
 
-        val secondsPart = parts[1]
-
         val secondsParts =
-            secondsPart.split(
-                ".",
-                limit = 2,
-            )
+            parts[1].split(".", limit = 2)
 
         val seconds =
-            secondsParts[0]
-                .toLongOrNull()
+            secondsParts[0].toLongOrNull()
                 ?: return -1L
 
         val milliseconds =
-            if (
-                secondsParts.size == 2
-            ) {
-                normalizeMilliseconds(
-                    secondsParts[1],
-                )
+            if (secondsParts.size == 2) {
+                normalizeMilliseconds(secondsParts[1])
             } else {
                 0L
             }
 
-        return (
-            minutes * 60_000L
-        ) + (
-            seconds * 1_000L
-        ) + milliseconds
+        return minutes * 60_000L +
+            seconds * 1_000L +
+            milliseconds
     }
 
     private fun normalizeMilliseconds(
@@ -826,23 +913,16 @@ class EmbeddedLyricsRepository(
         val normalized =
             value
                 .take(3)
-                .padEnd(
-                    3,
-                    '0',
-                )
+                .padEnd(3, '0')
 
-        return normalized
-            .toLongOrNull()
-            ?: 0L
+        return normalized.toLongOrNull() ?: 0L
     }
 
     private fun removeUnsynchronisation(
         data: ByteArray,
     ): ByteArray {
         val output =
-            ByteArrayOutputStream(
-                data.size,
-            )
+            ByteArrayOutputStream(data.size)
 
         var index = 0
 
@@ -855,8 +935,7 @@ class EmbeddedLyricsRepository(
             if (
                 value == 0xFF &&
                 index + 1 < data.size &&
-                data[index + 1]
-                    .toInt() == 0
+                data[index + 1].toInt() == 0
             ) {
                 index++
             }
@@ -871,12 +950,8 @@ class EmbeddedLyricsRepository(
         data: ByteArray,
         start: Int,
     ): Int {
-        for (
-            index in start until data.size
-        ) {
-            if (
-                data[index].toInt() == 0
-            ) {
+        for (index in start until data.size) {
+            if (data[index].toInt() == 0) {
                 return index
             }
         }
@@ -890,9 +965,7 @@ class EmbeddedLyricsRepository(
     ): Int {
         var index = start
 
-        while (
-            index + 1 < data.size
-        ) {
+        while (index + 1 < data.size) {
             if (
                 data[index].toInt() == 0 &&
                 data[index + 1].toInt() == 0
@@ -910,20 +983,10 @@ class EmbeddedLyricsRepository(
         data: ByteArray,
         offset: Int,
     ): Int {
-        val b0 =
-            data[offset].toInt() and 0x7F
-
-        val b1 =
-            data[offset + 1]
-                .toInt() and 0x7F
-
-        val b2 =
-            data[offset + 2]
-                .toInt() and 0x7F
-
-        val b3 =
-            data[offset + 3]
-                .toInt() and 0x7F
+        val b0 = data[offset].toInt() and 0x7F
+        val b1 = data[offset + 1].toInt() and 0x7F
+        val b2 = data[offset + 2].toInt() and 0x7F
+        val b3 = data[offset + 3].toInt() and 0x7F
 
         return (b0 shl 21) or
             (b1 shl 14) or
@@ -935,20 +998,10 @@ class EmbeddedLyricsRepository(
         data: ByteArray,
         offset: Int,
     ): Int {
-        val b0 =
-            data[offset].toInt() and 0xFF
-
-        val b1 =
-            data[offset + 1]
-                .toInt() and 0xFF
-
-        val b2 =
-            data[offset + 2]
-                .toInt() and 0xFF
-
-        val b3 =
-            data[offset + 3]
-                .toInt() and 0xFF
+        val b0 = data[offset].toInt() and 0xFF
+        val b1 = data[offset + 1].toInt() and 0xFF
+        val b2 = data[offset + 2].toInt() and 0xFF
+        val b3 = data[offset + 3].toInt() and 0xFF
 
         return (b0 shl 24) or
             (b1 shl 16) or
@@ -960,16 +1013,9 @@ class EmbeddedLyricsRepository(
         data: ByteArray,
         offset: Int,
     ): Int {
-        val b0 =
-            data[offset].toInt() and 0xFF
-
-        val b1 =
-            data[offset + 1]
-                .toInt() and 0xFF
-
-        val b2 =
-            data[offset + 2]
-                .toInt() and 0xFF
+        val b0 = data[offset].toInt() and 0xFF
+        val b1 = data[offset + 1].toInt() and 0xFF
+        val b2 = data[offset + 2].toInt() and 0xFF
 
         return (b0 shl 16) or
             (b1 shl 8) or
@@ -980,20 +1026,10 @@ class EmbeddedLyricsRepository(
         data: ByteArray,
         offset: Int,
     ): Int {
-        val b0 =
-            data[offset].toInt() and 0xFF
-
-        val b1 =
-            data[offset + 1]
-                .toInt() and 0xFF
-
-        val b2 =
-            data[offset + 2]
-                .toInt() and 0xFF
-
-        val b3 =
-            data[offset + 3]
-                .toInt() and 0xFF
+        val b0 = data[offset].toInt() and 0xFF
+        val b1 = data[offset + 1].toInt() and 0xFF
+        val b2 = data[offset + 2].toInt() and 0xFF
+        val b3 = data[offset + 3].toInt() and 0xFF
 
         return b0 or
             (b1 shl 8) or
@@ -1005,14 +1041,11 @@ class EmbeddedLyricsRepository(
         input: InputStream,
         byteCount: Int,
     ) {
-        var remaining =
-            byteCount.toLong()
+        var remaining = byteCount.toLong()
 
         while (remaining > 0L) {
             val skipped =
-                input.skip(
-                    remaining,
-                )
+                input.skip(remaining)
 
             if (skipped > 0L) {
                 remaining -= skipped
