@@ -36,7 +36,7 @@ import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.playback.AudioOutputController
-import com.rovia.music.core.playback.PlaybackController
+import com.rovia.music.core.playback.PlayerPlaybackController
 import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.player.PlayerRoute
 import kotlinx.coroutines.CancellationException
@@ -46,14 +46,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun UnifiedPlayerSheet(
     playbackState: PlaybackState,
-    playbackController: PlaybackController,
+    playbackController: PlayerPlaybackController,
     lyricsRepository: LyricsRepository,
-    musicRepository: MusicRepository,
+    musicRepository: MusicRepository?,
     navigationBar: @Composable () -> Unit,
     onProgressChanged: (Float) -> Unit = {},
     showBottomChrome: Boolean = true,
     modifier: Modifier = Modifier,
     audioOutputController: AudioOutputController? = null,
+    initiallyExpanded: Boolean = false,
+    onPlayerCloseRequested: (() -> Unit)? = null,
 ) {
     val track =
         playbackState.currentTrack
@@ -74,15 +76,22 @@ fun UnifiedPlayerSheet(
      * 0f = collapsed / MiniPlayer
      * 1f = expanded / Full Player
      *
-     * rememberSaveable is important here.
+     * rememberSaveable preserves the sheet state through
+     * configuration changes such as portrait-landscape rotation.
      *
-     * The Player sheet is not a Navigation 3 destination.
-     * Therefore its expanded/collapsed state must survive
-     * configuration changes such as portrait <-> landscape.
+     * Regular playback retains its existing collapsed initial state.
+     * An external caller can request an initially expanded sheet
+     * without introducing a separate Player UI.
      */
     val progressState =
-        rememberSaveable {
-            mutableFloatStateOf(0f)
+        rememberSaveable(initiallyExpanded) {
+            mutableFloatStateOf(
+                if (initiallyExpanded) {
+                    1f
+                } else {
+                    0f
+                },
+            )
         }
 
     /*
@@ -110,8 +119,11 @@ fun UnifiedPlayerSheet(
         }
 
     /*
-     * PlayerRoute registers its normal close action here.
-     * The action hides fullscreen lyrics and collapses the sheet.
+     * PlayerRoute registers its close action here.
+     *
+     * Regular playback uses the default collapse behavior.
+     * An external caller may handle close by ending its session
+     * and finishing its Activity.
      */
     val playerCloseActionState =
         remember {
@@ -327,8 +339,7 @@ fun UnifiedPlayerSheet(
          * The progress can reach zero during the final gesture
          * event, causing PlayerRoute to leave composition before
          * the event stream finishes. Keeping this local reference
-         * ensures the completed gesture can still hide fullscreen
-         * lyrics and close the sheet.
+         * ensures the completed gesture can still close the Player.
          */
         val closePlayerAction =
             playerCloseActionState.value
@@ -350,9 +361,14 @@ fun UnifiedPlayerSheet(
             }
 
             /*
-             * Only a completed predictive Back gesture invokes
-             * the close action. A cancelled gesture uses the
-             * CancellationException branch below instead.
+             * A completed predictive Back gesture uses the same
+             * close action registered by PlayerRoute.
+             *
+             * For regular playback this collapses the sheet.
+             * For an external session the caller can terminate
+             * that session and finish its Activity.
+             *
+             * A cancelled gesture never invokes this action.
              */
             if (closePlayerAction != null) {
                 closePlayerAction()
@@ -452,7 +468,7 @@ fun UnifiedPlayerSheet(
          */
         if (
             showBottomChrome ||
-                progress > 0f
+            progress > 0f
         ) {
             Box(
                 modifier =
@@ -574,14 +590,11 @@ fun UnifiedPlayerSheet(
                                         dragAmount,
                                     ->
                                         if (
-                                            gestureDirection ==
-                                                0 &&
-                                                dragAmount != 0f
+                                            gestureDirection == 0 &&
+                                            dragAmount != 0f
                                         ) {
                                             gestureDirection =
-                                                if (
-                                                    dragAmount < 0f
-                                                ) {
+                                                if (dragAmount < 0f) {
                                                     -1
                                                 } else {
                                                     1
@@ -596,9 +609,7 @@ fun UnifiedPlayerSheet(
                                             dragStartProgress <=
                                                 0.001f &&
                                                 gestureDirection > 0 -> {
-                                                if (
-                                                    dragAmount > 0f
-                                                ) {
+                                                if (dragAmount > 0f) {
                                                     val collapsedHeightPx =
                                                         with(density) {
                                                             collapsedHeight
@@ -618,8 +629,7 @@ fun UnifiedPlayerSheet(
                                                         (
                                                             dragDismissProgress +
                                                                 resistedDrag
-                                                            )
-                                                            .coerceIn(
+                                                            ).coerceIn(
                                                                 0f,
                                                                 1f,
                                                             )
@@ -668,9 +678,7 @@ fun UnifiedPlayerSheet(
                                             gestureDirection > 0 &&
                                                 dragStartProgress >
                                                 0.001f -> {
-                                                if (
-                                                    dragAmount > 0f
-                                                ) {
+                                                if (dragAmount > 0f) {
                                                     val heightPx =
                                                         size.height
                                                             .coerceAtLeast(
@@ -685,10 +693,10 @@ fun UnifiedPlayerSheet(
                                                                     dragAmount /
                                                                         heightPx
                                                                     )
-                                                            ).coerceIn(
-                                                                0f,
-                                                                1f,
-                                                            )
+                                                                ).coerceIn(
+                                                                    0f,
+                                                                    1f,
+                                                                )
 
                                                     setProgress(
                                                         dragProgress,
@@ -723,10 +731,7 @@ fun UnifiedPlayerSheet(
                                              * Finish upward expansion.
                                              */
                                             gestureDirection < 0 -> {
-                                                if (
-                                                    dragProgress >=
-                                                        0.5f
-                                                ) {
+                                                if (dragProgress >= 0.5f) {
                                                     expand()
                                                 } else {
                                                     collapse()
@@ -739,10 +744,7 @@ fun UnifiedPlayerSheet(
                                             gestureDirection > 0 &&
                                                 dragStartProgress >
                                                 0.001f -> {
-                                                if (
-                                                    dragProgress >=
-                                                        0.5f
-                                                ) {
+                                                if (dragProgress >= 0.5f) {
                                                     expand()
                                                 } else {
                                                     collapse()
@@ -750,10 +752,7 @@ fun UnifiedPlayerSheet(
                                             }
 
                                             else -> {
-                                                if (
-                                                    dragProgress >=
-                                                        0.5f
-                                                ) {
+                                                if (dragProgress >= 0.5f) {
                                                     expand()
                                                 } else {
                                                     collapse()
@@ -773,8 +772,7 @@ fun UnifiedPlayerSheet(
                                                 )
                                             }
 
-                                            dragProgress >=
-                                                0.5f -> {
+                                            dragProgress >= 0.5f -> {
                                                 expand()
                                             }
 
@@ -816,7 +814,14 @@ fun UnifiedPlayerSheet(
                                 musicRepository =
                                     musicRepository,
                                 onClose = {
-                                    collapse()
+                                    val closeRequested =
+                                        onPlayerCloseRequested
+
+                                    if (closeRequested != null) {
+                                        closeRequested()
+                                    } else {
+                                        collapse()
+                                    }
                                 },
                                 onCloseActionAvailable = { closeAction ->
                                     playerCloseActionState.value =
@@ -840,7 +845,7 @@ fun UnifiedPlayerSheet(
                          */
                         if (
                             showBottomChrome &&
-                                miniPlayerContentAlpha > 0f
+                            miniPlayerContentAlpha > 0f
                         ) {
                             Box(
                                 modifier =
@@ -851,8 +856,7 @@ fun UnifiedPlayerSheet(
                                         .fillMaxWidth()
                                         .clickable(
                                             enabled =
-                                                progress <
-                                                    0.999f,
+                                                progress < 0.999f,
                                             onClick = {
                                                 expand()
                                             },
@@ -868,9 +872,7 @@ fun UnifiedPlayerSheet(
                                     onPrevious =
                                         playbackController::skipToPrevious,
                                     onPlayPause = {
-                                        if (
-                                            playbackState.isPlaying
-                                        ) {
+                                        if (playbackState.isPlaying) {
                                             playbackController.pause()
                                         } else {
                                             playbackController.resume()
@@ -898,7 +900,7 @@ fun UnifiedPlayerSheet(
      */
     if (
         showBottomChrome &&
-            progress < 0.999f
+        progress < 0.999f
     ) {
         Box(
             modifier =
