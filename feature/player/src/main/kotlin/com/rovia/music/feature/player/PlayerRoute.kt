@@ -6,12 +6,19 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.RepeatMode
+import com.rovia.music.core.playback.AudioOutputController
+import com.rovia.music.core.playback.AudioOutputState
 import com.rovia.music.core.playback.PlaybackController
+import com.rovia.music.core.ui.R as CoreUiR
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun PlayerRoute(
@@ -21,6 +28,7 @@ fun PlayerRoute(
     onClose: () -> Unit,
     onCloseActionAvailable: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier,
+    audioOutputController: AudioOutputController? = null,
 ) {
     val viewModel: PlayerViewModel =
         viewModel(
@@ -41,6 +49,88 @@ fun PlayerRoute(
 
     val playbackState =
         uiState.playbackState
+
+    val audioOutputStateFlow:
+        StateFlow<AudioOutputState?> =
+        remember(audioOutputController) {
+            audioOutputController?.state
+                ?: MutableStateFlow<AudioOutputState?>(
+                    null,
+                )
+        }
+
+    val audioOutputState by
+        audioOutputStateFlow
+            .collectAsStateWithLifecycle()
+
+    val outputController =
+        audioOutputController
+
+    val currentAudioOutputState =
+        audioOutputState
+
+    val audioOutputIndicator:
+        (@Composable () -> Unit)? =
+        if (
+            outputController != null &&
+            currentAudioOutputState != null
+        ) {
+            {
+                AudioOutputIndicator(
+                    state = currentAudioOutputState,
+                    bluetoothIcon =
+                        painterResource(
+                            CoreUiR.drawable.ic_bluetooth,
+                        ),
+                    localDeviceIcon =
+                        painterResource(
+                            CoreUiR.drawable.ic_smartphone,
+                        ),
+                    volumeDownIcon =
+                        painterResource(
+                            CoreUiR.drawable.ic_volume_down,
+                        ),
+                    volumeUpIcon =
+                        painterResource(
+                            CoreUiR.drawable.ic_volume_up,
+                        ),
+                    outputButtonContentDescription =
+                        stringResource(
+                            R.string.audio_output_button_content_description,
+                        ),
+                    sheetTitle =
+                        stringResource(
+                            R.string.audio_output_sheet_title,
+                        ),
+                    localDeviceLabel =
+                        stringResource(
+                            R.string.audio_output_local_device,
+                        ),
+                    bluetoothAudioLabel =
+                        stringResource(
+                            R.string.audio_output_bluetooth_audio,
+                        ),
+                    mediaVolumeLabel =
+                        stringResource(
+                            R.string.audio_output_media_volume,
+                        ),
+                    volumeSliderContentDescription =
+                        stringResource(
+                            R.string.audio_output_volume_slider_content_description,
+                        ),
+                    fixedVolumeMessage =
+                        stringResource(
+                            R.string.audio_output_fixed_volume_message,
+                        ),
+                    onVolumeChange =
+                        outputController::setMediaVolume,
+                    onRefresh =
+                        outputController::refresh,
+                )
+            }
+        } else {
+            null
+        }
 
     /*
      * Keep one shared close action for both the Player UI
@@ -122,5 +212,6 @@ fun PlayerRoute(
             playbackController::seekTo,
         onClose = closePlayer,
         modifier = modifier,
+        audioOutputIndicator = audioOutputIndicator,
     )
 }
