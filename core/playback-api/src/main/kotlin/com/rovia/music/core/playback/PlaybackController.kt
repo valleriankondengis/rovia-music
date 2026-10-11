@@ -1,42 +1,40 @@
 package com.rovia.music.core.playback
 
-import com.rovia.music.core.model.PlaybackState
-import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.Track
 import kotlinx.coroutines.flow.StateFlow
 
-interface PlaybackController {
+/**
+ * Controls regular in-app music playback.
+ *
+ * This contract extends the shared Player UI playback operations
+ * while retaining functionality specific to regular playback,
+ * including track selection, queue creation, and recent-play
+ * history observation.
+ *
+ * External playback must use ExternalPlaybackController instead
+ * of invoking regular queue or history operations.
+ */
+interface PlaybackController : PlayerPlaybackController {
 
-    val playbackState: StateFlow<PlaybackState>
-
+    /**
+     * Observable history of tracks played through the regular
+     * playback context.
+     */
     val recentPlays: StateFlow<List<Track>>
 
-    fun play(track: Track)
+    /**
+     * Starts regular playback of a single track.
+     */
+    fun play(
+        track: Track,
+    )
 
+    /**
+     * Replaces the regular playback queue and starts at the
+     * specified track index.
+     */
     fun playQueue(
         tracks: List<Track>,
         startIndex: Int,
-    )
-
-    fun pause()
-
-    fun resume()
-
-    fun stopAndClearQueue()
-
-    fun seekTo(positionMs: Long)
-
-    fun restartCurrentTrack()
-
-    fun skipToNext()
-
-    fun skipToPrevious()
-
-    fun setRepeatMode(
-        repeatMode: RepeatMode,
-    )
-
-    fun setShuffleEnabled(
-        enabled: Boolean,
     )
 }
