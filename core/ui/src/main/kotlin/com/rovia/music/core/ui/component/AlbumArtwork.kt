@@ -1,3 +1,4 @@
+
 package com.rovia.music.core.ui.component
 
 import android.graphics.Bitmap
@@ -17,13 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Shape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -42,7 +43,7 @@ fun AlbumArtwork(
     val sizePx =
         with(density) {
             size.roundToPx()
-        }
+        }.coerceAtLeast(1)
 
     val bitmap by produceState<Bitmap?>(
         initialValue = null,
@@ -52,16 +53,46 @@ fun AlbumArtwork(
         value =
             artworkUri?.let { uriString ->
                 withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.loadThumbnail(
-                            Uri.parse(uriString),
-                            Size(
-                                sizePx.coerceAtLeast(1),
-                                sizePx.coerceAtLeast(1),
-                            ),
-                            null,
-                        )
-                    }.getOrNull()
+                    val uri =
+                        runCatching {
+                            Uri.parse(uriString)
+                        }.getOrNull()
+
+                    if (uri == null) {
+                        null
+                    } else {
+                        /*
+                         * Preserve the existing MediaStore artwork path.
+                         * This remains the first choice for normal Rovia
+                         * library artwork and thumbnail content URIs.
+                         */
+                        val thumbnail =
+                            runCatching {
+                                context.contentResolver.loadThumbnail(
+                                    uri,
+                                    Size(
+                                        sizePx,
+                                        sizePx,
+                                    ),
+                                    null,
+                                )
+                            }.getOrNull()
+
+                        /*
+                         * If the thumbnail API cannot load this URI,
+                         * fall back to the shared bitmap loader.
+                         *
+                         * This supports temporary file:// artwork
+                         * extracted from an externally opened audio file,
+                         * along with other URIs readable by ContentResolver.
+                         */
+                        thumbnail
+                            ?: ArtworkBitmapLoader.load(
+                                context = context,
+                                artworkUri = uriString,
+                                maxDimension = sizePx,
+                            )
+                    }
                 }
             }
     }
