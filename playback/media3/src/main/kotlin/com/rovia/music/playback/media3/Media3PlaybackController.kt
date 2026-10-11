@@ -1,3 +1,4 @@
+
 package com.rovia.music.playback.media3
 
 import android.content.ComponentName
@@ -11,6 +12,8 @@ import androidx.media3.session.SessionToken
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.Track
+import com.rovia.music.core.playback.PlaybackContext
+import com.rovia.music.core.playback.PlaybackContextState
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.core.playback.PlaybackSettingsRepository
 import com.rovia.music.core.playback.RecentPlayRepository
@@ -19,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +34,8 @@ class Media3PlaybackController(
     private val recentPlayRepository: RecentPlayRepository,
     private val playbackSettingsRepository:
         PlaybackSettingsRepository,
+    private val playbackContextState: PlaybackContextState =
+        PlaybackContextState(),
 ) : PlaybackController {
 
     private val applicationContext =
@@ -46,25 +52,22 @@ class Media3PlaybackController(
             PlaybackState(),
         )
 
-    override val playbackState:
-        StateFlow<PlaybackState> =
+    override val playbackState: StateFlow<PlaybackState> =
         _playbackState
 
-    override val recentPlays:
-        StateFlow<List<Track>> =
+    override val recentPlays: StateFlow<List<Track>> =
         recentPlayRepository.recentPlays
 
-    private var controller:
-        MediaController? =
-        null
+    private var controller: MediaController? = null
 
-    private var queue:
-        List<Track> =
-        emptyList()
+    private var queue: List<Track> = emptyList()
 
-    private var positionJob:
-        Job? =
-        null
+    private var positionJob: Job? = null
+
+    private val isRegularContextActive: Boolean
+        get() =
+            playbackContextState.activeContext.value ==
+                PlaybackContext.REGULAR
 
     private val controllerListener =
         object : MediaController.Listener {
@@ -73,32 +76,40 @@ class Media3PlaybackController(
                 controller: MediaController,
             ) {
                 if (
-                    this@Media3PlaybackController
-                        .controller ===
+                    this@Media3PlaybackController.controller !==
                         controller
                 ) {
-                    this@Media3PlaybackController
-                        .controller =
-                        null
-
-                    queue =
-                        emptyList()
-
-                    stopPositionUpdates()
-
-                    val settings =
-                        playbackSettingsRepository
-                            .settings
-                            .value
-
-                    _playbackState.value =
-                        PlaybackState(
-                            repeatMode =
-                                settings.repeatMode,
-                            shuffleEnabled =
-                                settings.shuffleEnabled,
-                        )
+                    return
                 }
+
+                controller.removeListener(playerListener)
+
+                this@Media3PlaybackController.controller =
+                    null
+
+                stopPositionUpdates()
+
+                /*
+                 * While external playback is active, the regular
+                 * queue and UI state must not be discarded merely
+                 * because the shared MediaSession disconnects.
+                 */
+                if (!isRegularContextActive) {
+                    return
+                }
+
+                queue = emptyList()
+
+                val settings =
+                    playbackSettingsRepository
+                        .settings
+                        .value
+
+                _playbackState.value =
+                    PlaybackState(
+                        repeatMode = settings.repeatMode,
+                        shuffleEnabled = settings.shuffleEnabled,
+                    )
             }
         }
 
@@ -108,6 +119,10 @@ class Media3PlaybackController(
             override fun onIsPlayingChanged(
                 isPlaying: Boolean,
             ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 updatePlaybackState()
 
                 if (isPlaying) {
@@ -122,6 +137,10 @@ class Media3PlaybackController(
                 mediaItem: MediaItem?,
                 reason: Int,
             ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 updatePlaybackState()
 
                 if (
@@ -136,11 +155,14 @@ class Media3PlaybackController(
             override fun onPlaybackStateChanged(
                 playbackState: Int,
             ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 updatePlaybackState()
 
                 when {
-                    playbackState ==
-                        Player.STATE_ENDED -> {
+                    playbackState == Player.STATE_ENDED -> {
                         stopPositionUpdates()
                     }
 
@@ -151,33 +173,40 @@ class Media3PlaybackController(
             }
 
             override fun onPositionDiscontinuity(
-                oldPosition:
-                    Player.PositionInfo,
-                newPosition:
-                    Player.PositionInfo,
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
                 reason: Int,
             ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 updatePlaybackState()
             }
 
             override fun onRepeatModeChanged(
                 repeatMode: Int,
             ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 _playbackState.value =
                     _playbackState.value.copy(
-                        repeatMode =
-                            repeatMode.toRepeatMode(),
+                        repeatMode = repeatMode.toRepeatMode(),
                     )
             }
 
-            override fun
-                onShuffleModeEnabledChanged(
-                    shuffleModeEnabled: Boolean,
-                ) {
+            override fun onShuffleModeEnabledChanged(
+                shuffleModeEnabled: Boolean,
+            ) {
+                if (!isRegularContextActive) {
+                    return
+                }
+
                 _playbackState.value =
                     _playbackState.value.copy(
-                        shuffleEnabled =
-                            shuffleModeEnabled,
+                        shuffleEnabled = shuffleModeEnabled,
                     )
             }
         }
@@ -188,16 +217,60 @@ class Media3PlaybackController(
                 .settings
                 .collect { settings ->
 
+                    /*
+                     * Persistent settings belong to regular playback.
+                     * Do not apply or reflect them while the external
+                     * player owns the shared MediaSession.
+                     */
+                    if (!isRegularContextActive) {
+                        return@collect
+                    }
+
                     _playbackState.value =
                         _playbackState.value.copy(
-                            repeatMode =
-                                settings.repeatMode,
-                            shuffleEnabled =
-                                settings.shuffleEnabled,
+                            repeatMode = settings.repeatMode,
+                            shuffleEnabled = settings.shuffleEnabled,
                         )
 
                     applyPlaybackSettings()
                 }
+        }
+
+        scope.launch {
+            playbackContextState.activeContext.collect { context ->
+                when (context) {
+                    PlaybackContext.EXTERNAL -> {
+                        /*
+                         * Stop observing positions from the shared
+                         * MediaSession while it controls external
+                         * playback. Preserve the regular queue.
+                         */
+                        stopPositionUpdates()
+                    }
+
+                    PlaybackContext.REGULAR -> {
+                        /*
+                         * The service should have restored the
+                         * regular player before the context changes
+                         * back to REGULAR.
+                         *
+                         * Refresh its state without recording a
+                         * Recent Play simply because it was restored.
+                         */
+                        applyPlaybackSettings()
+                        updatePlaybackState()
+
+                        if (
+                            controller?.isPlaying == true &&
+                            queue.isNotEmpty()
+                        ) {
+                            startPositionUpdates()
+                        } else {
+                            stopPositionUpdates()
+                        }
+                    }
+                }
+            }
         }
 
         connect()
@@ -206,13 +279,14 @@ class Media3PlaybackController(
     override fun play(
         track: Track,
     ) {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: return
 
-        queue =
-            listOf(
-                track,
-            )
+        queue = listOf(track)
 
         mediaController.setMediaItem(
             track.toMediaItem(),
@@ -231,6 +305,10 @@ class Media3PlaybackController(
         tracks: List<Track>,
         startIndex: Int,
     ) {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: return
 
@@ -241,12 +319,10 @@ class Media3PlaybackController(
         val safeIndex =
             startIndex.coerceIn(
                 minimumValue = 0,
-                maximumValue =
-                    tracks.lastIndex,
+                maximumValue = tracks.lastIndex,
             )
 
-        queue =
-            tracks
+        queue = tracks
 
         mediaController.setMediaItems(
             tracks.map { track ->
@@ -266,6 +342,10 @@ class Media3PlaybackController(
     }
 
     override fun pause() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         controller?.pause()
 
         updatePlaybackState()
@@ -273,6 +353,10 @@ class Media3PlaybackController(
     }
 
     override fun resume() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         controller?.play()
 
         updatePlaybackState()
@@ -280,10 +364,13 @@ class Media3PlaybackController(
     }
 
     override fun stopAndClearQueue() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: run {
-                queue =
-                    emptyList()
+                queue = emptyList()
 
                 stopPositionUpdates()
 
@@ -294,10 +381,8 @@ class Media3PlaybackController(
 
                 _playbackState.value =
                     PlaybackState(
-                        repeatMode =
-                            settings.repeatMode,
-                        shuffleEnabled =
-                            settings.shuffleEnabled,
+                        repeatMode = settings.repeatMode,
+                        shuffleEnabled = settings.shuffleEnabled,
                     )
 
                 return
@@ -308,8 +393,7 @@ class Media3PlaybackController(
         mediaController.stop()
         mediaController.clearMediaItems()
 
-        queue =
-            emptyList()
+        queue = emptyList()
 
         val settings =
             playbackSettingsRepository
@@ -318,26 +402,30 @@ class Media3PlaybackController(
 
         _playbackState.value =
             PlaybackState(
-                repeatMode =
-                    settings.repeatMode,
-                shuffleEnabled =
-                    settings.shuffleEnabled,
+                repeatMode = settings.repeatMode,
+                shuffleEnabled = settings.shuffleEnabled,
             )
     }
 
     override fun seekTo(
         positionMs: Long,
     ) {
+        if (!isRegularContextActive) {
+            return
+        }
+
         controller?.seekTo(
-            positionMs.coerceAtLeast(
-                0L,
-            ),
+            positionMs.coerceAtLeast(0L),
         )
 
         updatePlaybackState()
     }
 
     override fun restartCurrentTrack() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: return
 
@@ -351,10 +439,7 @@ class Media3PlaybackController(
             return
         }
 
-        mediaController.seekTo(
-            0L,
-        )
-
+        mediaController.seekTo(0L)
         mediaController.play()
 
         updatePlaybackState()
@@ -362,12 +447,20 @@ class Media3PlaybackController(
     }
 
     override fun skipToNext() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         controller?.seekToNext()
 
         updatePlaybackState()
     }
 
     override fun skipToPrevious() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         controller?.seekToPrevious()
 
         updatePlaybackState()
@@ -376,10 +469,13 @@ class Media3PlaybackController(
     override fun setRepeatMode(
         repeatMode: RepeatMode,
     ) {
+        if (!isRegularContextActive) {
+            return
+        }
+
         _playbackState.value =
             _playbackState.value.copy(
-                repeatMode =
-                    repeatMode,
+                repeatMode = repeatMode,
             )
 
         val mediaController =
@@ -397,20 +493,22 @@ class Media3PlaybackController(
         }
 
         scope.launch {
-            playbackSettingsRepository
-                .setRepeatMode(
-                    repeatMode,
-                )
+            playbackSettingsRepository.setRepeatMode(
+                repeatMode,
+            )
         }
     }
 
     override fun setShuffleEnabled(
         enabled: Boolean,
     ) {
+        if (!isRegularContextActive) {
+            return
+        }
+
         _playbackState.value =
             _playbackState.value.copy(
-                shuffleEnabled =
-                    enabled,
+                shuffleEnabled = enabled,
             )
 
         val mediaController =
@@ -428,15 +526,16 @@ class Media3PlaybackController(
         }
 
         scope.launch {
-            playbackSettingsRepository
-                .setShuffleEnabled(
-                    enabled,
-                )
+            playbackSettingsRepository.setShuffleEnabled(
+                enabled,
+            )
         }
     }
 
-    private fun
-        applyPlaybackSettings() {
+    private fun applyPlaybackSettings() {
+        if (!isRegularContextActive) {
+            return
+        }
 
         val mediaController =
             controller ?: return
@@ -452,12 +551,10 @@ class Media3PlaybackController(
             )
         ) {
             val media3RepeatMode =
-                settings.repeatMode
-                    .toMedia3RepeatMode()
+                settings.repeatMode.toMedia3RepeatMode()
 
             if (
-                mediaController.repeatMode !=
-                    media3RepeatMode
+                mediaController.repeatMode != media3RepeatMode
             ) {
                 mediaController.setRepeatMode(
                     media3RepeatMode,
@@ -471,33 +568,39 @@ class Media3PlaybackController(
             )
         ) {
             if (
-                mediaController
-                    .shuffleModeEnabled !=
+                mediaController.shuffleModeEnabled !=
                     settings.shuffleEnabled
             ) {
-                mediaController
-                    .setShuffleModeEnabled(
-                        settings.shuffleEnabled,
-                    )
+                mediaController.setShuffleModeEnabled(
+                    settings.shuffleEnabled,
+                )
             }
         }
     }
 
     private fun recordCurrentTrack() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: return
 
         val currentTrack =
             queue.getOrNull(
-                mediaController
-                    .currentMediaItemIndex,
-            )
-                ?: return
+                mediaController.currentMediaItemIndex,
+            ) ?: return
 
         scope.launch {
-            recentPlayRepository.record(
-                currentTrack,
-            )
+            /*
+             * Check again when the coroutine executes, because the
+             * playback context may have changed after it was launched.
+             */
+            if (!isRegularContextActive) {
+                return@launch
+            }
+
+            recentPlayRepository.record(currentTrack)
         }
     }
 
@@ -516,9 +619,7 @@ class Media3PlaybackController(
                 applicationContext,
                 sessionToken,
             )
-                .setListener(
-                    controllerListener,
-                )
+                .setListener(controllerListener)
                 .buildAsync()
 
         controllerFuture.addListener(
@@ -529,19 +630,21 @@ class Media3PlaybackController(
                     }.getOrNull()
                         ?: return@addListener
 
-                controller =
-                    mediaController
+                controller = mediaController
 
                 mediaController.addListener(
                     playerListener,
                 )
 
+                if (!isRegularContextActive) {
+                    stopPositionUpdates()
+                    return@addListener
+                }
+
                 applyPlaybackSettings()
                 updatePlaybackState()
 
-                if (
-                    mediaController.isPlaying
-                ) {
+                if (mediaController.isPlaying) {
                     recordCurrentTrack()
                     startPositionUpdates()
                 }
@@ -554,6 +657,7 @@ class Media3PlaybackController(
 
     private fun startPositionUpdates() {
         if (
+            !isRegularContextActive ||
             positionJob?.isActive == true
         ) {
             return
@@ -562,6 +666,10 @@ class Media3PlaybackController(
         positionJob =
             scope.launch {
                 while (isActive) {
+                    if (!isRegularContextActive) {
+                        break
+                    }
+
                     val mediaController =
                         controller ?: break
 
@@ -574,74 +682,52 @@ class Media3PlaybackController(
                     delay(250L)
 
                     if (
+                        !isRegularContextActive ||
                         !mediaController.isPlaying
                     ) {
                         break
                     }
                 }
 
-                positionJob =
-                    null
+                positionJob = null
             }
     }
 
     private fun stopPositionUpdates() {
         positionJob?.cancel()
-        positionJob =
-            null
+        positionJob = null
     }
 
     private fun updatePlaybackState() {
+        if (!isRegularContextActive) {
+            return
+        }
+
         val mediaController =
             controller ?: return
 
         val currentIndex =
-            mediaController
-                .currentMediaItemIndex
+            mediaController.currentMediaItemIndex
 
         val currentTrack =
-            queue.getOrNull(
-                currentIndex,
-            )
+            queue.getOrNull(currentIndex)
 
         _playbackState.value =
             PlaybackState(
-                currentTrack =
-                    currentTrack,
-                isPlaying =
-                    mediaController.isPlaying,
-                positionMs =
-                    mediaController
-                        .currentPosition
-                        .coerceAtLeast(
-                            0L,
-                        ),
-                durationMs =
-                    mediaController
-                        .duration
-                        .coerceAtLeast(
-                            0L,
-                        ),
-                repeatMode =
-                    mediaController
-                        .repeatMode
-                        .toRepeatMode(),
-                shuffleEnabled =
-                    mediaController
-                        .shuffleModeEnabled,
+                currentTrack = currentTrack,
+                isPlaying = mediaController.isPlaying,
+                positionMs = mediaController.currentPosition.coerceAtLeast(0L),
+                durationMs = mediaController.duration.coerceAtLeast(0L),
+                repeatMode = mediaController.repeatMode.toRepeatMode(),
+                shuffleEnabled = mediaController.shuffleModeEnabled,
             )
     }
 }
 
-private fun Track.toMediaItem():
-    MediaItem {
-    return MediaItem.Builder()
-        .setMediaId(
-            id.toString(),
-        )
-        .setUri(
-            Uri.parse(uri),
-        )
+private fun Track.toMediaItem(): MediaItem =
+    MediaItem.Builder()
+        .setMediaId(id.toString())
+        .setUri(Uri.parse(uri))
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)
@@ -650,32 +736,17 @@ private fun Track.toMediaItem():
                 .build(),
         )
         .build()
-}
 
-private fun RepeatMode.toMedia3RepeatMode():
-    Int {
-    return when (this) {
-        RepeatMode.OFF ->
-            Player.REPEAT_MODE_OFF
-
-        RepeatMode.ALL ->
-            Player.REPEAT_MODE_ALL
-
-        RepeatMode.ONE ->
-            Player.REPEAT_MODE_ONE
+private fun RepeatMode.toMedia3RepeatMode(): Int =
+    when (this) {
+        RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+        RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        RepeatMode.ONE -> Player.REPEAT_MODE_ONE
     }
-}
 
-private fun Int.toRepeatMode():
-    RepeatMode {
-    return when (this) {
-        Player.REPEAT_MODE_ALL ->
-            RepeatMode.ALL
-
-        Player.REPEAT_MODE_ONE ->
-            RepeatMode.ONE
-
-        else ->
-            RepeatMode.OFF
+private fun Int.toRepeatMode(): RepeatMode =
+    when (this) {
+        Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+        Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+        else -> RepeatMode.OFF
     }
-}
