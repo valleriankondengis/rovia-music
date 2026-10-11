@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -35,6 +36,10 @@ internal fun PlayerLyric(
             modifier = modifier,
         )
     } else {
+        val lyricPlaceholderColor =
+            playerArtworkAccentColor()
+                ?: MaterialTheme.colorScheme.onSurfaceVariant
+
         Box(
             modifier = modifier,
             contentAlignment = Alignment.Center,
@@ -43,7 +48,7 @@ internal fun PlayerLyric(
                 painter = painterResource(CoreUiR.drawable.ic_lyrics),
                 contentDescription = stringResource(R.string.player_show_lyrics),
                 modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = lyricPlaceholderColor,
             )
         }
     }
