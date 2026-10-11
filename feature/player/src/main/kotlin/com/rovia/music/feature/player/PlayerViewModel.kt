@@ -1,4 +1,3 @@
-
 package com.rovia.music.feature.player
 
 import androidx.lifecycle.ViewModel
@@ -7,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.Track
-import com.rovia.music.core.playback.PlaybackController
+import com.rovia.music.core.playback.PlayerPlaybackController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,7 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class PlayerViewModel(
-    private val playbackController: PlaybackController,
+    private val playbackController: PlayerPlaybackController,
     private val lyricsRepository: LyricsRepository,
     private val musicRepository: MusicRepository? = null,
 ) : ViewModel() {
@@ -40,17 +39,17 @@ class PlayerViewModel(
      * Latest catalog version of the active track.
      *
      * This is a UI metadata snapshot only. Playback itself remains
-     * controlled by PlaybackController and Media3.
+     * controlled by PlayerPlaybackController and Media3.
      */
     private val catalogTrack =
         MutableStateFlow<Track?>(null)
 
     /**
-     * Combines playback state with the latest catalog metadata
-     * when both tracks refer to the same URI.
+     * Combines playback state with catalog metadata when both
+     * tracks refer to the same URI.
      *
      * Position, playing state, duration, repeat mode, and shuffle
-     * state always remain sourced from PlaybackController.
+     * state always remain sourced from the active playback controller.
      */
     private val playbackStateWithCatalog =
         combine(
@@ -118,6 +117,9 @@ class PlayerViewModel(
 
     /**
      * Loads embedded lyrics when the playback URI changes.
+     *
+     * This works with both regular tracks and tracks provided
+     * directly by an external content URI.
      */
     private fun observeCurrentTrack() {
         viewModelScope.launch {
@@ -135,10 +137,14 @@ class PlayerViewModel(
     }
 
     /**
-     * Observes only the catalog entry corresponding to the active URI.
+     * Observes catalog metadata only when a MusicRepository
+     * is provided.
      *
-     * A track change cancels the previous observation. If no matching
-     * catalog entry exists, the original playback track remains visible.
+     * External playback should pass null so its selected URI
+     * is not resolved through the regular music catalog.
+     *
+     * If no matching catalog entry exists, the original track
+     * supplied by the playback controller remains visible.
      */
     private fun observeCurrentTrackMetadata() {
         val repository =
@@ -201,7 +207,7 @@ class PlayerViewModel(
 }
 
 class PlayerViewModelFactory(
-    private val playbackController: PlaybackController,
+    private val playbackController: PlayerPlaybackController,
     private val lyricsRepository: LyricsRepository,
     private val musicRepository: MusicRepository? = null,
 ) : ViewModelProvider.Factory {
