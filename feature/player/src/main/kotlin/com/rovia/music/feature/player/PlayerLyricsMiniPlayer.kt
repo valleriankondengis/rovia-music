@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -35,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -60,10 +63,19 @@ internal fun PlayerLyricsMiniPlayer(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    artworkColor: Color? = null,
 ) {
     val track =
         playbackState.currentTrack
             ?: return
+
+    /*
+     * Prefer the shared PlayerScreen artwork source.
+     * Keep the existing argument as a compatibility fallback.
+     */
+    val sharedArtworkColor =
+        LocalPlayerArtworkColor.current
+            ?: artworkColor
 
     var latestSeekPosition by
         remember(
@@ -175,8 +187,9 @@ internal fun PlayerLyricsMiniPlayer(
                     /*
                      * Visual layer only.
                      *
-                     * Disable its own gestures because the
-                     * dedicated gesture layer below owns input.
+                     * Use the shared artwork color for the
+                     * active seekbar. Gesture handling remains
+                     * owned by the transparent layer below.
                      */
                     WavySeekBar(
                         positionMs = latestSeekPosition,
@@ -186,15 +199,15 @@ internal fun PlayerLyricsMiniPlayer(
                         onSeekFinished = {},
                         modifier =
                             Modifier.fillMaxSize(),
+                        artworkColor = sharedArtworkColor,
                     )
 
                     /*
                      * Dedicated gesture layer.
                      *
                      * Exactly 32dp high, matching the visual
-                     * seekbar. This is the important part that
-                     * prevents the fullscreen sheet gesture from
-                     * stealing the horizontal seek gesture.
+                     * seekbar. This prevents the fullscreen sheet
+                     * gesture from stealing horizontal seeking.
                      */
                     Box(
                         modifier =
@@ -223,10 +236,8 @@ internal fun PlayerLyricsMiniPlayer(
                                     }
 
                                     /*
-                                     * Tap behavior.
-                                     *
-                                     * Same idea as the main PlayerSeekBar:
-                                     * tap X -> convert to position -> seek.
+                                     * Tap behavior:
+                                     * tap X -> playback position -> seek.
                                      */
                                     detectTapGestures { offset ->
                                         val position =
@@ -279,9 +290,7 @@ internal fun PlayerLyricsMiniPlayer(
                                     /*
                                      * Horizontal drag behavior.
                                      *
-                                     * This follows the same gesture
-                                     * structure used by the working
-                                     * main WavySeekBar.
+                                     * Keep the existing gesture structure.
                                      */
                                     detectHorizontalDragGestures(
                                         onDragStart = { offset ->
@@ -350,6 +359,7 @@ internal fun PlayerLyricsMiniPlayer(
 
         /*
          * Dedicated MiniPlayer surface.
+         * Structural colors remain Material 3.
          */
         Card(
             modifier =
@@ -449,6 +459,40 @@ private fun PlayerLyricsMiniPlayerButtons(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    /*
+     * Read the shared accent directly. This private component
+     * does not need to receive another artworkColor parameter.
+     */
+    val artworkAccent =
+        playerArtworkAccentColor()
+
+    val idleContainerColor =
+        artworkAccent?.let { accent ->
+            lerp(
+                start = colorScheme.surfaceContainerHigh,
+                stop = accent,
+                fraction = 0.12f,
+            )
+        } ?: colorScheme.surfaceContainerHigh
+
+    val idleContentColor =
+        artworkAccent
+            ?: colorScheme.onSurface
+
+    val playPauseContainerColor =
+        artworkAccent
+            ?: colorScheme.primaryContainer
+
+    val playPauseContentColor =
+        if (artworkAccent != null) {
+            playerArtworkOnAccentColor()
+        } else {
+            colorScheme.onPrimaryContainer
+        }
+
     val previousSource =
         remember {
             MutableInteractionSource()
@@ -491,13 +535,9 @@ private fun PlayerLyricsMiniPlayerButtons(
                         IconButtonDefaults
                             .filledIconButtonColors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
+                                    idleContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                    idleContentColor,
                             ),
                     shapes =
                         IconButtonDefaults
@@ -538,13 +578,9 @@ private fun PlayerLyricsMiniPlayerButtons(
                         IconButtonDefaults
                             .filledIconButtonColors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primaryContainer,
+                                    playPauseContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimaryContainer,
+                                    playPauseContentColor,
                             ),
                     shapes =
                         IconButtonDefaults
@@ -596,13 +632,9 @@ private fun PlayerLyricsMiniPlayerButtons(
                         IconButtonDefaults
                             .filledIconButtonColors(
                                 containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
+                                    idleContainerColor,
                                 contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
+                                    idleContentColor,
                             ),
                     shapes =
                         IconButtonDefaults
