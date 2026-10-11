@@ -27,8 +27,8 @@ android {
 
     defaultConfig {
         applicationId = "com.rovia.music"
-        minSdk = 36
-        targetSdk = 36
+        minSdk = 33
+        targetSdk = 37
 
         versionCode = 1
         versionName = "0.1.0"
