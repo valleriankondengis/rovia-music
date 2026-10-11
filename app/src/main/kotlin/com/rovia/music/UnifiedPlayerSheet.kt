@@ -35,6 +35,7 @@ import androidx.compose.ui.zIndex
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.PlaybackState
+import com.rovia.music.core.playback.AudioOutputController
 import com.rovia.music.core.playback.PlaybackController
 import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.player.PlayerRoute
@@ -52,6 +53,7 @@ fun UnifiedPlayerSheet(
     onProgressChanged: (Float) -> Unit = {},
     showBottomChrome: Boolean = true,
     modifier: Modifier = Modifier,
+    audioOutputController: AudioOutputController? = null,
 ) {
     val track =
         playbackState.currentTrack
@@ -827,6 +829,8 @@ fun UnifiedPlayerSheet(
                                             alpha =
                                                 playerContentAlpha
                                         },
+                                audioOutputController =
+                                    audioOutputController,
                             )
                         }
 
