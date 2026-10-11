@@ -1,9 +1,11 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
 
 package com.rovia.music.feature.player
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -21,9 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +44,7 @@ internal fun WavySeekBar(
     onPositionChange: (Float) -> Unit,
     onSeekFinished: () -> Unit,
     modifier: Modifier = Modifier,
+    artworkColor: Color? = null,
 ) {
     val density = LocalDensity.current
 
@@ -69,9 +74,67 @@ internal fun WavySeekBar(
         mutableFloatStateOf(0f)
     }
 
-    val primaryColor =
+    val themeAccentColor =
         MaterialTheme.colorScheme.primary
 
+    /*
+     * Prefer the accent from the shared artwork palette.
+     *
+     * The optional artworkColor parameter remains as a
+     * compatibility fallback for callers outside PlayerScreen.
+     * Only that fallback needs local HSV conversion.
+     */
+    val sharedArtworkAccentColor =
+        playerArtworkAccentColor()
+
+    val sharedArtworkColor =
+        LocalPlayerArtworkColor.current
+            ?: artworkColor
+
+    val progressColor =
+        remember(
+            sharedArtworkAccentColor,
+            sharedArtworkColor,
+            themeAccentColor,
+        ) {
+            sharedArtworkAccentColor
+                ?: sharedArtworkColor
+                    ?.let { color ->
+                        val hsv =
+                            FloatArray(3)
+
+                        AndroidColor.colorToHSV(
+                            color.toArgb(),
+                            hsv,
+                        )
+
+                        if (
+                            hsv[1] < 0.12f ||
+                            hsv[2] < 0.08f
+                        ) {
+                            null
+                        } else {
+                            val strongerSaturation =
+                                (hsv[1] + 0.08f)
+                                    .coerceAtLeast(0.58f)
+                                    .coerceAtMost(1f)
+
+                            Color.hsv(
+                                hue = hsv[0],
+                                saturation = strongerSaturation,
+                                value = 1f,
+                                alpha = 1f,
+                            )
+                        }
+                    }
+                ?: themeAccentColor
+        }
+
+    /*
+     * The inactive track remains a Material 3 neutral role.
+     * Active progress, the thumb, and the stop indicator share
+     * the same artwork-derived accent.
+     */
     val trackColor =
         MaterialTheme.colorScheme.outlineVariant
 
@@ -133,6 +196,7 @@ internal fun WavySeekBar(
                                 offset.x,
                             ),
                         )
+
                         onSeekFinished()
                     }
                 }
@@ -190,7 +254,7 @@ internal fun WavySeekBar(
                 stopIndicatorSize.toPx() / 2f
             }
 
-        // Keep the native stop indicator fully inside the Canvas bounds.
+        // Keep the stop indicator fully inside the Canvas bounds.
         val stopIndicatorCenterX =
             (size.width - stopIndicatorRadius)
                 .coerceAtLeast(0f)
@@ -276,7 +340,7 @@ internal fun WavySeekBar(
 
             drawPath(
                 path = path,
-                color = primaryColor,
+                color = progressColor,
                 style =
                     Stroke(
                         width = strokeWidth,
@@ -285,8 +349,9 @@ internal fun WavySeekBar(
             )
         }
 
+        // Solid thumb matching the shared artwork accent.
         drawCircle(
-            color = primaryColor,
+            color = progressColor,
             radius = dotRadius,
             center =
                 Offset(
@@ -295,7 +360,7 @@ internal fun WavySeekBar(
                 ),
         )
 
-        // Material 3 Slider's native stop indicator at the track's right end.
+        // End indicator uses the same accent.
         with(SliderDefaults) {
             drawStopIndicator(
                 offset =
@@ -304,7 +369,7 @@ internal fun WavySeekBar(
                         y = centerY,
                     ),
                 size = stopIndicatorSize,
-                color = primaryColor,
+                color = progressColor,
             )
         }
     }
