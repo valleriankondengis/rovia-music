@@ -62,6 +62,8 @@ The current application contains these real features:
 - Folder Filter UI with native Material 3 controls and an add action, with persistent exclusion selections.
 - Search screen with realtime local search and fuzzy matching.
 - Real playback through Media3/ExoPlayer.
+- Android system audio-output indicator in Player, showing the detected Bluetooth output device name or the localized local-device label.
+- System media-volume control through `AudioManager.STREAM_MUSIC`, including synchronization with physical volume-button changes while the Audio Output bottom sheet is open.
 - In-memory playback queue.
 - Play, pause, resume, seek, previous, and next.
 - Global MiniPlayer while a track is active.
@@ -289,6 +291,7 @@ Rovia/
 │   │
 │   ├── playback-api/
 │   │   └── src/main/kotlin/com/rovia/music/core/playback/
+│   │       ├── AudioOutputController.kt
 │   │       ├── PlaybackController.kt
 │   │       └── RecentPlayRepository.kt
 │   │
@@ -340,6 +343,7 @@ Rovia/
 ├── playback/
 │   └── media3/
 │       └── src/main/kotlin/com/rovia/music/playback/media3/
+│           ├── AndroidAudioOutputController.kt
 │           ├── Media3PlaybackController.kt
 │           └── RoviaMediaSessionService.kt
 │
@@ -375,6 +379,7 @@ Rovia/
     │
     ├── player/
     │   └── src/main/kotlin/com/rovia/music/feature/player/
+    │       ├── AudioOutputIndicator.kt
     │       ├── LyricViewer.kt
     │       ├── PlayerActionButtonGroup.kt
     │       ├── PlayerArtwork.kt
@@ -455,19 +460,31 @@ LyricsRepository
 Owns:
 
 ```text
+AudioOutputController
+AudioOutputState
+AudioOutputType
 PlaybackController
 RecentPlayRepository
 ```
 
+`AudioOutputController` is the feature-independent API for observing and refreshing the current Android output/volume state and requesting a media-volume change. Keep the Android framework implementation out of feature modules.
+
 ## `:core:ui`
 
-Owns reusable presentation components and local shared vector icons:
+Owns reusable presentation components and shared vector icons:
 
 ```text
 AlbumArtwork
 TrackRow
 MiniPlayer
+ic_lyrics
+ic_bluetooth
+ic_smartphone
+ic_volume_down
+ic_volume_up
 ```
+
+Shared vector icons belong in `:core:ui`. Do not duplicate a shared icon in a feature resource directory when the feature can use `CoreUiR.drawable.*`.
 
 ## `:data:database`
 
@@ -520,9 +537,10 @@ Owns:
 - MediaSession;
 - queue implementation;
 - playback position updates;
-- Recent Play event emission through `RecentPlayRepository`.
+- Recent Play event emission through `RecentPlayRepository`;
+- `AndroidAudioOutputController`, which reads Android output devices and controls the system media stream through `AudioManager`.
 
-The playback module does not know about Room or SQLite.
+The playback module does not know about Room or SQLite. `AndroidAudioOutputController` is application-scoped through `AppContainer`; it does not create a second playback engine.
 
 ## `:feature:home`
 
@@ -671,6 +689,10 @@ RecentPlayRepository
 
 PlaybackController
     -> Media3PlaybackController
+
+AudioOutputController
+    -> AndroidAudioOutputController
+    -> AudioManager output-device information + STREAM_MUSIC volume
 ```
 
 `MainActivity` requests catalog synchronization after audio permission is available and again when the
@@ -679,7 +701,7 @@ synchronization happens off the UI thread. Embedded metadata enrichment is separ
 catalog query and uses bounded batches (currently 24 tracks per batch).
 
 The `:app` module owns manual dependency wiring. It passes the existing `MusicRepository` instance to
-Home, Library, Search, and the Player route. Do not construct a second catalog repository inside a feature.
+Home, Library, Search, and the Player route. It also creates one application-scoped `AndroidAudioOutputController` and passes its `AudioOutputController` API through `MainActivity`, `MainNavigation`, and `UnifiedPlayerSheet` to `PlayerRoute`. Do not construct duplicate controllers inside feature composables or introduce a DI framework.
 
 ## 10.1 DATABASE AND MEDIASTORE CATALOG ARCHITECTURE
 
@@ -783,6 +805,58 @@ schema evolution, preserve released schema exports, and implement/test the requi
 
 Keep schema tests aligned with the actual current table set. Migration tests must use a dedicated test database;
 they must not delete or alter the developer's real `rovia.db`.
+
+
+## 10.2 AUDIO OUTPUT AND SYSTEM MEDIA VOLUME
+
+The Player includes `AudioOutputIndicator`, owned by `:feature:player`. It is an output-status control and a bottom-sheet entry point; it does not create or route audio itself.
+
+### API and implementation boundaries
+
+```text
+:core:playback-api
+    AudioOutputController
+    AudioOutputState
+    AudioOutputType
+        ↓
+:playback:media3
+    AndroidAudioOutputController
+    AudioManager output-device information
+    AudioManager.STREAM_MUSIC volume read/write
+        ↓
+:app
+    AppContainer creates the controller
+    MainActivity -> MainNavigation -> UnifiedPlayerSheet -> PlayerRoute
+        ↓
+:feature:player
+    AudioOutputIndicator -> PlayerScreen -> portrait/landscape layouts
+```
+
+`AudioOutputController.state` is a `StateFlow<AudioOutputState?>`. The feature observes it through the lifecycle-aware Compose collection in `PlayerRoute`. `setMediaVolume()` changes the Android system media stream; it must not introduce an app-only volume value. `refresh()` rereads the Android volume and detected output state.
+
+### Output detection and labels
+
+- Use Android `AudioManager` output-device information, including Bluetooth output types supported by the implementation.
+- When a Bluetooth output is detected and has a nonblank product name, show that name beside the Bluetooth icon (for example, `Space Travel 2`).
+- When Bluetooth output is not detected, show the localized local-device label (`This device` / `Perangkat ini`) beside the local-device icon. Do not invent a device name.
+- Reuse the shared vector icons from `:core:ui`; do not add an icon-pack dependency or duplicate `ic_lyrics` or Audio Output icons in `:feature:player`.
+- Do not add Bluetooth scanning or location permissions for this feature. Do not claim the app performs Bluetooth pairing or device selection; this control reports detected output and controls the system media-volume stream.
+
+### System-volume synchronization
+
+- The slider reads `AudioOutputState.volumeFraction`, derived from the actual current/max `STREAM_MUSIC` volume.
+- Slider changes call `AudioOutputController.setMediaVolume()` to update the system volume. A fixed system volume disables the slider and displays the localized explanatory message.
+- While the bottom sheet is open, `AudioOutputIndicator` invokes `refresh()` immediately and then every 200 ms. This keeps the slider/percentage synchronized with hardware volume-button changes even on devices where the settings observer alone does not refresh the UI.
+- The polling `LaunchedEffect` is cancelled when the sheet closes or the composable leaves composition. Do not poll continuously while the sheet is closed.
+- Preserve the transparent scrim and `rememberBottomSheetState` behavior shared with `TrackInfoBottomSheet`. The fullscreen lyrics view intentionally remains minimalist and does not show the Audio Output indicator.
+
+### Layout contract
+
+- The output control is a separate rounded rectangle, not part of the connected Repeat/Shuffle `ButtonGroup`. It uses Material theme colors and remains `64dp` high, matching Repeat and Shuffle.
+- In portrait, its maximum width is `128dp`, subject to the available width after reserving the Repeat/Shuffle controls and spacing. The label stays beside the icon and uses a marquee for long device names.
+- In landscape, the output control can use the remaining width after reserving `224dp` for Repeat and Shuffle plus an `8dp` gap. Keep the control groups aligned to the layout's left/right padding without inserting a weighted spacer between them.
+- `PlaybackOptionsButtonGroup(compact = true)` is used by the landscape layout so Repeat and Shuffle use their natural combined width instead of consuming the entire row. Its default (`compact = false`) preserves the existing alignment behavior in other layouts.
+- Keep output controls out of fullscreen lyrics to preserve that view's minimal presentation.
 
 ---
 
@@ -2330,7 +2404,9 @@ LyricViewer
 orientation, and selects the portrait or landscape composition. It does not render the detailed
 Player controls itself.
 
-`PlayerPortraitContent` and `PlayerLandscapeContent` own the orientation-specific visual layout.
+`PlayerPortraitContent` and `PlayerLandscapeContent` own the orientation-specific visual layout. Both can receive the optional `AudioOutputIndicator` slot; portrait uses a maximum width of `128dp`, while landscape adapts the output control width to the remaining row space reserved around the fixed-width Repeat/Shuffle controls.
+
+`AudioOutputIndicator` owns the detected-output label/icon, rounded standalone output control, transparent-scrim volume bottom sheet, and volume slider presentation. It invokes callbacks rather than accessing `AudioManager` directly. The fullscreen lyrics layout intentionally omits this indicator.
 
 `PlayerArtwork` owns Player artwork presentation. `PlayerLyric` owns embedded-lyrics presentation and fallback state.
 
@@ -2372,7 +2448,9 @@ Both layouts must preserve:
 - close/collapse action.
 
 The fullscreen lyrics layout is selected before the portrait/landscape layout when `isLyricsVisible`
-is true.
+is true. The Audio Output indicator is shown in the normal portrait and landscape Player layouts, but not in fullscreen lyrics.
+
+Portrait output-control width is capped at `128dp`; landscape output-control width uses the available row space after reserving the `224dp` Repeat/Shuffle group and its `8dp` gap. The output control and Repeat/Shuffle buttons are all `64dp` high. Keep the landscape control row fitted to its left/right layout padding and avoid adding a weighted spacer that produces a large gap.
 
 Portrait/landscape rotation must not collapse the UnifiedPlayerSheet or dismiss fullscreen lyrics merely
 because the Activity is recreated.
@@ -3605,9 +3683,9 @@ It does not independently query MediaStore or open audio files per query. No net
 
 `PlayerRoute` creates `PlayerViewModel` using `PlayerViewModelFactory`.
 
-It collects `PlayerUiState` and passes plain state/callbacks to `PlayerScreen`.
+It collects `PlayerUiState` and passes plain state/callbacks to `PlayerScreen`. It also collects `AudioOutputController.state` through lifecycle-aware Compose state, then passes the output state, shared icons, localized labels, `setMediaVolume`, and `refresh` callbacks to `AudioOutputIndicator`.
 
-This keeps the Player composable free of direct Media3 implementation details.
+This keeps the Player composable free of direct Media3 and Android `AudioManager` implementation details.
 
 ---
 
@@ -4191,6 +4269,15 @@ After changing Player, MiniPlayer, or `UnifiedPlayerSheet`, verify:
 [ ] NavigationBar is not touch-intercepting when Player is fully expanded
 [ ] portrait layout works
 [ ] landscape layout works
+[ ] Audio Output label shows the localized local-device label when no Bluetooth output is detected
+[ ] detected Bluetooth output name is shown when available
+[ ] Audio Output opens its volume bottom sheet
+[ ] Audio Output slider changes Android `STREAM_MUSIC` volume
+[ ] physical volume-button changes update the slider/percentage while the bottom sheet is open
+[ ] Audio Output volume polling stops after the sheet closes
+[ ] fixed system volume disables the slider and shows the explanatory message
+[ ] Audio Output control aligns with Repeat/Shuffle in portrait and landscape without a large empty gap or overflow menu
+[ ] fullscreen lyrics remains minimal and does not show the Audio Output indicator
 ```
 
 ---
@@ -5124,6 +5211,16 @@ contract was violated.
 
 This engineering record documents the following intentional changes made during the latest
 implementation pass.
+
+## Audio output indicator and system-volume integration
+
+- Added `AudioOutputController` / `AudioOutputState` / `AudioOutputType` to `:core:playback-api` and the Android `AudioManager` implementation `AndroidAudioOutputController` to `:playback:media3`.
+- Wired the application-scoped controller through `AppContainer`, `MainActivity`, `MainNavigation`, `UnifiedPlayerSheet`, and `PlayerRoute`.
+- Added `AudioOutputIndicator` with detected Bluetooth name or localized local-device label, themed rounded control, and a transparent-scrim `ModalBottomSheet`.
+- Connected the slider to Android `AudioManager.STREAM_MUSIC`, including fixed-volume handling and 200 ms refresh polling only while the bottom sheet is open so hardware volume-button changes update the UI.
+- Kept Audio Output visible in normal portrait and landscape Player layouts but intentionally omitted it from fullscreen lyrics.
+- Reused shared `:core:ui` vector resources for Bluetooth, local-device, volume-down, volume-up, and lyrics icons instead of keeping duplicate feature-local icon resources.
+- Documented the portrait/landscape width contract: portrait maximum `128dp`; landscape uses remaining space while reserving `224dp` for Repeat/Shuffle and an `8dp` inter-group gap; all three controls are `64dp` high.
 
 ## UI spacing and positioning
 
