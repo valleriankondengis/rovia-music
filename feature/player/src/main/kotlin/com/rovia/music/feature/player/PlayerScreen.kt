@@ -1,4 +1,3 @@
-
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -6,8 +5,11 @@
 package com.rovia.music.feature.player
 
 import android.app.WallpaperColors
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Size
 import androidx.compose.animation.animateColorAsState
@@ -36,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.SyncedLyrics
+import com.rovia.music.core.ui.component.ArtworkBitmapLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,11 +123,14 @@ fun PlayerScreen(
     val context =
         LocalContext.current
 
+    val trackUri =
+        track?.uri
+
     val artworkUri =
         track?.artworkUri
 
     /*
-     * Keep the existing palette while the next thumbnail loads.
+     * Keep the existing palette while the next artwork loads.
      * This prevents a brief flash to the default background
      * during track transitions.
      */
@@ -133,10 +139,14 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(
+        trackUri,
         artworkUri,
         context,
     ) {
-        if (artworkUri.isNullOrBlank()) {
+        if (
+            trackUri.isNullOrBlank() &&
+            artworkUri.isNullOrBlank()
+        ) {
             artworkPalette = null
             return@LaunchedEffect
         }
@@ -144,19 +154,49 @@ fun PlayerScreen(
         val sampledPalette =
             withContext(Dispatchers.IO) {
                 try {
-                    val bitmap =
+                    val appContext =
                         context.applicationContext
-                            .contentResolver
-                            .loadThumbnail(
-                                Uri.parse(artworkUri),
-                                Size(64, 64),
-                                null,
+
+                    /*
+                     * Use the audio URI as the primary source
+                     * for embedded artwork in both playback
+                     * contexts.
+                     *
+                     * Regular playback:
+                     *   track.uri is the MediaStore audio URI.
+                     *
+                     * External playback:
+                     *   track.uri is the supplied content URI.
+                     *
+                     * This avoids relying on two different
+                     * thumbnail sources to derive the palette.
+                     */
+                    val embeddedBitmap =
+                        trackUri?.let { audioUri ->
+                            loadEmbeddedArtworkBitmap(
+                                context = appContext,
+                                audioUri = audioUri,
+                                maxDimension = ARTWORK_PALETTE_MAX_DIMENSION,
                             )
+                        }
+
+                    /*
+                     * Retain the existing thumbnail and cached-file
+                     * loading paths when embedded artwork cannot
+                     * be read from the audio URI.
+                     */
+                    val bitmap =
+                        embeddedBitmap
+                            ?: loadArtworkFallbackBitmap(
+                                context = appContext,
+                                artworkUri = artworkUri,
+                                maxDimension = ARTWORK_PALETTE_MAX_DIMENSION,
+                            )
+                            ?: return@withContext null
 
                     try {
                         /*
-                         * This is the same public Android API
-                         * used by AOSP System UI to obtain
+                         * Continue using Android's public API for
                          * representative artwork colors.
                          */
                         val wallpaperColors =
@@ -166,6 +206,13 @@ fun PlayerScreen(
                             wallpaperColors,
                         )
                     } finally {
+                        /*
+                         * Release only the temporary bitmap
+                         * created for palette extraction.
+                         *
+                         * Artwork displayed by the UI is loaded
+                         * separately and is not recycled here.
+                         */
                         bitmap.recycle()
                     }
                 } catch (
@@ -174,8 +221,8 @@ fun PlayerScreen(
                     throw cancelled
                 } catch (_: Exception) {
                     /*
-                     * Missing, unreadable, or neutral artwork
-                     * falls back to the Material 3 theme.
+                     * Unavailable or unusable artwork falls back
+                     * to the existing Material 3 theme behavior.
                      */
                     null
                 }
@@ -497,3 +544,172 @@ fun PlayerScreen(
         }
     }
 }
+
+/**
+ * Extracts the embedded artwork directly from the audio source.
+ *
+ * The same extraction and bitmap-decoding path is used for
+ * regular MediaStore playback and external content-URI playback.
+ *
+ * This function must run off the main thread.
+ */
+private fun loadEmbeddedArtworkBitmap(
+    context: Context,
+    audioUri: String,
+    maxDimension: Int,
+): Bitmap? {
+    val uri =
+        runCatching {
+            Uri.parse(audioUri)
+        }.getOrNull()
+            ?: return null
+
+    val retriever =
+        MediaMetadataRetriever()
+
+    return try {
+        retriever.setDataSource(
+            context,
+            uri,
+        )
+
+        val embeddedPicture =
+            retriever.embeddedPicture
+                ?: return null
+
+        decodeEmbeddedArtwork(
+            bytes = embeddedPicture,
+            maxDimension = maxDimension,
+        )
+    } catch (
+        cancelled: CancellationException,
+    ) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    } finally {
+        runCatching {
+            retriever.release()
+        }
+    }
+}
+
+/**
+ * Loads artwork from the existing artwork URI if direct embedded
+ * artwork extraction is unavailable.
+ *
+ * Preserve the original ContentResolver thumbnail path first for
+ * non-file URIs, then fall back to ArtworkBitmapLoader.
+ */
+private suspend fun loadArtworkFallbackBitmap(
+    context: Context,
+    artworkUri: String?,
+    maxDimension: Int,
+): Bitmap? {
+    if (artworkUri.isNullOrBlank()) {
+        return null
+    }
+
+    val uri =
+        runCatching {
+            Uri.parse(artworkUri)
+        }.getOrNull()
+            ?: return null
+
+    if (uri.scheme == FILE_SCHEME) {
+        return ArtworkBitmapLoader.load(
+            context = context,
+            artworkUri = artworkUri,
+            maxDimension = maxDimension,
+        )
+    }
+
+    val thumbnail =
+        try {
+            context.contentResolver.loadThumbnail(
+                uri,
+                Size(
+                    maxDimension,
+                    maxDimension,
+                ),
+                null,
+            )
+        } catch (
+            cancelled: CancellationException,
+        ) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+
+    return thumbnail
+        ?: ArtworkBitmapLoader.load(
+            context = context,
+            artworkUri = artworkUri,
+            maxDimension = maxDimension,
+        )
+}
+
+/**
+ * Decodes embedded image bytes using the same power-of-two
+ * sampling strategy used by ArtworkBitmapLoader.
+ *
+ * This keeps memory use bounded and makes palette input consistent
+ * when both playback contexts expose the same embedded image bytes.
+ */
+private fun decodeEmbeddedArtwork(
+    bytes: ByteArray,
+    maxDimension: Int,
+): Bitmap? {
+    if (bytes.isEmpty()) {
+        return null
+    }
+
+    val safeMaxDimension =
+        maxDimension.coerceAtLeast(1)
+
+    val boundsOptions =
+        BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+
+    BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        boundsOptions,
+    )
+
+    if (
+        boundsOptions.outWidth <= 0 ||
+        boundsOptions.outHeight <= 0
+    ) {
+        return null
+    }
+
+    var sampleSize = 1
+
+    while (
+        boundsOptions.outWidth / sampleSize > safeMaxDimension ||
+        boundsOptions.outHeight / sampleSize > safeMaxDimension
+    ) {
+        sampleSize *= 2
+    }
+
+    val decodeOptions =
+        BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inJustDecodeBounds = false
+        }
+
+    return BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        decodeOptions,
+    )
+}
+
+private const val ARTWORK_PALETTE_MAX_DIMENSION = 64
+private const val FILE_SCHEME = "file"
