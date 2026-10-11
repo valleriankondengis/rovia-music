@@ -1,8 +1,10 @@
+
 package com.rovia.music.data.media.store
 
 import android.content.ContentResolver
 import android.content.Context
 import android.database.Cursor
+import android.os.Build
 import android.provider.MediaStore
 import com.rovia.music.core.model.Track
 import kotlinx.coroutines.Dispatchers
@@ -59,36 +61,51 @@ class MediaStoreCatalogDataSource(
     private val contentResolver: ContentResolver =
         applicationContext.contentResolver
 
+    /**
+     * These MediaStore columns are available starting from Android 16
+     * (API 36). Older Android versions must not request them.
+     */
+    private val supportsApi36AudioColumns =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA
+
     private val trackProjection =
-        arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ARTIST,
-            MediaStore.Audio.Media.GENRE,
-            MediaStore.Audio.Media.AUTHOR,
-            MediaStore.Audio.Media.COMPOSER,
-            MediaStore.Audio.Media.WRITER,
-            MediaStore.Audio.Media.YEAR,
-            MediaStore.Audio.Media.TRACK,
-            MediaStore.Audio.Media.DISC_NUMBER,
-            MediaStore.Audio.Media.CD_TRACK_NUMBER,
-            MediaStore.Audio.Media.COMPILATION,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-            MediaStore.Audio.Media.DATE_TAKEN,
-            MediaStore.Audio.Media.INFERRED_DATE,
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.SAMPLERATE,
-            MediaStore.Audio.Media.BITS_PER_SAMPLE,
-            MediaStore.Audio.Media.BITRATE,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.RELATIVE_PATH,
-            MediaStore.MediaColumns.GENERATION_MODIFIED,
-        )
+        buildList<String> {
+            add(MediaStore.Audio.Media._ID)
+            add(MediaStore.Audio.Media.TITLE)
+            add(MediaStore.Audio.Media.ARTIST)
+            add(MediaStore.Audio.Media.ALBUM)
+            add(MediaStore.Audio.Media.ALBUM_ARTIST)
+            add(MediaStore.Audio.Media.GENRE)
+            add(MediaStore.Audio.Media.AUTHOR)
+            add(MediaStore.Audio.Media.COMPOSER)
+            add(MediaStore.Audio.Media.WRITER)
+            add(MediaStore.Audio.Media.YEAR)
+            add(MediaStore.Audio.Media.TRACK)
+            add(MediaStore.Audio.Media.DISC_NUMBER)
+            add(MediaStore.Audio.Media.CD_TRACK_NUMBER)
+            add(MediaStore.Audio.Media.COMPILATION)
+            add(MediaStore.Audio.Media.DURATION)
+            add(MediaStore.Audio.Media.DATE_ADDED)
+            add(MediaStore.Audio.Media.DATE_MODIFIED)
+            add(MediaStore.Audio.Media.DATE_TAKEN)
+
+            if (supportsApi36AudioColumns) {
+                add(MediaStore.MediaColumns.INFERRED_DATE)
+            }
+
+            add(MediaStore.Audio.Media.DISPLAY_NAME)
+            add(MediaStore.Audio.Media.MIME_TYPE)
+
+            if (supportsApi36AudioColumns) {
+                add(MediaStore.Audio.Media.SAMPLERATE)
+                add(MediaStore.Audio.Media.BITS_PER_SAMPLE)
+            }
+
+            add(MediaStore.Audio.Media.BITRATE)
+            add(MediaStore.Audio.Media.SIZE)
+            add(MediaStore.Audio.Media.RELATIVE_PATH)
+            add(MediaStore.MediaColumns.GENERATION_MODIFIED)
+        }.toTypedArray()
 
     /**
      * Returns the currently available external MediaStore volume names.
@@ -362,9 +379,13 @@ class MediaStoreCatalogDataSource(
             )
 
         val inferredDateIndex =
-            cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.INFERRED_DATE,
-            )
+            if (supportsApi36AudioColumns) {
+                cursor.getColumnIndex(
+                    MediaStore.MediaColumns.INFERRED_DATE,
+                )
+            } else {
+                -1
+            }
 
         val displayNameIndex =
             cursor.getColumnIndexOrThrow(
@@ -377,14 +398,22 @@ class MediaStoreCatalogDataSource(
             )
 
         val sampleRateIndex =
-            cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.SAMPLERATE,
-            )
+            if (supportsApi36AudioColumns) {
+                cursor.getColumnIndex(
+                    MediaStore.Audio.Media.SAMPLERATE,
+                )
+            } else {
+                -1
+            }
 
         val bitsPerSampleIndex =
-            cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.BITS_PER_SAMPLE,
-            )
+            if (supportsApi36AudioColumns) {
+                cursor.getColumnIndex(
+                    MediaStore.Audio.Media.BITS_PER_SAMPLE,
+                )
+            } else {
+                -1
+            }
 
         val bitrateIndex =
             cursor.getColumnIndexOrThrow(
@@ -501,20 +530,53 @@ class MediaStoreCatalogDataSource(
                 cursor.readLong(metadataDateIndex)
                     ?.takeIf { it > 0L }
 
+            val nativeInferredDateEpochMillis =
+                if (
+                    inferredDateIndex >= 0 &&
+                    !cursor.isNull(inferredDateIndex)
+                ) {
+                    cursor.readLong(inferredDateIndex)
+                        ?.takeIf { it > 0L }
+                } else {
+                    null
+                }
+
+            /**
+             * Android 16+ prefers MediaStore's inferred date.
+             * Android 13-15 fall back to DATE_TAKEN, then DATE_MODIFIED.
+             *
+             * DATE_TAKEN is in milliseconds, whereas DATE_MODIFIED is in
+             * seconds, so DATE_MODIFIED must be converted to milliseconds.
+             */
             val inferredDateEpochMillis =
-                cursor.readLong(inferredDateIndex)
-                    ?.takeIf { it > 0L }
+                nativeInferredDateEpochMillis
+                    ?: metadataDateEpochMillis
+                    ?: dateModifiedEpochSeconds?.times(1_000L)
 
             val mimeType =
                 cursor.readString(mimeTypeIndex)
 
             val sampleRateHz =
-                cursor.readInt(sampleRateIndex)
-                    ?.takeIf { it > 0 }
+                if (
+                    sampleRateIndex >= 0 &&
+                    !cursor.isNull(sampleRateIndex)
+                ) {
+                    cursor.readInt(sampleRateIndex)
+                        ?.takeIf { it > 0 }
+                } else {
+                    null
+                }
 
             val bitsPerSample =
-                cursor.readInt(bitsPerSampleIndex)
-                    ?.takeIf { it > 0 }
+                if (
+                    bitsPerSampleIndex >= 0 &&
+                    !cursor.isNull(bitsPerSampleIndex)
+                ) {
+                    cursor.readInt(bitsPerSampleIndex)
+                        ?.takeIf { it > 0 }
+                } else {
+                    null
+                }
 
             val bitrateBps =
                 cursor.readInt(bitrateIndex)
@@ -613,7 +675,7 @@ class MediaStoreCatalogDataSource(
     private fun Cursor.readInt(
         index: Int,
     ): Int? {
-        return if (isNull(index)) {
+        return if (index < 0 || isNull(index)) {
             null
         } else {
             getInt(index)
@@ -623,7 +685,7 @@ class MediaStoreCatalogDataSource(
     private fun Cursor.readLong(
         index: Int,
     ): Long? {
-        return if (isNull(index)) {
+        return if (index < 0 || isNull(index)) {
             null
         } else {
             getLong(index)

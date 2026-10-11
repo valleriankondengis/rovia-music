@@ -1,7 +1,9 @@
+
 package com.rovia.music.data.media.store
 
 import android.content.ContentUris
 import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
 import com.rovia.music.core.library.FolderBrowserRepository
 import com.rovia.music.core.library.FolderFilterRepository
@@ -17,6 +19,15 @@ class MediaStoreFolderBrowserRepository(
 
     private val contentResolver =
         context.applicationContext.contentResolver
+
+    /**
+     * INFERRED_DATE, SAMPLERATE, and BITS_PER_SAMPLE are
+     * available starting from Android 16 (API 36).
+     *
+     * Older Android versions must not request these columns.
+     */
+    private val supportsApi36AudioColumns =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA
 
     override suspend fun getRootFolders(): List<MusicFolder> =
         withContext(Dispatchers.IO) {
@@ -164,35 +175,43 @@ class MediaStoreFolderBrowserRepository(
              * contain the same metadata available in All Songs.
              */
             val projection =
-                arrayOf(
-                    MediaStore.Audio.Media._ID,
-                    MediaStore.Audio.Media.TITLE,
-                    MediaStore.Audio.Media.ARTIST,
-                    MediaStore.Audio.Media.ALBUM,
-                    MediaStore.Audio.Media.ALBUM_ARTIST,
-                    MediaStore.Audio.Media.GENRE,
-                    MediaStore.Audio.Media.AUTHOR,
-                    MediaStore.Audio.Media.COMPOSER,
-                    MediaStore.Audio.Media.WRITER,
-                    MediaStore.Audio.Media.YEAR,
-                    MediaStore.Audio.Media.TRACK,
-                    MediaStore.Audio.Media.DISC_NUMBER,
-                    MediaStore.Audio.Media.CD_TRACK_NUMBER,
-                    MediaStore.Audio.Media.COMPILATION,
-                    MediaStore.Audio.Media.DURATION,
-                    MediaStore.Audio.Media.DATE_ADDED,
-                    MediaStore.Audio.Media.DATE_MODIFIED,
-                    MediaStore.Audio.Media.DATE_TAKEN,
-                    MediaStore.Audio.Media.INFERRED_DATE,
-                    MediaStore.Audio.Media.DISPLAY_NAME,
-                    MediaStore.Audio.Media.MIME_TYPE,
-                    MediaStore.Audio.Media.SAMPLERATE,
-                    MediaStore.Audio.Media.BITS_PER_SAMPLE,
-                    MediaStore.Audio.Media.BITRATE,
-                    MediaStore.Audio.Media.SIZE,
-                    MediaStore.Audio.Media.RELATIVE_PATH,
-                    MediaStore.Audio.Media.VOLUME_NAME,
-                )
+                buildList<String> {
+                    add(MediaStore.Audio.Media._ID)
+                    add(MediaStore.Audio.Media.TITLE)
+                    add(MediaStore.Audio.Media.ARTIST)
+                    add(MediaStore.Audio.Media.ALBUM)
+                    add(MediaStore.Audio.Media.ALBUM_ARTIST)
+                    add(MediaStore.Audio.Media.GENRE)
+                    add(MediaStore.Audio.Media.AUTHOR)
+                    add(MediaStore.Audio.Media.COMPOSER)
+                    add(MediaStore.Audio.Media.WRITER)
+                    add(MediaStore.Audio.Media.YEAR)
+                    add(MediaStore.Audio.Media.TRACK)
+                    add(MediaStore.Audio.Media.DISC_NUMBER)
+                    add(MediaStore.Audio.Media.CD_TRACK_NUMBER)
+                    add(MediaStore.Audio.Media.COMPILATION)
+                    add(MediaStore.Audio.Media.DURATION)
+                    add(MediaStore.Audio.Media.DATE_ADDED)
+                    add(MediaStore.Audio.Media.DATE_MODIFIED)
+                    add(MediaStore.Audio.Media.DATE_TAKEN)
+
+                    if (supportsApi36AudioColumns) {
+                        add(MediaStore.MediaColumns.INFERRED_DATE)
+                    }
+
+                    add(MediaStore.Audio.Media.DISPLAY_NAME)
+                    add(MediaStore.Audio.Media.MIME_TYPE)
+
+                    if (supportsApi36AudioColumns) {
+                        add(MediaStore.Audio.Media.SAMPLERATE)
+                        add(MediaStore.Audio.Media.BITS_PER_SAMPLE)
+                    }
+
+                    add(MediaStore.Audio.Media.BITRATE)
+                    add(MediaStore.Audio.Media.SIZE)
+                    add(MediaStore.Audio.Media.RELATIVE_PATH)
+                    add(MediaStore.Audio.Media.VOLUME_NAME)
+                }.toTypedArray()
 
             val tracks =
                 mutableListOf<Track>()
@@ -296,9 +315,13 @@ class MediaStoreFolderBrowserRepository(
                     )
 
                 val inferredDateIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.INFERRED_DATE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.MediaColumns.INFERRED_DATE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val displayNameIndex =
                     cursor.getColumnIndexOrThrow(
@@ -311,14 +334,22 @@ class MediaStoreFolderBrowserRepository(
                     )
 
                 val sampleRateIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.SAMPLERATE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.SAMPLERATE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val bitsPerSampleIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.BITS_PER_SAMPLE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.BITS_PER_SAMPLE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val bitrateIndex =
                     cursor.getColumnIndexOrThrow(
@@ -578,14 +609,13 @@ class MediaStoreFolderBrowserRepository(
                                 }
                         }
 
-                    val inferredDateEpochMillis =
+                    val nativeInferredDateEpochMillis =
                         if (
-                            cursor.isNull(
+                            inferredDateIndex >= 0 &&
+                            !cursor.isNull(
                                 inferredDateIndex,
                             )
                         ) {
-                            null
-                        } else {
                             cursor
                                 .getLong(
                                     inferredDateIndex,
@@ -593,7 +623,23 @@ class MediaStoreFolderBrowserRepository(
                                 .takeIf {
                                     it > 0L
                                 }
-                    }
+                        } else {
+                            null
+                        }
+
+                    /*
+                     * Android 16+ prefers INFERRED_DATE.
+                     * Android 13-15 fall back to DATE_TAKEN,
+                     * then DATE_MODIFIED.
+                     *
+                     * DATE_TAKEN uses milliseconds, while
+                     * DATE_MODIFIED uses seconds.
+                     */
+                    val inferredDateEpochMillis =
+                        nativeInferredDateEpochMillis
+                            ?: metadataDateEpochMillis
+                            ?: dateModifiedEpochSeconds
+                                ?.times(1_000L)
 
                     val mimeType =
                         cursor
@@ -606,12 +652,11 @@ class MediaStoreFolderBrowserRepository(
 
                     val sampleRateHz =
                         if (
-                            cursor.isNull(
+                            sampleRateIndex >= 0 &&
+                            !cursor.isNull(
                                 sampleRateIndex,
                             )
                         ) {
-                            null
-                        } else {
                             cursor
                                 .getInt(
                                     sampleRateIndex,
@@ -619,16 +664,17 @@ class MediaStoreFolderBrowserRepository(
                                 .takeIf {
                                     it > 0
                                 }
+                        } else {
+                            null
                         }
 
                     val bitsPerSample =
                         if (
-                            cursor.isNull(
+                            bitsPerSampleIndex >= 0 &&
+                            !cursor.isNull(
                                 bitsPerSampleIndex,
                             )
                         ) {
-                            null
-                        } else {
                             cursor
                                 .getInt(
                                     bitsPerSampleIndex,
@@ -636,6 +682,8 @@ class MediaStoreFolderBrowserRepository(
                                 .takeIf {
                                     it > 0
                                 }
+                        } else {
+                            null
                         }
 
                     val bitrateBps =
@@ -719,11 +767,9 @@ class MediaStoreFolderBrowserRepository(
                             bitsPerSample = bitsPerSample,
                             bitrateBps = bitrateBps,
                             fileSizeBytes = fileSizeBytes,
-                            relativePath =
-                                songRelativePath,
+                            relativePath = songRelativePath,
                             volumeName = volumeName,
-                            artworkUri =
-                                contentUri.toString(),
+                            artworkUri = contentUri.toString(),
                         )
                 }
             }

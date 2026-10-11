@@ -1,8 +1,10 @@
+
 package com.rovia.music.data.media.store
 
 import android.content.ContentResolver
 import android.content.Context
 import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.provider.MediaStore
 import com.rovia.music.core.library.FolderFilterRepository
 import com.rovia.music.core.library.MusicRepository
@@ -21,6 +23,15 @@ class MediaStoreMusicRepository(
 
     private val contentResolver: ContentResolver =
         applicationContext.contentResolver
+
+    /**
+     * INFERRED_DATE, SAMPLERATE, and BITS_PER_SAMPLE are
+     * available starting from Android 16 (API 36).
+     *
+     * Older Android versions must not request these columns.
+     */
+    private val supportsApi36AudioColumns =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA
 
     private val excludedFolders: StateFlow<Set<String>>
         get() =
@@ -57,35 +68,43 @@ class MediaStoreMusicRepository(
                 )
 
             val projection =
-                arrayOf(
-                    MediaStore.Audio.Media._ID,
-                    MediaStore.Audio.Media.TITLE,
-                    MediaStore.Audio.Media.ARTIST,
-                    MediaStore.Audio.Media.ALBUM,
-                    MediaStore.Audio.Media.ALBUM_ARTIST,
-                    MediaStore.Audio.Media.GENRE,
-                    MediaStore.Audio.Media.AUTHOR,
-                    MediaStore.Audio.Media.COMPOSER,
-                    MediaStore.Audio.Media.WRITER,
-                    MediaStore.Audio.Media.YEAR,
-                    MediaStore.Audio.Media.TRACK,
-                    MediaStore.Audio.Media.DISC_NUMBER,
-                    MediaStore.Audio.Media.CD_TRACK_NUMBER,
-                    MediaStore.Audio.Media.COMPILATION,
-                    MediaStore.Audio.Media.DURATION,
-                    MediaStore.Audio.Media.DATE_ADDED,
-                    MediaStore.Audio.Media.DATE_MODIFIED,
-                    MediaStore.Audio.Media.DATE_TAKEN,
-                    MediaStore.Audio.Media.INFERRED_DATE,
-                    MediaStore.Audio.Media.DISPLAY_NAME,
-                    MediaStore.Audio.Media.MIME_TYPE,
-                    MediaStore.Audio.Media.SAMPLERATE,
-                    MediaStore.Audio.Media.BITS_PER_SAMPLE,
-                    MediaStore.Audio.Media.BITRATE,
-                    MediaStore.Audio.Media.SIZE,
-                    MediaStore.Audio.Media.RELATIVE_PATH,
-                    MediaStore.Audio.Media.VOLUME_NAME,
-                )
+                buildList<String> {
+                    add(MediaStore.Audio.Media._ID)
+                    add(MediaStore.Audio.Media.TITLE)
+                    add(MediaStore.Audio.Media.ARTIST)
+                    add(MediaStore.Audio.Media.ALBUM)
+                    add(MediaStore.Audio.Media.ALBUM_ARTIST)
+                    add(MediaStore.Audio.Media.GENRE)
+                    add(MediaStore.Audio.Media.AUTHOR)
+                    add(MediaStore.Audio.Media.COMPOSER)
+                    add(MediaStore.Audio.Media.WRITER)
+                    add(MediaStore.Audio.Media.YEAR)
+                    add(MediaStore.Audio.Media.TRACK)
+                    add(MediaStore.Audio.Media.DISC_NUMBER)
+                    add(MediaStore.Audio.Media.CD_TRACK_NUMBER)
+                    add(MediaStore.Audio.Media.COMPILATION)
+                    add(MediaStore.Audio.Media.DURATION)
+                    add(MediaStore.Audio.Media.DATE_ADDED)
+                    add(MediaStore.Audio.Media.DATE_MODIFIED)
+                    add(MediaStore.Audio.Media.DATE_TAKEN)
+
+                    if (supportsApi36AudioColumns) {
+                        add(MediaStore.MediaColumns.INFERRED_DATE)
+                    }
+
+                    add(MediaStore.Audio.Media.DISPLAY_NAME)
+                    add(MediaStore.Audio.Media.MIME_TYPE)
+
+                    if (supportsApi36AudioColumns) {
+                        add(MediaStore.Audio.Media.SAMPLERATE)
+                        add(MediaStore.Audio.Media.BITS_PER_SAMPLE)
+                    }
+
+                    add(MediaStore.Audio.Media.BITRATE)
+                    add(MediaStore.Audio.Media.SIZE)
+                    add(MediaStore.Audio.Media.RELATIVE_PATH)
+                    add(MediaStore.Audio.Media.VOLUME_NAME)
+                }.toTypedArray()
 
             val queryArgs =
                 android.os.Bundle().apply {
@@ -196,9 +215,13 @@ class MediaStoreMusicRepository(
                     )
 
                 val inferredDateIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.INFERRED_DATE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.MediaColumns.INFERRED_DATE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val displayNameIndex =
                     cursor.getColumnIndexOrThrow(
@@ -211,14 +234,22 @@ class MediaStoreMusicRepository(
                     )
 
                 val sampleRateIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.SAMPLERATE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.SAMPLERATE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val bitsPerSampleIndex =
-                    cursor.getColumnIndexOrThrow(
-                        MediaStore.Audio.Media.BITS_PER_SAMPLE,
-                    )
+                    if (supportsApi36AudioColumns) {
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.BITS_PER_SAMPLE,
+                        )
+                    } else {
+                        -1
+                    }
 
                 val bitrateIndex =
                     cursor.getColumnIndexOrThrow(
@@ -242,12 +273,8 @@ class MediaStoreMusicRepository(
 
                 val currentExcludedFolders =
                     excludedFolders.value
-                        .map(
-                            ::normalizeFolderPath,
-                        )
-                        .filter(
-                            String::isNotBlank,
-                        )
+                        .map(::normalizeFolderPath)
+                        .filter(String::isNotBlank)
                         .toSet()
 
                 while (cursor.moveToNext()) {
@@ -269,16 +296,13 @@ class MediaStoreMusicRepository(
                     }
 
                     val id =
-                        cursor.getLong(
-                            idIndex,
-                        )
+                        cursor.getLong(idIndex)
 
                     val title =
-                        cursor.getString(
-                            titleIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(titleIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
                             ?: cursor.getString(
                                 displayNameIndex,
                             )
@@ -291,86 +315,65 @@ class MediaStoreMusicRepository(
                         }
 
                     val artist =
-                        cursor.getString(
-                            artistIndex,
-                        )?.takeUnless {
-                            it.isBlank() ||
-                                it == "<unknown>"
-                        }
+                        cursor.getString(artistIndex)
+                            ?.takeUnless {
+                                it.isBlank() ||
+                                    it == "<unknown>"
+                            }
 
                     val album =
-                        cursor.getString(
-                            albumIndex,
-                        )?.takeUnless {
-                            it.isBlank() ||
-                                it == "<unknown>"
-                        }
+                        cursor.getString(albumIndex)
+                            ?.takeUnless {
+                                it.isBlank() ||
+                                    it == "<unknown>"
+                            }
 
                     val albumArtist =
-                        cursor.getString(
-                            albumArtistIndex,
-                        )?.takeUnless {
-                            it.isBlank() ||
-                                it == "<unknown>"
-                        }
+                        cursor.getString(albumArtistIndex)
+                            ?.takeUnless {
+                                it.isBlank() ||
+                                    it == "<unknown>"
+                            }
 
                     val genre =
-                        cursor.getString(
-                            genreIndex,
-                        )?.takeUnless {
-                            it.isBlank() ||
-                                it == "<unknown>"
-                        }
+                        cursor.getString(genreIndex)
+                            ?.takeUnless {
+                                it.isBlank() ||
+                                    it == "<unknown>"
+                            }
 
                     val author =
-                        cursor.getString(
-                            authorIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(authorIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val composer =
-                        cursor.getString(
-                            composerIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(composerIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val writer =
-                        cursor.getString(
-                            writerIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(writerIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val year =
-                        if (
-                            cursor.isNull(
-                                yearIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(yearIndex)) {
                             null
                         } else {
-                            cursor.getInt(
-                                yearIndex,
-                            ).takeIf {
-                                it > 0
-                            }
+                            cursor.getInt(yearIndex)
+                                .takeIf { it > 0 }
                         }
 
                     val encodedTrackNumber =
-                        if (
-                            cursor.isNull(
-                                trackIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(trackIndex)) {
                             null
                         } else {
-                            cursor.getInt(
-                                trackIndex,
-                            ).takeIf {
-                                it > 0
-                            }
+                            cursor.getInt(trackIndex)
+                                .takeIf { it > 0 }
                         }
 
                     val trackNumber =
@@ -383,160 +386,125 @@ class MediaStoreMusicRepository(
                         }
 
                     val discNumber =
-                        cursor.getString(
-                            discNumberIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        } ?: encodedTrackNumber?.let { encoded ->
-                            if (encoded >= 1_000) {
-                                (encoded / 1_000).toString()
-                            } else {
-                                null
+                        cursor.getString(discNumberIndex)
+                            ?.takeUnless {
+                                it.isBlank()
                             }
-                        }
+                            ?: encodedTrackNumber?.let { encoded ->
+                                if (encoded >= 1_000) {
+                                    (encoded / 1_000).toString()
+                                } else {
+                                    null
+                                }
+                            }
 
                     val cdTrackNumber =
-                        cursor.getString(
-                            cdTrackNumberIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(cdTrackNumberIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val compilation =
-                        cursor.getString(
-                            compilationIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(compilationIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val durationMs =
-                        cursor.getLong(
-                            durationIndex,
-                        )
+                        cursor.getLong(durationIndex)
 
                     val dateAddedEpochSeconds =
-                        cursor.getLong(
-                            dateAddedIndex,
-                        )
+                        cursor.getLong(dateAddedIndex)
 
                     val dateModifiedEpochSeconds =
-                        if (
-                            cursor.isNull(
-                                dateModifiedIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(dateModifiedIndex)) {
                             null
                         } else {
-                            cursor.getLong(
-                                dateModifiedIndex,
-                            ).takeIf {
-                                it > 0L
-                            }
+                            cursor.getLong(dateModifiedIndex)
+                                .takeIf { it > 0L }
                         }
 
                     val metadataDateEpochMillis =
-                        if (
-                            cursor.isNull(
-                                metadataDateIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(metadataDateIndex)) {
                             null
                         } else {
-                            cursor.getLong(
-                                metadataDateIndex,
-                            ).takeIf {
-                                it > 0L
-                            }
+                            cursor.getLong(metadataDateIndex)
+                                .takeIf { it > 0L }
                         }
 
-                    val inferredDateEpochMillis =
+                    val nativeInferredDateEpochMillis =
                         if (
-                            cursor.isNull(
-                                inferredDateIndex,
-                            )
+                            inferredDateIndex >= 0 &&
+                            !cursor.isNull(inferredDateIndex)
                         ) {
-                            null
+                            cursor.getLong(inferredDateIndex)
+                                .takeIf { it > 0L }
                         } else {
-                            cursor.getLong(
-                                inferredDateIndex,
-                            ).takeIf {
-                                it > 0L
-                            }
+                            null
                         }
+
+                    /*
+                     * Android 16+ prefers INFERRED_DATE.
+                     * Android 13-15 use DATE_TAKEN, then DATE_MODIFIED.
+                     *
+                     * DATE_TAKEN is milliseconds since epoch.
+                     * DATE_MODIFIED is seconds since epoch, so convert
+                     * it to milliseconds for Track.inferredDateEpochMillis.
+                     */
+                    val inferredDateEpochMillis =
+                        nativeInferredDateEpochMillis
+                            ?: metadataDateEpochMillis
+                            ?: dateModifiedEpochSeconds?.times(1_000L)
 
                     val mimeType =
-                        cursor.getString(
-                            mimeTypeIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(mimeTypeIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val sampleRateHz =
                         if (
-                            cursor.isNull(
-                                sampleRateIndex,
-                            )
+                            sampleRateIndex >= 0 &&
+                            !cursor.isNull(sampleRateIndex)
                         ) {
-                            null
+                            cursor.getInt(sampleRateIndex)
+                                .takeIf { it > 0 }
                         } else {
-                            cursor.getInt(
-                                sampleRateIndex,
-                            ).takeIf {
-                                it > 0
-                            }
+                            null
                         }
 
                     val bitsPerSample =
                         if (
-                            cursor.isNull(
-                                bitsPerSampleIndex,
-                            )
+                            bitsPerSampleIndex >= 0 &&
+                            !cursor.isNull(bitsPerSampleIndex)
                         ) {
-                            null
+                            cursor.getInt(bitsPerSampleIndex)
+                                .takeIf { it > 0 }
                         } else {
-                            cursor.getInt(
-                                bitsPerSampleIndex,
-                            ).takeIf {
-                                it > 0
-                            }
+                            null
                         }
 
                     val bitrateBps =
-                        if (
-                            cursor.isNull(
-                                bitrateIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(bitrateIndex)) {
                             null
                         } else {
-                            cursor.getInt(
-                                bitrateIndex,
-                            ).takeIf {
-                                it > 0
-                            }
+                            cursor.getInt(bitrateIndex)
+                                .takeIf { it > 0 }
                         }
 
                     val fileSizeBytes =
-                        if (
-                            cursor.isNull(
-                                fileSizeIndex,
-                            )
-                        ) {
+                        if (cursor.isNull(fileSizeIndex)) {
                             null
                         } else {
-                            cursor.getLong(
-                                fileSizeIndex,
-                            ).takeIf {
-                                it > 0L
-                            }
+                            cursor.getLong(fileSizeIndex)
+                                .takeIf { it > 0L }
                         }
 
                     val volumeName =
-                        cursor.getString(
-                            volumeNameIndex,
-                        )?.takeUnless {
-                            it.isBlank()
-                        }
+                        cursor.getString(volumeNameIndex)
+                            ?.takeUnless {
+                                it.isBlank()
+                            }
 
                     val uri =
                         MediaStore.Audio.Media.getContentUri(
@@ -567,13 +535,10 @@ class MediaStoreMusicRepository(
                                 embeddedMetadata.releaseDate,
                             trackNumber = trackNumber,
                             discNumber = discNumber,
-                            cdTrackNumber =
-                                cdTrackNumber,
-                            compilation =
-                                compilation,
+                            cdTrackNumber = cdTrackNumber,
+                            compilation = compilation,
                             label = null,
-                            copyright =
-                                embeddedMetadata.copyright,
+                            copyright = embeddedMetadata.copyright,
                             releaseType = null,
                             durationMs = durationMs,
                             dateAddedEpochSeconds =
@@ -585,27 +550,19 @@ class MediaStoreMusicRepository(
                             inferredDateEpochMillis =
                                 inferredDateEpochMillis,
                             mimeType = mimeType,
-                            sampleRateHz =
-                                sampleRateHz,
-                            bitsPerSample =
-                                bitsPerSample,
-                            bitrateBps =
-                                bitrateBps,
-                            fileSizeBytes =
-                                fileSizeBytes,
-                            relativePath =
-                                relativePath,
-                            volumeName =
-                                volumeName,
-                            artworkUri =
-                                uri.toString(),
+                            sampleRateHz = sampleRateHz,
+                            bitsPerSample = bitsPerSample,
+                            bitrateBps = bitrateBps,
+                            fileSizeBytes = fileSizeBytes,
+                            relativePath = relativePath,
+                            volumeName = volumeName,
+                            artworkUri = uri.toString(),
                         )
 
                     /*
-                     * Limit diterapkan setelah filtering.
-                     *
-                     * Lagu dari folder excluded tidak memakan
-                     * slot Recently Added.
+                     * Apply the limit after filtering.
+                     * Excluded folders therefore do not consume
+                     * Recently Added slots.
                      */
                     if (
                         limit != null &&
@@ -631,23 +588,18 @@ class MediaStoreMusicRepository(
 
                 EmbeddedMetadata(
                     releaseDate =
-                        retriever
-                            .extractMetadata(
-                                MediaMetadataRetriever
-                                    .METADATA_KEY_DATE,
-                            )
-                            ?.takeUnless {
-                                it.isBlank()
-                            },
+                        retriever.extractMetadata(
+                            MediaMetadataRetriever.METADATA_KEY_DATE,
+                        )?.takeUnless {
+                            it.isBlank()
+                        },
                     copyright =
                         extractCopyrightMetadata(
                             retriever,
                         ),
                 )
             }
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             EmbeddedMetadata()
         }
     }
@@ -656,21 +608,19 @@ class MediaStoreMusicRepository(
         retriever: MediaMetadataRetriever,
     ): String? {
         /*
-         * Android's platform metadata contract contains the
-         * copyright key in the native MediaMetadataRetriever
-         * implementation. The public SDK surface does not expose
-         * a named constant consistently across API levels, so the
-         * stable platform key value is kept locally.
+         * Android's platform metadata contract contains the copyright
+         * key in the native MediaMetadataRetriever implementation.
+         * The public SDK surface does not expose a named constant
+         * consistently across API levels, so the stable platform key
+         * value is kept locally.
          *
          * 15 = METADATA_KEY_COPYRIGHT
          */
-        return retriever
-            .extractMetadata(
-                COPYRIGHT_METADATA_KEY,
-            )
-            ?.takeUnless {
-                it.isBlank()
-            }
+        return retriever.extractMetadata(
+            COPYRIGHT_METADATA_KEY,
+        )?.takeUnless {
+            it.isBlank()
+        }
     }
 
     private fun isExcludedFolder(
@@ -685,14 +635,10 @@ class MediaStoreMusicRepository(
         }
 
         val normalizedPath =
-            normalizeFolderPath(
-                relativePath,
-            )
+            normalizeFolderPath(relativePath)
 
         return excludedFolders.any { excludedFolder ->
-            normalizedPath.startsWith(
-                excludedFolder,
-            )
+            normalizedPath.startsWith(excludedFolder)
         }
     }
 
