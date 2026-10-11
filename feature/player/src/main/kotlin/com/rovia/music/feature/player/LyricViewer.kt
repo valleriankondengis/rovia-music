@@ -1,3 +1,4 @@
+
 package com.rovia.music.feature.player
 
 import androidx.compose.animation.animateColorAsState
@@ -400,6 +401,14 @@ private fun LyricLineContent(
     val activeColor =
         MaterialTheme.colorScheme.onSurface
 
+    /*
+     * The currently sung word follows the shared artwork accent.
+     * Neutral or unavailable artwork falls back to Material 3.
+     */
+    val activeWordColor =
+        playerArtworkAccentColor()
+            ?: MaterialTheme.colorScheme.primary
+
     val lineColor by animateColorAsState(
         targetValue =
             if (isActive) {
@@ -430,9 +439,7 @@ private fun LyricLineContent(
                             inactiveColor
 
                         index == activeWordIndex ->
-                            MaterialTheme
-                                .colorScheme
-                                .primary
+                            activeWordColor
 
                         index < activeWordIndex ->
                             activeColor
