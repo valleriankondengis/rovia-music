@@ -5,8 +5,11 @@
 package com.rovia.music.core.ui.component
 
 import android.app.WallpaperColors
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Size
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,7 +48,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.PlaybackState
-import com.rovia.music.core.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,11 +67,13 @@ private val LocalMiniPlayerArtworkPalette =
 /**
  * Main mini-player.
  *
- * Artwork colors use WallpaperColors, matching the source
- * and vivid accent formula used by PlayerScreen.
+ * The artwork accent is extracted from the embedded image in the
+ * audio source, using the same sampling strategy, WallpaperColors
+ * API, representative-color selection, and HSV accent formula
+ * as PlayerScreen.
  *
- * The card surface remains Material 3. Only the controls
- * are tinted by the artwork accent.
+ * The card surface remains Material 3. Only its controls are
+ * tinted by the artwork accent.
  */
 @Composable
 fun MiniPlayer(
@@ -84,6 +88,7 @@ fun MiniPlayer(
 
     val artworkAccent =
         rememberMiniPlayerArtworkAccent(
+            trackUri = track.uri,
             artworkUri = track.artworkUri,
         )
 
@@ -140,6 +145,7 @@ fun MiniPlayerContent(
 
     val artworkAccent =
         rememberMiniPlayerArtworkAccent(
+            trackUri = track.uri,
             artworkUri = track.artworkUri,
         )
 
@@ -243,8 +249,6 @@ private fun MiniPlayerButtonGroup(
         LocalMiniPlayerArtworkPalette.current.accent
 
     /*
-     * Match PlayerLyricsMiniPlayer.
-     *
      * Previous / Next:
      * - A 12% blend between the Material surface and artwork.
      * - Vivid artwork color for their icons.
@@ -323,7 +327,7 @@ private fun MiniPlayerButtonGroup(
                     Icon(
                         painter =
                             painterResource(
-                                R.drawable.ic_skip_previous,
+                                com.rovia.music.core.ui.R.drawable.ic_skip_previous,
                             ),
                         contentDescription = "Previous",
                         modifier = Modifier.size(24.dp),
@@ -355,9 +359,9 @@ private fun MiniPlayerButtonGroup(
                         painter =
                             painterResource(
                                 if (isPlaying) {
-                                    R.drawable.ic_pause
+                                    com.rovia.music.core.ui.R.drawable.ic_pause
                                 } else {
-                                    R.drawable.ic_play_arrow
+                                    com.rovia.music.core.ui.R.drawable.ic_play_arrow
                                 },
                             ),
                         contentDescription =
@@ -390,7 +394,7 @@ private fun MiniPlayerButtonGroup(
                     Icon(
                         painter =
                             painterResource(
-                                R.drawable.ic_skip_next,
+                                com.rovia.music.core.ui.R.drawable.ic_skip_next,
                             ),
                         contentDescription = "Next",
                         modifier = Modifier.size(24.dp),
@@ -403,28 +407,40 @@ private fun MiniPlayerButtonGroup(
 }
 
 /**
- * Loads the artwork thumbnail and derives an accent from
- * Android's public WallpaperColors API on a background dispatcher.
+ * Loads the artwork accent using the same primary extraction
+ * path as PlayerScreen.
  *
- * The resulting vivid accent uses the same representative-color
- * selection and HSV formula as PlayerArtworkColors.kt.
+ * Embedded artwork is extracted directly from trackUri, so
+ * regular and external playback do not derive their accents
+ * from different thumbnail sources.
+ *
+ * The existing artworkUri path remains a fallback when embedded
+ * artwork cannot be read.
  */
 @Composable
 private fun rememberMiniPlayerArtworkAccent(
+    trackUri: String?,
     artworkUri: String?,
 ): Color? {
     val context =
         LocalContext.current
 
-    var artworkAccent by remember(artworkUri) {
+    var artworkAccent by remember(
+        trackUri,
+        artworkUri,
+    ) {
         mutableStateOf<Color?>(null)
     }
 
     LaunchedEffect(
+        trackUri,
         artworkUri,
         context,
     ) {
-        if (artworkUri.isNullOrBlank()) {
+        if (
+            trackUri.isNullOrBlank() &&
+            artworkUri.isNullOrBlank()
+        ) {
             artworkAccent = null
             return@LaunchedEffect
         }
@@ -432,14 +448,25 @@ private fun rememberMiniPlayerArtworkAccent(
         val sampledAccent =
             withContext(Dispatchers.IO) {
                 try {
-                    val bitmap =
+                    val appContext =
                         context.applicationContext
-                            .contentResolver
-                            .loadThumbnail(
-                                Uri.parse(artworkUri),
-                                Size(64, 64),
-                                null,
+
+                    val bitmap =
+                        trackUri
+                            ?.takeIf(String::isNotBlank)
+                            ?.let { audioUri ->
+                                loadEmbeddedArtworkBitmap(
+                                    context = appContext,
+                                    audioUri = audioUri,
+                                    maxDimension = ARTWORK_PALETTE_MAX_DIMENSION,
+                                )
+                            }
+                            ?: loadArtworkFallbackBitmap(
+                                context = appContext,
+                                artworkUri = artworkUri,
+                                maxDimension = ARTWORK_PALETTE_MAX_DIMENSION,
                             )
+                            ?: return@withContext null
 
                     try {
                         extractMiniPlayerArtworkAccent(bitmap)
@@ -452,8 +479,8 @@ private fun rememberMiniPlayerArtworkAccent(
                     throw cancelled
                 } catch (_: Exception) {
                     /*
-                     * Unavailable or unsupported artwork is
-                     * not a playback error. Use Material 3.
+                     * Artwork extraction failure is not a
+                     * playback error. Material 3 is used.
                      */
                     null
                 }
@@ -481,12 +508,174 @@ private fun rememberMiniPlayerArtworkPalette(
 }
 
 /**
- * Selects the first sufficiently chromatic representative
- * color returned by WallpaperColors, in primary, secondary,
- * tertiary order.
+ * Extracts artwork bytes directly from the audio source.
  *
- * The vivid accent formula matches playerArtworkPaletteFromWallpaperColors()
- * and playerArtworkAccentColor() in PlayerArtworkColors.kt.
+ * Uses the same MediaMetadataRetriever strategy as PlayerScreen.
+ * This function must run on a background dispatcher.
+ */
+private fun loadEmbeddedArtworkBitmap(
+    context: Context,
+    audioUri: String,
+    maxDimension: Int,
+): Bitmap? {
+    val uri =
+        runCatching {
+            Uri.parse(audioUri)
+        }.getOrNull()
+            ?: return null
+
+    val retriever =
+        MediaMetadataRetriever()
+
+    return try {
+        retriever.setDataSource(
+            context,
+            uri,
+        )
+
+        val embeddedPicture =
+            retriever.embeddedPicture
+                ?: return null
+
+        decodeEmbeddedArtwork(
+            bytes = embeddedPicture,
+            maxDimension = maxDimension,
+        )
+    } catch (
+        cancelled: CancellationException,
+    ) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    } finally {
+        runCatching {
+            retriever.release()
+        }
+    }
+}
+
+/**
+ * Loads a fallback artwork bitmap if direct extraction from the
+ * audio source is unavailable.
+ *
+ * For content URIs, the original loadThumbnail() path is retained.
+ * For file URIs, ArtworkBitmapLoader reads the cached artwork file.
+ */
+private suspend fun loadArtworkFallbackBitmap(
+    context: Context,
+    artworkUri: String?,
+    maxDimension: Int,
+): Bitmap? {
+    if (artworkUri.isNullOrBlank()) {
+        return null
+    }
+
+    val uri =
+        runCatching {
+            Uri.parse(artworkUri)
+        }.getOrNull()
+            ?: return null
+
+    if (uri.scheme == FILE_SCHEME) {
+        return ArtworkBitmapLoader.load(
+            context = context,
+            artworkUri = artworkUri,
+            maxDimension = maxDimension,
+        )
+    }
+
+    val thumbnail =
+        try {
+            context.contentResolver.loadThumbnail(
+                uri,
+                Size(
+                    maxDimension,
+                    maxDimension,
+                ),
+                null,
+            )
+        } catch (
+            cancelled: CancellationException,
+        ) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+
+    return thumbnail
+        ?: ArtworkBitmapLoader.load(
+            context = context,
+            artworkUri = artworkUri,
+            maxDimension = maxDimension,
+        )
+}
+
+/**
+ * Decodes the embedded image using the same power-of-two sample
+ * strategy as PlayerScreen. The resulting bitmap is bounded to
+ * the requested maximum dimension while preserving aspect ratio.
+ */
+private fun decodeEmbeddedArtwork(
+    bytes: ByteArray,
+    maxDimension: Int,
+): Bitmap? {
+    if (bytes.isEmpty()) {
+        return null
+    }
+
+    val safeMaxDimension =
+        maxDimension.coerceAtLeast(1)
+
+    val boundsOptions =
+        BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+
+    BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        boundsOptions,
+    )
+
+    if (
+        boundsOptions.outWidth <= 0 ||
+        boundsOptions.outHeight <= 0
+    ) {
+        return null
+    }
+
+    var sampleSize = 1
+
+    while (
+        boundsOptions.outWidth / sampleSize > safeMaxDimension ||
+        boundsOptions.outHeight / sampleSize > safeMaxDimension
+    ) {
+        sampleSize *= 2
+    }
+
+    val decodeOptions =
+        BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inJustDecodeBounds = false
+        }
+
+    return BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        decodeOptions,
+    )
+}
+
+/**
+ * Selects the first sufficiently chromatic representative color
+ * returned by WallpaperColors, in primary, secondary, tertiary
+ * order.
+ *
+ * The selection criteria and vivid HSV accent formula match
+ * PlayerArtworkColors.kt.
  */
 private fun extractMiniPlayerArtworkAccent(
     bitmap: Bitmap,
@@ -542,6 +731,9 @@ private fun extractMiniPlayerArtworkAccent(
         alpha = 1f,
     )
 }
+
+private const val ARTWORK_PALETTE_MAX_DIMENSION = 64
+private const val FILE_SCHEME = "file"
 
 private const val MIN_ARTWORK_SATURATION = 0.12f
 private const val MIN_ARTWORK_VALUE = 0.08f
