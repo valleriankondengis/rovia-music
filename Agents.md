@@ -28,7 +28,7 @@ It is written so a human developer or AI coding agent can understand the applica
 | Language | Kotlin only |
 | UI | Jetpack Compose |
 | Design system | Material 3 Expressive |
-| Color system | Android system dynamic color / Monet |
+| Color system | Android dynamic color / Monet globally; artwork-derived accent palette in Player and MiniPlayer |
 | Navigation | AndroidX Navigation 3 |
 | Playback | AndroidX Media3 + ExoPlayer |
 | Background playback | `MediaSessionService` |
@@ -78,6 +78,7 @@ The current application contains these real features:
 - Navigation 3 Predictive Back for normal destinations, with no forward or normal-pop destination animation.
 - MediaSession background playback and system media controls.
 - Real MediaStore artwork loading through Android thumbnails.
+- Artwork-derived Player/MiniPlayer colors using the Android `WallpaperColors.fromBitmap()` API, with a local palette for Player controls and background accents.
 - Audio technical information such as sample rate, bitrate, and MIME-derived format when metadata exists.
 - Additional real track metadata fields such as release date, label, copyright, and release type when the
   source exposes them; missing values remain missing and are not fabricated.
@@ -168,11 +169,13 @@ Media3 + ExoPlayer is the playback foundation.
 
 Do not add Hilt, Dagger, Koin, or a global service locator.
 
-## 3.6 No custom design system
+## 3.6 No custom global design system
 
-Use the configured Material 3 Expressive APIs and `MaterialTheme` tokens.
+Use the configured Material 3 Expressive APIs and `MaterialTheme` semantic tokens for the app-wide UI.
 
-Do not replace them with hardcoded colors, arbitrary shadows, fake expressive components, or a custom color palette.
+Do not introduce a second global theme, hardcoded brand palette, arbitrary shadows, or fake Expressive components.
+The documented artwork-derived palette is a deliberate, Player/MiniPlayer-local exception: it may tint media-specific
+backgrounds and controls, but it must not replace the app-wide Android dynamic color / Monet scheme. See Section 49.
 
 ## 3.7 Do not turn Player into a normal navigation destination
 
@@ -383,6 +386,7 @@ Rovia/
     │       ├── LyricViewer.kt
     │       ├── PlayerActionButtonGroup.kt
     │       ├── PlayerArtwork.kt
+    │       ├── PlayerArtworkColors.kt
     │       ├── PlayerLyric.kt
     │       ├── PlayerLandscapeContent.kt
     │       ├── PlayerPlaybackControls.kt
@@ -759,8 +763,8 @@ generation, audio rows, or lightweight IDs. It does not write to Room and does n
 
 MediaStore remains authoritative for underlying files, volume availability, content URIs, paths, and
 MediaStore-indexed metadata. Room intentionally stores a synchronized catalog of the complete available local
-library so normal UI reads do not need to scan and parse every file again. Do not describe this catalog as
-“application-only state” or prohibit storing the synchronized track catalog in Room; that policy is obsolete.
+library so normal UI reads do not need to scan and parse every file again. The synchronized `music_tracks`
+catalog is a supported part of the current persistence architecture and must remain reconciled with MediaStore.
 
 ### Embedded metadata enrichment
 
@@ -906,11 +910,14 @@ Light/dark selection follows the system theme:
 isSystemInDarkTheme()
 ```
 
-Application colors must come from:
+App-wide UI colors must come from:
 
 ```text
 MaterialTheme.colorScheme
 ```
+
+The documented artwork-derived palette is a limited exception for Player/MiniPlayer media surfaces only; it must not
+replace or globally override `MaterialTheme.colorScheme`. See Section 49.
 
 Do not introduce:
 
@@ -1025,10 +1032,13 @@ Do not:
 ```text
 hardcode icon colors
 use pure white/black as the application-wide icon tint
-sample album-art colors for global icon theming
+sample album-art colors to recolor unrelated/global app icons
 bundle a third-party icon pack
 replace themed vector icons with emoji
 ```
+
+Exception: Player- and MiniPlayer-specific media controls may use the documented artwork-derived palette in Section 49.
+That exception must remain local to those media surfaces and must not change app-wide Monet theming.
 
 The goal is:
 
@@ -1535,7 +1545,7 @@ Before changing a shape, answer all of the following:
 [ ] Are all explicit dp values documented?
 [ ] Does the change preserve accessibility and interaction semantics?
 [ ] Has the affected screen been tested on the real Android device?
-[ ] Has ./compiledebug been run after the change?
+[ ] Has `./gradlew.bat :app:assembleDebug` been run after the change?
 ```
 
 If the answer to the native-component question is `yes` and the requested behavior is covered by
@@ -2401,8 +2411,13 @@ LyricViewer
 `PlayerRoute` connects application APIs to the UI.
 
 `PlayerScreen` is the orchestration layer: it owns transient seek interaction state, derives
-orientation, and selects the portrait or landscape composition. It does not render the detailed
-Player controls itself.
+orientation, selects the portrait or landscape composition, and extracts the current track artwork
+palette for Player-local colors. It does not render the detailed Player controls itself.
+
+`PlayerArtworkColors.kt` owns the shared Player artwork palette, its Compose `CompositionLocal` values,
+and the helper functions used by Player controls. Keep this palette feature-local; `:core:ui` must not
+depend on `:feature:player`. The shared `MiniPlayer` in `:core:ui` therefore extracts its own artwork
+colors through the same Android platform API instead of importing Player feature helpers.
 
 `PlayerPortraitContent` and `PlayerLandscapeContent` own the orientation-specific visual layout. Both can receive the optional `AudioOutputIndicator` slot; portrait uses a maximum width of `128dp`, while landscape adapts the output control width to the remaining row space reserved around the fixed-width Repeat/Shuffle controls.
 
@@ -3020,15 +3035,48 @@ Localization changes UI labels, not the music metadata itself.
 
 # 48. ARTWORK
 
-`AlbumArtwork` uses Android's local thumbnail APIs through `ContentResolver.loadThumbnail()`.
+`AlbumArtwork` loads local artwork through Android's `ContentResolver.loadThumbnail()` API. Thumbnail work must stay off the main thread.
 
-The component loads thumbnails on a background dispatcher.
+There is no Coil, Glide, or third-party image-loading dependency. If artwork is unavailable, render the existing neutral Material-themed fallback; do not generate or download replacement artwork.
 
-There is no Coil or Glide dependency.
+## 48.1 Artwork-derived Player colors
 
-If artwork is unavailable, a neutral Material-themed fallback is rendered.
+Rovia also derives media-specific UI colors from the real current track artwork. The extraction path uses the Android framework `WallpaperColors` API, even though the source image is album artwork rather than a device wallpaper. `WallpaperColors.fromBitmap(bitmap)` accepts a bitmap and returns representative colors; it does not require the bitmap to be an actual wallpaper.
 
-The fallback is derived from the real title, not generated network content.
+In `feature/player/PlayerScreen.kt`, Rovia loads a small `64 × 64` artwork thumbnail with `ContentResolver.loadThumbnail()` and calls `WallpaperColors.fromBitmap(bitmap)` on `Dispatchers.IO`. The returned colors are converted by `playerArtworkPaletteFromWallpaperColors(...)` into `PlayerArtworkPalette`.
+
+The palette in `feature/player/PlayerArtworkColors.kt` contains:
+
+- `seedColor`: the primary artwork-derived seed used for Player-local background color treatment;
+- `secondaryColor` and `tertiaryColor`: additional representative artwork colors, when available;
+- `vividAccentColor`: a more vivid artwork accent for emphasis;
+- `controlAccentColor`: a softer accent for media controls.
+
+`LocalPlayerArtworkPalette` provides the full palette to Player descendants, while `LocalPlayerArtworkColor` preserves the seed-color value for existing UI paths. Use the helpers in `PlayerArtworkColors.kt` (`playerArtworkAccentColor()`, `playerArtworkControlAccentColor()`, and the related control-container/content helpers) instead of duplicating color transformations in each Player component. The palette uses local HSV adjustments where needed and falls back safely when an extracted color or artwork is unavailable.
+
+The current palette feeds Player-local artwork/background treatment, lyric accents, the seekbar, playback options, action buttons, and audio-output control styling. Keep contrast appropriate for the final container color, including in both light and dark themes.
+
+The shared `MiniPlayer` in `:core:ui` extracts artwork colors independently using `WallpaperColors.fromBitmap()`. This is intentional module separation: `:core:ui` must not depend on `:feature:player`. Keep the MiniPlayer's extraction lightweight and use a safe fallback when artwork cannot be loaded or the representative colors are not useful.
+
+## 48.2 Color-system boundary
+
+Two color systems coexist, with different responsibilities:
+
+```text
+App-wide UI
+    -> Android dynamic color / Monet
+    -> MaterialTheme.colorScheme and native component defaults
+
+Player and MiniPlayer media accents
+    -> local artwork thumbnail
+    -> WallpaperColors.fromBitmap(bitmap)
+    -> PlayerArtworkPalette / MiniPlayer-local accent
+    -> media-specific backgrounds and controls
+```
+
+The artwork palette is **not** a replacement for `dynamicLightColorScheme()` / `dynamicDarkColorScheme()`, is not a second app-wide theme, and must not recolor unrelated Home, Search, Library, Settings, or navigation UI.
+
+This in-app palette also does not configure the Android notification or lock-screen media color scheme. Media3/MediaSession supplies real media metadata and artwork; Android System UI makes its own presentation/color decisions. Do not claim that Rovia's `PlayerArtworkPalette` is shared with, or exactly reproduces, System UI's internal Monet palette algorithm.
 
 ---
 
@@ -3036,14 +3084,34 @@ The fallback is derived from the real title, not generated network content.
 
 Artwork must be:
 
-- local;
-- real;
-- lightweight;
-- optional.
+- local and real;
+- loaded with Android platform APIs;
+- lightweight, with thumbnail-sized bitmaps for palette extraction;
+- optional, with a safe fallback when missing.
 
-Do not add remote image URLs or a network image loader.
+Do not add remote image URLs, a network image loader, a third-party palette library, or unnecessary full-resolution bitmap decoding.
 
-Do not decode unnecessarily large bitmaps.
+### Android API reference
+
+- [`WallpaperColors`](https://developer.android.com/reference/android/app/WallpaperColors) — Android API reference for representative wallpaper/image colors.
+- [`WallpaperColors.fromBitmap(Bitmap)`](https://developer.android.com/reference/android/app/WallpaperColors#fromBitmap(android.graphics.Bitmap)) — constructs `WallpaperColors` from a bitmap and extracts its main colors. Available since API 27; Rovia's minimum API is 36.
+- [`ContentResolver.loadThumbnail(Uri, Size, CancellationSignal)`](https://developer.android.com/reference/android/content/ContentResolver#loadThumbnail(android.net.Uri,android.util.Size,android.os.CancellationSignal)) — platform API for efficiently loading a visual thumbnail. Available since API 29.
+- [AOSP `WallpaperColors.java`](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/app/WallpaperColors.java) — implementation reference, useful for understanding framework behavior; do not depend on hidden/internal methods.
+
+Relevant API behavior:
+
+- `primaryColor` is the most visually representative color returned by the framework;
+- `secondaryColor` and `tertiaryColor` may be `null` and must not be assumed present;
+- the API extracts representative colors but does not itself create Rovia's `PlayerArtworkPalette` or generate the app's full Monet `ColorScheme`;
+- `WallpaperColors` is part of the Android framework, so no third-party color extraction dependency is required.
+
+Example of the core API call (illustrative; preserve the current coroutine, fallback, and CompositionLocal wiring in the actual implementation):
+
+```kotlin
+val wallpaperColors = WallpaperColors.fromBitmap(bitmap)
+```
+
+Do not replace this mechanism with a different palette library or rewrite the global app theme as part of unrelated Player UI work. If the extraction path, fallback rules, palette fields, or component usage changes, update this section to match the code.
 
 ---
 
@@ -4806,9 +4874,9 @@ Do not reintroduce manually frozen button shapes where the native Expressive sha
 
 ---
 
-# 108. LATEST PLAYER / MINIPLAYER REFINEMENT CONTRACT
+# 108. PLAYER / MINIPLAYER IMPLEMENTATION CONTRACT
 
-This section records the current Player architecture after the latest verified refinement pass.
+This section records current Player and MiniPlayer implementation contracts that must remain stable unless a requested change explicitly alters them.
 
 ## 108.1. Shared MiniPlayer API
 
@@ -4963,26 +5031,6 @@ PlayerLandscapeContent
 
 not in `UnifiedPlayerSheet`.
 
-## 108.8. Recent verified commits
-
-The latest three Player interaction refinements were intentionally separated by module ownership:
-
-```text
-cb999ff core: Clean up MiniPlayer interaction
-b4c5dc8 app: Refine UnifiedPlayerSheet behavior
-95cb760 feature: Refine fullscreen lyrics player
-```
-
-This commit separation is the preferred pattern for future changes:
-
-```text
-core:*     -> shared reusable UI/API behavior
-app:*      -> application shell, sheet, navigation, composition
-feature:*  -> feature-local presentation and behavior
-```
-
-Do not combine unrelated module ownership changes into one commit when they can be verified independently.
-
 ---
 
 # 109. FOLDER FILTER HEADER CONTRACT
@@ -5071,115 +5119,11 @@ Keep the package declaration unchanged unless the developer explicitly requests 
 
 ---
 
-# 111. SOURCE TREE MIGRATION RECORD
-
-The Kotlin source migration was completed in this sequence:
-
-```text
-core:model         -> src/main/kotlin
-core:library-api   -> src/main/kotlin
-core:playback-api  -> src/main/kotlin
-core:ui            -> src/main/kotlin
-data:media-store   -> src/main/kotlin
-playback:media3    -> src/main/kotlin
-feature:home       -> src/main/kotlin
-feature:search     -> src/main/kotlin
-feature:library    -> src/main/kotlin
-feature:player     -> src/main/kotlin
-feature:settings   -> src/main/kotlin
-app                -> src/main/kotlin
-```
-
-Each module was verified after moving its `.kt` files.
-
-The validation sequence was intentionally:
-
-```text
-inspect actual source tree
-    ↓
-create src/main/kotlin package directory
-    ↓
-move only existing *.kt files
-    ↓
-verify no *.kt remains under src/main/java
-    ↓
-compile
-    ↓
-remove empty src/main/java
-    ↓
-compile again
-```
-
-No package names were changed by this migration.
-
-No resources were moved from `src/main/res`.
-
-No module dependency direction was changed.
-
-No feature behavior was intentionally changed by the source-tree migration.
+---
 
 ---
 
-# 112. FINAL SOURCE-TREE AUDIT CONTRACT
-
-Before declaring a source-tree migration complete, verify:
-
-```powershell
-Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
-    -Recurse -Filter "*.kt" -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "\src\main\java\" } |
-    Select-Object -ExpandProperty FullName
-```
-
-Expected result:
-
-```text
-<empty>
-```
-
-Then:
-
-```powershell
-Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
-    -Recurse -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "\src\main\java$" } |
-    Select-Object -ExpandProperty FullName
-```
-
-Expected result:
-
-```text
-<empty>
-```
-
-Then:
-
-```powershell
-Get-ChildItem -Path ".\app", ".\core", ".\data", ".\playback", ".\feature" `
-    -Recurse -Filter "*.java" -File -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty FullName
-```
-
-Expected result:
-
-```text
-<empty>
-```
-
-The presence of Gradle tasks such as:
-
-```text
-javaPreCompileDebug
-compileDebugJavaWithJavac NO-SOURCE
-```
-
-is not evidence that Java source files exist. Those tasks are part of the Android build pipeline.
-
-The source audit, not the task name alone, determines whether Java source is present.
-
----
-
-# 113. UI ALIGNMENT REGRESSION CHECKLIST
+# 111. UI ALIGNMENT REGRESSION CHECKLIST
 
 Whenever Library, Settings, Folder Filter, or shared playback UI spacing is modified, verify:
 
@@ -5207,247 +5151,3 @@ contract was violated.
 
 ---
 
-# 114. CHANGE LOG: CURRENT UI AND ARCHITECTURE REFINEMENT
-
-This engineering record documents the following intentional changes made during the latest
-implementation pass.
-
-## Audio output indicator and system-volume integration
-
-- Added `AudioOutputController` / `AudioOutputState` / `AudioOutputType` to `:core:playback-api` and the Android `AudioManager` implementation `AndroidAudioOutputController` to `:playback:media3`.
-- Wired the application-scoped controller through `AppContainer`, `MainActivity`, `MainNavigation`, `UnifiedPlayerSheet`, and `PlayerRoute`.
-- Added `AudioOutputIndicator` with detected Bluetooth name or localized local-device label, themed rounded control, and a transparent-scrim `ModalBottomSheet`.
-- Connected the slider to Android `AudioManager.STREAM_MUSIC`, including fixed-volume handling and 200 ms refresh polling only while the bottom sheet is open so hardware volume-button changes update the UI.
-- Kept Audio Output visible in normal portrait and landscape Player layouts but intentionally omitted it from fullscreen lyrics.
-- Reused shared `:core:ui` vector resources for Bluetooth, local-device, volume-down, volume-up, and lyrics icons instead of keeping duplicate feature-local icon resources.
-- Documented the portrait/landscape width contract: portrait maximum `128dp`; landscape uses remaining space while reserving `224dp` for Repeat/Shuffle and an `8dp` inter-group gap; all three controls are `64dp` high.
-
-## UI spacing and positioning
-
-- Re-aligned page headers around native `TopAppBar`.
-- Standardized outer header horizontal padding at `4dp`.
-- Removed the need for manually rebuilt header rows where `TopAppBar` already provides the correct
-  navigation/action slots.
-- Standardized Library mode-selector spacing at `8dp`.
-- Standardized TrackRow artwork dimensions at `56dp`.
-- Standardized Library / Search / Home bottom content padding around MiniPlayer presence:
-  `200dp` with MiniPlayer and `100dp` without MiniPlayer.
-- Preserved the asymmetric MiniPlayer container shape at `32dp` top and `20dp` bottom radii.
-- Current navigation geometry uses an 80dp NavigationBar, 20dp bottom padding, and 8dp
-  MiniPlayer-to-NavigationBar spacing.
-
-## Material 3 Expressive implementation
-
-- Library mode switching uses `ButtonGroup`.
-- Library and folder rows use native `ListItem`.
-- Shape behavior uses official `ListItemDefaults`, `IconButtonDefaults`, and relevant Material 3
-  Expressive shape APIs.
-- MiniPlayer controls use native `IconButtonDefaults.shapes()` behavior rather than frozen manual
-  shapes.
-- Existing Monet/dynamic-color behavior remains the source of truth.
-
-## Folder navigation
-
-- Added explicit All Songs / Folders Library mode.
-- Added MediaStore-derived folder browsing.
-- Added parent-folder navigation.
-- Added a tappable breadcrumb/navigation path.
-- Added normalized folder-path handling in Library state.
-- Preserved the no-rescan rule for folder filtering/navigation.
-- Added animated folder Back-icon appearance/disappearance inside the native `TopAppBar.navigationIcon`
-  slot so the Library title shifts continuously with the changing icon-slot width.
-- Preserved the native `TopAppBar` rather than rebuilding the header with a manual row or title offset.
-
-## Navigation 3 and Predictive Back
-
-- Reworked Home, Search, and Library as equal top-level sibling destinations.
-- Removed the previous Home-root Back-stack relationship between those three tabs.
-- Settings is a child of the active top-level destination.
-- Folder Filter and About are children of Settings.
-- Removed destination enter animations from Navigation 3.
-- Removed normal/programmatic destination pop animations.
-- Kept Predictive Back as the only destination-level navigation motion.
-- Predictive Back now scales the current opaque destination surface toward `90%` and moves it to the
-  right without fade.
-- Added `NavigationDestinationSurface` around every active Navigation 3 destination so the entire page
-  surface participates in Predictive Back.
-- Kept normal Back button presses instantaneous; the predictive scale/slide motion is exclusive to the
-  gesture-driven `predictivePopTransitionSpec`.
-- Established a strict rule that future Navigation 3 features must not introduce new page transitions,
-  fades, entrance animations, shared-element transitions, or arbitrary destination motion.
-
-## Source architecture
-
-- Migrated every current Kotlin source file from `src/main/java` to `src/main/kotlin`.
-- Removed the old `src/main/java` directories after successful compile checkpoints.
-- Kept package declarations unchanged.
-- Kept resources in `src/main/res`.
-- Confirmed there are no remaining `.kt` files under `src/main/java`.
-- Confirmed there are no remaining `.java` source files in the current application modules.
-
-## Player feature modularization
-
-- Refactored the 1,956-line `PlayerScreen.kt` into focused Player presentation files without
-  changing the Player state flow, playback callbacks, orientation behavior, lyrics behavior, seek
-  interaction, or Material 3 Expressive controls.
-- Kept transient seek interaction state in `PlayerScreen`, because it belongs to the screen-level
-  gesture/session interaction rather than persistent or domain state.
-- Moved portrait and landscape compositions into separate files so future orientation-specific UI
-  changes remain localized.
-- Isolated artwork/lyrics presentation, top action controls, playback controls, the custom wavy seek
-  bar, and technical/time metadata into focused internal presentation components.
-- Kept these components inside `:feature:player`; no new module, dependency, DI framework, or data
-  abstraction was introduced.
-- Kept cross-file Player UI helpers `internal` so they remain module-local rather than becoming a
-  public feature API.
-- Preserved the existing `UnifiedPlayerSheet`, `PlayerRoute`, `PlayerViewModel`, `LyricViewer`,
-  Predictive Back behavior, and playback architecture unchanged.
-
-## Latest Player interaction refinement
-
-- Reworked `UnifiedPlayerSheet` into a true MiniPlayer ↔ Player morphing surface using one physical
-  `Surface` driven by normalized `progress`.
-- Kept the Player out of Navigation 3 and out of `SharedTransitionLayout`.
-- Added saveable Player progress so rotation does not collapse the Player.
-- Propagated restored sheet progress back to `MainNavigation`.
-- Removed the invisible NavigationBar touch-interception problem by composing NavigationBar only while
-  the Player is not fully expanded.
-- Cleaned the shared `MiniPlayer` API so it no longer owns `onOpenPlayer`; opening behavior remains in
-  `UnifiedPlayerSheet`.
-- Added a dedicated `PlayerLyricsMiniPlayer` for fullscreen lyrics instead of reusing the shared
-  `MiniPlayer` component in a context with different interaction requirements.
-- Split fullscreen lyrics bottom controls into two physical pill surfaces:
-  a dedicated seekbar surface and a dedicated MiniPlayer surface.
-- Added elapsed playback time to the left side of the fullscreen lyrics seekbar.
-- Added internal horizontal seekbar spacing so the wavy seek visual does not touch the pill edges.
-- Standardized fullscreen lyrics seekbar and MiniPlayer shapes to full-pill geometry.
-- Matched fullscreen lyrics bottom content padding to the NavigationBar bottom padding of `20dp`.
-- Preserved direct Previous / Play-Pause / Next callbacks in fullscreen lyrics.
-- Kept fullscreen lyrics visible across track changes while clearing/reloading the actual lyric content.
-- Kept the explicit Player close operation responsible for hiding lyrics.
-- Added smoother lyric active-line scaling while preserving adaptive sizing for long lines.
-- Preserved the established portrait and landscape Player layouts while extracting the fullscreen
-  lyrics-specific presentation into focused feature-local files.
-- Kept all changes within the existing `:app`, `:core:ui`, and `:feature:player` module boundaries;
-  no additional dependency or architecture layer was introduced.
-
-## Recent Play history and collection pages
-
-- Removed the old database-side trim that capped Recent Play at 10 records. `recent_plays` retains one latest-played record per distinct content URI; replaying the same URI updates its recency instead of creating duplicate rows for that URI.
-- Kept the Home Recent Play preview bounded to 10 entries as a UI-only performance/presentation rule.
-- Added Home collection grouping for Artist, Album, and Genre, using real metadata from persisted Recent Play records.
-- Added the `RecentPlayCollection` model layer and dedicated `RecentCollectionRoute` / `RecentCollectionScreen` implementation in `:feature:home`.
-- Added Navigation 3 keys and destinations for the collection detail flow while keeping Home, Search, and Library as the only bottom-navigation siblings.
-- Collection pages display actual matching Recent Play tracks and reuse the established native Material 3 / `TrackRow` presentation. Empty or missing values must not be replaced with invented entries.
-
-## Library sorting and collection artwork
-
-- Added `LibrarySort.kt` and `LibrarySortBottomSheet.kt` to `:feature:library`.
-- Made visible sort options depend on the current browsing context instead of showing one universal list.
-- Added actual Genre-based sorting and removed Duration from the sort menu.
-- Added/retained type-appropriate artwork for Artist, Album, and Genre collection entries, using the existing visual contracts and Material 3 Expressive shape behavior.
-
-## Workflow correction
-
-- Build checkpoints apply after application source/code changes; documentation-only Markdown edits do not require Gradle compilation or APK installation.
-- Git commits are not automatic. Commit one file at a time only when explicitly requested; never stage the whole tree or push without an explicit request.
-
-## Database and synchronized catalog integration
-
-- Room 3 remains the database layer in `:data:database`, backed by Android framework SQLite.
-- Current schema version remains `1` during active development; the exported `1.json` is kept aligned with
-  `RoviaDatabase.kt` and its entities.
-- Persisted tables are `music_tracks`, `media_store_sync_state`, `recent_plays`, and `excluded_folders`.
-- `music_tracks` is the synchronized local audio catalog used by Home, Library, Search, and active-player
-  metadata observation. Its composite key is `(volume_name, track_id)`.
-- `media_store_sync_state` stores per-volume MediaStore version/generation checkpoints.
-- `recent_plays` is keyed by content URI, includes real track metadata fields when available, and retains one latest-played record per distinct URI without a hard 10-row cap.
-- The Home Recent Play preview is limited to 10 entries; Artist/Album/Genre collection groups and detail track lists derive from the persisted history.
-- Library sorting is context-aware: All Songs/Folder and selected-collection track lists support Default, Title, Artist, Album, Genre, Date added, and Date modified; Artist/Album/Genre collection lists expose their mode-specific subsets. Duration is not a sort option.
-- `excluded_folders` remains the persistent store for Folder Filter selections.
-- `AppContainer` wires `MusicRepository` to `RoomMusicCatalogRepository`, not to the legacy
-  `MediaStoreMusicRepository` implementation.
-- `MediaStoreCatalogDataSource` queries available volumes, source version/generation, indexed audio rows,
-  and lightweight IDs for reconciliation. It does not open each audio file during catalog listing.
-- `MediaCatalogSyncCoordinator` performs full sync for first/invalidated checkpoints, incremental sync when
-  generation advances, skips unchanged volume scans, and reconciles removed track IDs. An unavailable volume
-  is not treated as an empty catalog.
-- `EmbeddedMetadataEnrichmentProcessor` separately extracts selected embedded tags in bounded batches
-  (currently 24). It records a source signature and processing status so completed/failed sources are not
-  blindly reopened on every startup. Missing embedded tags remain missing values.
-- Embedded `releaseDate` and `copyright` updates also refresh an existing Recent Play snapshot by URI.
-- `PlayerViewModel` observes the active track's catalog metadata by URI. The UI uses the refreshed `Track` for
-  presentation without restarting playback or rebuilding the Media3 queue; playback controls/state remain
-  sourced from `PlaybackController`.
-- `MusicRepository` exposes snapshot compatibility methods plus `observeRecentlyAdded`, `observeAllTracks`,
-  and `observeTrackByUri`; the Room implementation supplies reactive catalog Flows and a URI-scoped lookup.
-- Artwork stays on the existing Android thumbnail path. `artworkUri` is not altered by embedded metadata
-  enrichment; artwork/cache behavior should only be changed for a separately verified artwork issue.
-
-### Current development schema policy
-
-During active development, keep `RoviaDatabase` at version `1` and do not add migrations/automigrations unless
-explicitly requested. When incompatible schema changes require a clean local test database, clearing app data
-or reinstalling is acceptable. This is a development convenience, not a policy to discard real users' data on
-production upgrades. Before shipping schema evolution to existing users, define the released baseline and add
-migrations/tests that preserve their data. Do not introduce destructive fallback migrations as a production
-recovery strategy.
-
----
-
-## Navigation contract verification
-
-The current navigation contract is:
-
-```text
-Home / Search / Library
-    = top-level siblings
-
-RecentCollection detail (Artist / Album / Genre)
-    = child route opened from Home's recent collection sections
-
-Settings
-    = child of active top-level destination
-
-FolderFilter / About
-    = children of Settings
-
-Forward navigation
-    = instantaneous
-
-Normal Back button
-    = instantaneous
-
-Predictive Back gesture
-    = surface scales to 90%
-    = moves right
-    = no fade
-```
-
-Future navigation work must keep this contract and update the Navigation 3 sections of `Agents.md` whenever
-the implementation intentionally changes.
-
-## Verification status for the current catalog work
-
-Verified during the current implementation session:
-
-```text
-:app:assembleDebug -> BUILD SUCCESSFUL after the catalog and active-player metadata wiring changes
-Track Info releaseDate -> developer confirmed it appears for tracks that have the embedded tag
-Missing copyright tag -> valid missing metadata; do not fabricate a value
-Git history -> catalog changes split into one-file commits by module prefix
-Git working-tree and ahead/behind status are transient. Check `git status -sb` in the live repository instead of relying on a previously recorded status.
-```
-
-A missing copyright value is expected when the source file does not contain that tag. It is not by itself a
-processing failure. Artwork code was not changed as part of embedded metadata enrichment; a separate runtime
-artwork regression should be investigated only if an actual artwork issue is observed.
-
-Do not claim that the latest full catalog schema has passed `connectedDebugAndroidTest` or Release verification
-unless those commands have actually been run against this exact schema and build. The instrumentation test
-must be kept aligned with the current table set, and it must use a dedicated test database rather than the
-developer's real `rovia.db`.
-
-The existing source-tree migration rules remain unchanged. The current catalog integration intentionally adds
-a synchronized Room-backed index while keeping MediaStore authoritative for the underlying local media.
-Git commits are created only when the developer explicitly requests them; when requested, use one file per commit and do not push unless explicitly asked.
