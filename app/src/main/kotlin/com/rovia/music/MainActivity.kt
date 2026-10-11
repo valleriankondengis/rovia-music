@@ -128,6 +128,10 @@ class MainActivity : ComponentActivity() {
                                 roviaApplication
                                     .appContainer
                                     .lyricsRepository,
+                            audioOutputController =
+                                roviaApplication
+                                    .appContainer
+                                    .audioOutputController,
                         )
                     } else {
                         Column(
