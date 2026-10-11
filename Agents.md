@@ -62,6 +62,11 @@ The current application contains these real features:
 - Folder Filter UI with native Material 3 controls and an add action, with persistent exclusion selections.
 - Search screen with realtime local search and fuzzy matching.
 - Real playback through Media3/ExoPlayer.
+- Android file-manager `Open with` playback for supported `ACTION_VIEW` intents carrying an external `content://` audio URI (`audio/*`).
+- A dedicated external playback context with a single-track queue, isolated from the regular library playback context.
+- External audio metadata resolution directly from the granted content URI, including optional embedded artwork and embedded lyrics, without adding the item to the Room music catalog.
+- External playback bypasses Room catalog lookup, Folder Filter exclusions, Recently Added, and persistent Recent Play history; closing it restores the preserved regular playback context.
+- The regular and external contexts share the existing `RoviaMediaSessionService` and `MediaSession`, which is switched between two isolated ExoPlayer instances. This is not a second playback framework or a second service.
 - Android system audio-output indicator in Player, showing the detected Bluetooth output device name or the localized local-device label.
 - System media-volume control through `AudioManager.STREAM_MUSIC`, including synchronization with physical volume-button changes while the Audio Output bottom sheet is open.
 - In-memory playback queue.
@@ -77,8 +82,8 @@ The current application contains these real features:
 - Android Predictive Back for the Player sheet.
 - Navigation 3 Predictive Back for normal destinations, with no forward or normal-pop destination animation.
 - MediaSession background playback and system media controls.
-- Real MediaStore artwork loading through Android thumbnails.
-- Artwork-derived Player/MiniPlayer colors using the Android `WallpaperColors.fromBitmap()` API, with a local palette for Player controls and background accents.
+- Real displayed artwork from Android-supported local URIs. `AlbumArtwork` uses `ContentResolver.loadThumbnail()` and falls back to `ArtworkBitmapLoader` for supported content/file URIs.
+- Artwork-derived Player/MiniPlayer colors using `MediaMetadataRetriever` to prefer the active audio URI's embedded picture, `WallpaperColors.fromBitmap()` for representative colors, and Rovia-local HSV accent/background adjustments. Fallback artwork loading remains available when embedded art cannot be extracted.
 - Audio technical information such as sample rate, bitrate, and MIME-derived format when metadata exists.
 - Additional real track metadata fields such as release date, label, copyright, and release type when the
   source exposes them; missing values remain missing and are not fabricated.
@@ -271,6 +276,7 @@ Rovia/
 │       │   ├── Navigation.kt
 │       │   ├── NavigationKeys.kt
 │       │   ├── RoviaApplication.kt
+│       │   ├── ExternalPlayerHost.kt
 │       │   ├── UnifiedPlayerSheet.kt
 │       │   └── theme/
 │       │       └── Theme.kt
@@ -295,12 +301,16 @@ Rovia/
 │   ├── playback-api/
 │   │   └── src/main/kotlin/com/rovia/music/core/playback/
 │   │       ├── AudioOutputController.kt
+│   │       ├── PlayerPlaybackController.kt
 │   │       ├── PlaybackController.kt
+│   │       ├── PlaybackContextState.kt
+│   │       ├── ExternalPlaybackController.kt
 │   │       └── RecentPlayRepository.kt
 │   │
 │   └── ui/
 │       └── src/main/kotlin/com/rovia/music/core/ui/component/
 │           ├── AlbumArtwork.kt
+│           ├── ArtworkBitmapLoader.kt
 │           ├── MiniPlayer.kt
 │           └── TrackRow.kt
 │
@@ -335,6 +345,7 @@ Rovia/
 │   └── media-store/
 │       └── src/main/kotlin/com/rovia/music/data/media/store/
 │           ├── EmbeddedLyricsRepository.kt
+│           ├── ExternalAudioMetadataResolver.kt
 │           ├── EmbeddedMetadataEnrichmentProcessor.kt
 │           ├── EmbeddedMetadataSignature.kt
 │           ├── MediaCatalogSyncCoordinator.kt
@@ -348,6 +359,7 @@ Rovia/
 │       └── src/main/kotlin/com/rovia/music/playback/media3/
 │           ├── AndroidAudioOutputController.kt
 │           ├── Media3PlaybackController.kt
+│           ├── ExternalMedia3PlaybackController.kt
 │           └── RoviaMediaSessionService.kt
 │
 └── feature/
@@ -427,13 +439,12 @@ No empty future modules should be introduced.
 
 Owns application composition:
 
-- Activity;
-- runtime permission entry point;
+- Activity and routing of supported external `ACTION_VIEW` audio intents;
+- runtime permission entry point for the regular library;
 - theme entry point;
-- Navigation 3 root;
-- top-level navigation bar;
-- `UnifiedPlayerSheet`;
-- manual dependency wiring.
+- Navigation 3 root and top-level navigation bar;
+- `UnifiedPlayerSheet` and `ExternalPlayerHost`;
+- manual dependency wiring for regular and external playback paths.
 
 ## `:core:model`
 
@@ -461,24 +472,30 @@ LyricsRepository
 
 ## `:core:playback-api`
 
-Owns:
+Owns the playback contracts and cross-context state, without exposing concrete Media3 implementations:
 
 ```text
 AudioOutputController
 AudioOutputState
 AudioOutputType
+PlayerPlaybackController
 PlaybackController
+ExternalPlaybackController
+PlaybackContextState / PlaybackContext
 RecentPlayRepository
 ```
+
+`PlayerPlaybackController` defines operations and `PlaybackState` needed by the shared Player UI. `PlaybackController` extends it with regular queue-selection and Recent Play responsibilities. `ExternalPlaybackController` extends the shared UI contract with external-session start/end operations. `PlaybackContextState` indicates whether regular or external playback is active so the regular controller can avoid consuming external session events.
 
 `AudioOutputController` is the feature-independent API for observing and refreshing the current Android output/volume state and requesting a media-volume change. Keep the Android framework implementation out of feature modules.
 
 ## `:core:ui`
 
-Owns reusable presentation components and shared vector icons:
+Owns reusable presentation components, the platform-only artwork bitmap loader, and shared vector icons:
 
 ```text
 AlbumArtwork
+ArtworkBitmapLoader
 TrackRow
 MiniPlayer
 ic_lyrics
@@ -519,12 +536,15 @@ This module is the only module that should depend directly on Room 3 and SQLite 
 
 Owns:
 
-- MediaStore queries;
+- MediaStore queries and catalog synchronization data-source support;
 - MediaStore-derived folder discovery;
-- local artwork access;
-- audio metadata extraction;
+- local artwork access and embedded artwork extraction/caching for an explicitly opened external audio URI;
+- direct external audio metadata resolution through `ExternalAudioMetadataResolver`;
+- selected embedded metadata enrichment for catalog tracks;
 - embedded lyric parsing;
 - MediaStore-backed folder scanning.
+
+`ExternalAudioMetadataResolver` is deliberately a direct-URI utility, not another catalog repository. It must not query Room, `MusicRepository`, Folder Filter, or Recent Play persistence.
 
 Folder Filter persistence does not belong here. The MediaStore module consumes the `FolderFilterRepository`
 API and applies the persisted exclusions when querying MediaStore.
@@ -536,15 +556,17 @@ independent filesystem scan or force a media rescan just to update the Library U
 
 Owns:
 
-- Media3 controller;
-- ExoPlayer service;
-- MediaSession;
-- queue implementation;
-- playback position updates;
-- Recent Play event emission through `RecentPlayRepository`;
+- regular `Media3PlaybackController`;
+- `ExternalMedia3PlaybackController`;
+- `RoviaMediaSessionService`;
+- the regular and external ExoPlayer instances;
+- the single `MediaSession` that switches between those players;
+- regular and external in-memory queue semantics;
+- playback position/state updates and context isolation;
+- regular Recent Play event emission through `RecentPlayRepository`;
 - `AndroidAudioOutputController`, which reads Android output devices and controls the system media stream through `AudioManager`.
 
-The playback module does not know about Room or SQLite. `AndroidAudioOutputController` is application-scoped through `AppContainer`; it does not create a second playback engine.
+The playback module does not know about Room or SQLite. `AndroidAudioOutputController` is application-scoped and shared through app wiring; it does not create another playback engine. External playback uses the same Media3/ExoPlayer engine family and service but a separate player instance so it cannot overwrite the regular queue or position.
 
 ## `:feature:home`
 
@@ -571,7 +593,7 @@ Owns full Library UI and Library ViewModel state, including:
 
 ## `:feature:player`
 
-Owns Player UI, Player ViewModel, lyrics toggle/state, and lyric viewer.
+Owns Player UI, Player ViewModel, lyrics toggle/state, and lyric viewer. The presentation layer uses `PlayerPlaybackController`, so the same Player screen supports regular and external playback. Its catalog repository is optional: it is supplied for regular playback and omitted for external playback.
 
 ## `:feature:settings`
 
@@ -623,19 +645,25 @@ The important architectural rule is that UI feature modules do not construct Exo
 
 # 8. APPLICATION STARTUP
 
-`MainActivity` currently:
+`MainActivity` supports two intentionally separate entry paths.
 
-1. calls `enableEdgeToEdge()`;
-2. obtains the `RoviaApplication` container;
-3. enters `RoviaTheme`;
-4. checks `READ_MEDIA_AUDIO`;
-5. requests the permission when it is missing;
-6. renders the real permission state when access is unavailable;
-7. creates `MainNavigation` after the permission is granted.
+### Regular app launch
 
-The app does not fake a library when permission is unavailable.
+1. Calls `enableEdgeToEdge()` and enters `RoviaTheme`.
+2. Checks `READ_MEDIA_AUDIO` and requests it when needed.
+3. Shows the real permission state if library access is unavailable.
+4. Creates the normal navigation experience and uses `AppContainer` for Room-backed catalog, regular playback, lyrics, and other application dependencies.
+5. Requests catalog synchronization only on the regular library path when audio permission is available.
 
----
+### External audio launch
+
+When Android launches `MainActivity` with a supported `ACTION_VIEW` intent for a `content://` URI whose MIME type is `audio/*`, `MainActivity` resolves that URI through `ExternalAudioMetadataResolver` and displays `ExternalPlayerHost`.
+
+This path is handled separately from normal library startup. It does not need to locate the audio item in `music_tracks`, does not open the regular library navigation as its source of truth, and does not use Folder Filter to decide whether the explicitly opened URI can be played. `MainActivity` can also route a new external intent through its existing intent-handling path.
+
+The external path uses the same `UnifiedPlayerSheet` and normal Player UI; it does not add an external-player label, badge, or alternate visual design. Closing the external Player or using Back ends the external session and returns to the invoking file manager.
+
+Do not merge these paths into one catalog-dependent flow. An external launch is an explicit request to play one URI, not a request to import or index that file into Rovia's library.
 
 # 9. AUDIO PERMISSION
 
@@ -653,6 +681,12 @@ The application also declares the foreground playback permissions required by th
 ```
 
 Do not add image/video permissions or unrelated permissions without a real implementation requirement.
+
+## 9.1. EXTERNAL AUDIO `OPEN WITH` INTENT
+
+The manifest registers an `ACTION_VIEW` intent filter for the `content` scheme and `audio/*` MIME types. The external path uses the URI granted by the invoking file manager; it must not try to reconstruct a filesystem path or search MediaStore to rediscover the item.
+
+Keep the accepted scheme and MIME checks aligned between `AndroidManifest.xml` and `MainActivity`. Do not claim that this implementation accepts arbitrary `file://` launch intents; the supported external audio input is a content URI.
 
 ---
 
@@ -694,18 +728,21 @@ RecentPlayRepository
 PlaybackController
     -> Media3PlaybackController
 
+External playback dependencies (owned by RoviaApplication, not AppContainer's catalog path)
+    -> PlaybackContextState shared with regular playback
+    -> ExternalAudioMetadataResolver
+    -> EmbeddedLyricsRepository for direct-URI lyrics reads
+    -> ExternalMedia3PlaybackController
+    -> the same application-scoped AudioOutputController
+
 AudioOutputController
     -> AndroidAudioOutputController
     -> AudioManager output-device information + STREAM_MUSIC volume
 ```
 
-`MainActivity` requests catalog synchronization after audio permission is available and again when the
-activity resumes. `AppContainer` guards against launching duplicate active catalog-sync jobs. Catalog
-synchronization happens off the UI thread. Embedded metadata enrichment is separate from the MediaStore
-catalog query and uses bounded batches (currently 24 tracks per batch).
+`MainActivity` requests catalog synchronization after regular audio-library permission is available and again when the regular activity resumes. `AppContainer` guards against launching duplicate active catalog-sync jobs. Catalog synchronization happens off the UI thread. Embedded metadata enrichment is separate from the MediaStore catalog query and uses bounded batches (currently 24 tracks per batch).
 
-The `:app` module owns manual dependency wiring. It passes the existing `MusicRepository` instance to
-Home, Library, Search, and the Player route. It also creates one application-scoped `AndroidAudioOutputController` and passes its `AudioOutputController` API through `MainActivity`, `MainNavigation`, and `UnifiedPlayerSheet` to `PlayerRoute`. Do not construct duplicate controllers inside feature composables or introduce a DI framework.
+The `:app` module owns manual dependency wiring. It passes the existing `MusicRepository` instance to Home, Library, Search, and the regular Player route. The external launch path is wired separately by `RoviaApplication` and `ExternalPlayerHost`; it uses the shared `PlaybackContextState`, the direct-URI metadata resolver, the existing embedded lyrics reader, and `ExternalMedia3PlaybackController`. The regular and external paths use the same application-scoped `AudioOutputController`. Do not construct duplicate output controllers inside feature composables or introduce a DI framework. Do not force external items through `AppContainer` or its Room-backed catalog merely to reuse the normal library path.
 
 ## 10.1 DATABASE AND MEDIASTORE CATALOG ARCHITECTURE
 
@@ -779,15 +816,11 @@ the entire audio file. Do not call it a content hash.
 
 ### Active player metadata
 
-`PlayerViewModel` observes the active playback URI through `MusicRepository.observeTrackByUri()`. When Room
-emits a newer catalog `Track` for the same URI, the UI state uses that refreshed track for presentation while
-keeping playback position, play/pause state, duration, repeat, and shuffle sourced from
-`PlaybackController.playbackState`. This UI refresh must not restart playback or rebuild the Media3 queue.
-The playback module remains unaware of Room/SQLite.
+For regular playback, `PlayerViewModel` observes the active playback URI through `MusicRepository.observeTrackByUri()`. When Room emits a newer catalog `Track` for the same URI, the UI state uses that refreshed track for presentation while keeping playback position, play/pause state, duration, repeat, and shuffle sourced from the playback controller state. This UI refresh must not restart playback or rebuild the Media3 queue. The playback module remains unaware of Room/SQLite.
 
-`artworkUri` currently uses the MediaStore content URI for the track. Embedded metadata enrichment does not
-update `artwork_uri`, and the artwork loader remains based on Android `ContentResolver.loadThumbnail()`.
-Do not add cache-busting or a separate artwork cache as part of unrelated metadata changes.
+External playback intentionally does not observe `MusicRepository.observeTrackByUri()`: its `PlayerViewModel` receives no catalog repository and uses the transient `Track` resolved directly from the external content URI. This prevents an external item from being silently replaced with a catalog record or requiring catalog membership.
+
+For a regular MediaStore track, `artworkUri` is currently the MediaStore audio content URI. This remains a source URI for the displayed-artwork fallback path, not proof that Player color extraction always derives colors from a provider-generated thumbnail. Player and MiniPlayer now prefer embedded artwork read from `Track.uri` with `MediaMetadataRetriever`; their separate fallback path uses `artworkUri`. Embedded metadata enrichment does not update `artwork_uri`. Do not add cache-busting or an unrelated persistent artwork cache.
 
 ### Schema version and current development policy
 
@@ -2612,9 +2645,9 @@ Important semantics:
 - artwork may be null;
 - extended release metadata may be null when the source does not expose it.
 
-Do not turn `Track.title` into nullable merely because MediaStore metadata can be incomplete.
+`Track` can represent both a catalog item and a transient external item. For a regular catalog item, `id`, `dateAddedEpochSeconds`, `relativePath`, and `volumeName` reflect MediaStore/catalog data. For an external item, `ExternalAudioMetadataResolver` keeps the supplied audio URI as `uri`, derives a temporary in-memory ID from the URI string, uses `dateAddedEpochSeconds = 0L`, and leaves catalog-only path/volume fields null. Those external defaults are not verified source metadata and must not be presented as a real date-added value or MediaStore identity. External tracks are not inserted into `music_tracks` or `recent_plays`.
 
-The repository keeps a non-null title fallback.
+Do not turn `Track.title` into nullable merely because source metadata can be incomplete. The regular repository and external resolver each keep an appropriate non-null title fallback without fabricating artist/album tags.
 
 ---
 
@@ -2635,8 +2668,7 @@ metadata use its database-backed Flows. `MediaStoreMusicRepository` may remain i
 not the repository wired by `AppContainer` for the primary catalog read path. Do not reintroduce the old
 per-track `MediaMetadataRetriever` listing path as the Home/Library/Search startup path.
 
-The MediaStore-derived `Track` uses the real MediaStore content URI for both `uri` and `artworkUri`. Artwork
-loading remains a separate operation handled by the existing Android thumbnail component.
+The MediaStore-derived `Track` uses the real MediaStore audio content URI for both `uri` and `artworkUri`. `artworkUri` remains the source for displayed-artwork loading and the palette fallback path. However, Player and MiniPlayer color extraction now prefers the embedded picture read from `Track.uri` with `MediaMetadataRetriever`; do not describe the palette extraction as thumbnail-only or assume its first source is always `ContentResolver.loadThumbnail()`.
 
 ---
 
@@ -2888,7 +2920,7 @@ MediaStore remains authoritative for media availability and indexed source metad
 
 # 40. RECENT PLAY EVENT SOURCE
 
-Recent Play is recorded by the Media3 playback layer when a track actually becomes active. The playback layer writes through `RecentPlayRepository`; it does not access Room directly.
+Recent Play is recorded by the regular Media3 playback context when a regular library track actually becomes active. The playback layer writes through `RecentPlayRepository`; it does not access Room directly. The external context is explicitly excluded: opening a file through `ACTION_VIEW` must never create or update a Recent Play record.
 
 The implementation listens to relevant Media3 player events such as:
 
@@ -2904,30 +2936,44 @@ A simple UI tap should not be treated as a playback-history event.
 
 # 41. PLAYBACK CONTROLLER CONTRACT
 
-`PlaybackController` currently exposes:
+The shared Player UI depends on `PlayerPlaybackController`, not on regular-library-only APIs. This allows Player controls to operate on either regular or external playback without changing the UI design.
+
+The shared controller contract contains:
 
 ```kotlin
 val playbackState: StateFlow<PlaybackState>
-val recentPlays: StateFlow<List<Track>>
-
-fun play(track: Track)
-
-fun playQueue(
-    tracks: List<Track>,
-    startIndex: Int = 0,
-)
 
 fun pause()
 fun resume()
 fun stopAndClearQueue()
 fun seekTo(positionMs: Long)
+fun restartCurrentTrack()
 fun skipToNext()
 fun skipToPrevious()
+fun setRepeatMode(repeatMode: RepeatMode)
+fun setShuffleEnabled(enabled: Boolean)
 ```
 
-`recentPlays` exposes the complete persistent Recent Play recency list (one record per distinct content URI), not the 10-entry Home preview. Presentation layers apply any display limit themselves.
+`PlaybackController` extends `PlayerPlaybackController` and adds regular-library responsibilities:
 
-Feature modules should depend on this interface.
+```kotlin
+val recentPlays: StateFlow<List<Track>>
+fun play(track: Track)
+fun playQueue(tracks: List<Track>, startIndex: Int)
+```
+
+`ExternalPlaybackController` also extends `PlayerPlaybackController` and adds:
+
+```kotlin
+fun startExternalPlayback(track: Track)
+fun endExternalPlayback()
+```
+
+`PlaybackContextState` exposes the current `PlaybackContext` (`REGULAR` or `EXTERNAL`). The regular controller uses it to ignore playback callbacks/operations that belong to the external context and to prevent an external item from being recorded into Recent Play. Do not move concrete Media3 types into the API module or make feature UI modules instantiate their own players.
+
+`recentPlays` exposes the complete persistent Recent Play recency list (one record per distinct content URI), not the 10-entry Home preview. Presentation layers apply any display limit themselves. External playback does not create or update Recent Play records.
+
+Feature modules should depend on `PlayerPlaybackController` when they only need Player UI operations, and on `PlaybackController` only when they genuinely need regular-library queue/history operations.
 
 ---
 
@@ -2947,136 +2993,218 @@ Do not duplicate Media3 state into a second global player state system.
 
 The playback queue is in memory.
 
-When a screen selects a track from a list:
+When a screen selects a track from a regular Rovia list:
 
 ```text
 tracks + selected index
         ↓
 PlaybackController.playQueue(...)
+        ↓
+regular ExoPlayer queue
 ```
 
-The selected item becomes current and Previous/Next operate within that queue.
+The selected item becomes current and Previous/Next operate within that regular queue. The queue does not survive process death. Do not introduce persistent playlists.
 
-The queue does not survive process death.
-
-Do not introduce persistent playlists.
+External `ACTION_VIEW` playback does not call `playQueue()` with catalog tracks. It starts one transient `Track` in the isolated external player. External Previous/Next must never operate on the regular queue.
 
 ---
 
 # 44. MEDIA3 IMPLEMENTATION
 
-`Media3PlaybackController` creates a `SessionToken` for:
+Rovia uses Media3/ExoPlayer for both regular and external audio playback. It does not introduce another decoding framework or a second media service.
+
+`Media3PlaybackController` is the regular-library controller. It connects to:
 
 ```text
 RoviaMediaSessionService
+    -> one MediaSession
+    -> currently active ExoPlayer
 ```
 
-It obtains a `MediaController` through the official Media3 API.
+The regular controller keeps its regular-library queue of `Track` objects and translates it into Media3 `MediaItem`s. Its queue, current media item, and position are owned by the regular ExoPlayer instance.
 
-The controller keeps a local queue of `Track` objects and translates it into Media3 `MediaItem`s.
+`ExternalMedia3PlaybackController` connects to the same `RoviaMediaSessionService`, but starts and commands a separately owned external ExoPlayer through the shared `MediaSession`. It uses a single external `Track`, not the regular library queue.
 
-Features provided through the controller include:
-
-```text
-play
-playQueue
-pause
-resume
-stop/clear
-seek
-next
-previous
-position updates
-```
+Keep the implementation based on the official Media3 API. Do not instantiate ExoPlayer inside `MainActivity`, `PlayerScreen`, or a feature ViewModel.
 
 ---
 
 # 45. MEDIASESSION SERVICE
 
-`RoviaMediaSessionService` owns:
+`RoviaMediaSessionService` owns these playback objects:
 
 ```text
-ExoPlayer
-MediaSession
+regularPlayer  : ExoPlayer for the normal Rovia queue
+externalPlayer : ExoPlayer for an explicitly opened external URI
+mediaSession   : one MediaSession whose active Player can switch between them
 ```
 
-It is registered in the manifest as a `MediaSessionService`.
+The service is registered in the manifest as a `MediaSessionService`. The `MediaSession` points at the regular player during normal playback. When external playback begins, the service switches the session to `externalPlayer`; when external playback ends, it switches the same session back to `regularPlayer`.
 
-The service is the background playback boundary.
+The service handles app-internal custom commands to activate the external player and restore the regular player. Those commands are accepted only from Rovia's own controller package. They are not a general external-client API.
 
-Do not construct another ExoPlayer in `MainActivity`, `PlayerScreen`, or a feature ViewModel.
+When switching to external playback, the service remembers whether regular playback was playing and pauses the regular player without releasing it or clearing its queue. On restore it stops and clears the external player, reattaches the session to the preserved regular player, and resumes regular playback only when it had been playing before the external session and still has a queue.
+
+Do not replace this with one shared mutable queue. Doing so would overwrite the user's regular queue/current position, and restoring the session would no longer be reliable. Do not add a second `MediaSessionService` or a different audio engine.
 
 ---
 
 # 46. BACKGROUND PLAYBACK
 
-The playback service uses Media3's system media-session integration for:
+The existing Media3 service and its active `MediaSession` provide:
 
 - background playback;
 - Android media notification;
 - lock-screen controls;
 - system media controls.
 
+This applies to regular playback and to an active external playback session. Since the service switches the one `MediaSession` between player instances, System UI follows whichever context is currently active.
+
 Rovia does not maintain a second custom notification state machine.
 
 ---
 
+## 46.1. EXTERNAL PLAYER: PURPOSE AND ENTRY POINT
+
+External Player supports Android file-manager `Open with` / `ACTION_VIEW` launches for a supported `content://` audio URI with an `audio/*` MIME type. The invoking app supplies the URI access; Rovia must use that URI directly rather than constructing a filesystem path or searching for a matching catalog row.
+
+External playback is intentionally different from selecting a song in Rovia's own Library:
+
+| Regular playback | External playback |
+|---|---|
+| Track is selected from Rovia's Room-backed catalog / a Rovia list. | Track is supplied explicitly by another app through an external content URI. |
+| The `Track` corresponds to the synchronized MediaStore catalog. | A transient `Track` is resolved directly from the supplied URI. |
+| Uses the regular ExoPlayer and regular in-memory queue. | Uses the dedicated external ExoPlayer with exactly one external item. |
+| Regular playback events may update persistent Recent Play. | External playback must not add a `recent_plays` record. |
+| MediaStore catalog and Folder Filter govern normal library discovery. | Does not look up, import, index, or Folder-Filter the explicitly opened URI. |
+
+The reason for this separation is isolation, not different UI: the app must play a requested file even when it is not in Rovia's catalog or its containing folder is excluded. It must also avoid replacing the user's existing queue, playback position, or play/pause state.
+
+The external path reuses `UnifiedPlayerSheet` and the normal `PlayerScreen` with the full Player initially expanded. Do not add external-player badges, labels, alternate controls, or a separate visual design unless explicitly requested.
+
+## 46.2. EXTERNAL PLAYER: SESSION SWITCH AND RESTORE CONTRACT
+
+The session hand-off is:
+
+```text
+ACTION_VIEW content://... (audio/*)
+    -> MainActivity identifies the external URI
+    -> ExternalAudioMetadataResolver resolves a transient Track
+    -> ExternalMedia3PlaybackController starts that one Track
+    -> RoviaMediaSessionService remembers the regular play/pause state
+    -> regular ExoPlayer pauses but remains alive with queue/position intact
+    -> MediaSession switches to externalPlayer
+    -> ExternalPlayerHost displays the existing full Player UI
+    -> playback continues through the same MediaSessionService
+    -> Back / Player close ends external playback
+    -> externalPlayer stops and its queue is cleared
+    -> MediaSession switches back to regularPlayer
+    -> regular playback resumes only if it was playing before the hand-off
+    -> Activity finishes and returns to the invoking file manager
+```
+
+`PlaybackContextState` is set to `EXTERNAL` while external playback owns the session, then returns to `REGULAR` when the regular context is restored. The regular controller must not treat external-session events as regular track changes, update regular playback state from them, or emit Recent Play events for the external URI.
+
+Repeat and Shuffle controls remain present and can change external playback state, but the external queue contains one item only. Neither control may append catalog tracks or navigate into the normal Rovia queue. Previous/Next must not escape into regular songs.
+
+External playback must not write to the Room `music_tracks` table, `recent_plays`, or any persistent playback-settings store. It must not appear in Recently Added. Ending external playback clears the external item but must not clear or rebuild the preserved regular queue.
+
+## 46.3. EXTERNAL PLAYER: BACKGROUND AND LIFECYCLE
+
+External playback uses the same Media3 foreground playback service, active media notification, lock-screen controls, and system media-session path as regular playback. Backgrounding the Activity or locking the screen must not by itself stop external audio.
+
+Normal system Back and the Player's close/back action both end the external session and return to the file manager. The external artwork cache is temporary and is released during external-session cleanup. Do not route the external close action through the regular Player's collapse-only behavior.
+
 # 47. MEDIA METADATA
 
-Media3 `MediaItem` metadata is created from real track information.
+Media metadata has two distinct sources, depending on how playback was started. Both paths use real source values and must leave missing values absent rather than fabricate them.
 
-Do not invent album/artist/title metadata when the source is missing.
+## 47.1. REGULAR LIBRARY METADATA
 
-Do not manipulate source metadata merely for UI translation.
+Regular tracks originate from `MediaStoreCatalogDataSource`, which reads indexed metadata and stores a synchronized snapshot in Room through `MediaCatalogSyncCoordinator`. `RoomMusicCatalogRepository` supplies Home, Library, Search, and regular Player track observation.
 
-Localization changes UI labels, not the music metadata itself.
+Catalog listing does not open every media file with `MediaMetadataRetriever`. `EmbeddedMetadataEnrichmentProcessor` separately reads only the selected embedded fields it currently owns (release date and copyright), processes a bounded batch off the main thread, and updates the matching catalog/recent-play metadata. Do not expand catalog listing into an unbounded per-file metadata scan.
+
+The regular `Track.uri` is a MediaStore audio content URI. The current `MediaStoreCatalogDataSource` also assigns that same content URI to `Track.artworkUri`; it is used by the displayed-artwork path and fallback palette path. Embedded art used by the color extractor is now queried directly from `Track.uri` first, not assumed to be the same as a provider-generated thumbnail.
+
+## 47.2. EXTERNAL URI METADATA
+
+`ExternalAudioMetadataResolver` resolves one explicitly supplied `content://` audio URI on `Dispatchers.IO`, independently from the catalog. It can query optional `OpenableColumns.DISPLAY_NAME` and `OpenableColumns.SIZE` values, then uses `MediaMetadataRetriever.setDataSource(context, uri)` to read metadata from that exact source.
+
+The resolver currently reads supported embedded fields such as title, artist, album, album artist, genre, composer, author, writer, release date/year, track/disc numbers, compilation, duration, MIME type, bitrate, and embedded picture when available. MIME type prefers `ContentResolver.getType(uri)` and falls back to retriever metadata. Display name and size are optional provider metadata; a provider can omit them.
+
+Title selection uses the embedded title first, then a usable display name without its extension, then the URI's last path segment, and finally the URI string. This is a non-null `Track.title` fallback, not fabricated artist/album metadata. Values the resolver does not obtain (for example sample rate and bits per sample in the current implementation) remain null.
+
+External `Track` identity and catalog-only fields are transient: the current resolver derives `id` from the URI string, sets `dateAddedEpochSeconds` to `0L`, and leaves `relativePath` and `volumeName` null. Do not present these defaults as real MediaStore values. The original external audio URI stays in `Track.uri` and is used for playback and embedded lyric reading. The external `Track` is not inserted into Room.
+
+Do not make `ExternalAudioMetadataResolver` depend on `MusicRepository`, Room/SQLite, `FolderBrowserRepository`, `FolderFilterRepository`, catalog synchronization, or Recent Play persistence. External playback must continue to work if the item is missing from Rovia's catalog or is located inside a folder excluded from the regular library.
 
 ---
 
 # 48. ARTWORK
 
-`AlbumArtwork` loads local artwork through Android's `ContentResolver.loadThumbnail()` API. Thumbnail work must stay off the main thread.
+Artwork display and artwork-color extraction are related but separate operations.
+
+### Artwork displayed in UI
+
+`AlbumArtwork` first uses Android's `ContentResolver.loadThumbnail()` where that path is supported, then falls back to `ArtworkBitmapLoader`. The shared `ArtworkBitmapLoader` reads supported URIs through Android platform APIs, including temporary `file://` artwork URIs and `content://` URIs. It inspects image dimensions before decoding and bounds bitmap size to reduce memory use. All I/O and bitmap decoding must stay off the main thread.
 
 There is no Coil, Glide, or third-party image-loading dependency. If artwork is unavailable, render the existing neutral Material-themed fallback; do not generate or download replacement artwork.
 
-## 48.1 Artwork-derived Player colors
+### External embedded artwork lifecycle
 
-Rovia also derives media-specific UI colors from the real current track artwork. The extraction path uses the Android framework `WallpaperColors` API, even though the source image is album artwork rather than a device wallpaper. `WallpaperColors.fromBitmap(bitmap)` accepts a bitmap and returns representative colors; it does not require the bitmap to be an actual wallpaper.
+`ExternalAudioMetadataResolver` reads `MediaMetadataRetriever.embeddedPicture` from the external audio URI. When embedded artwork is available, it writes only the image bytes to an app-private temporary cache directory (`cache/external-artwork`) and returns a `file://` URI as `Track.artworkUri`. The audio itself continues to be played from the original `content://` URI; Rovia does not copy or move the audio file. Temporary art is deleted during external-playback cleanup. Artwork is optional and its absence must not prevent audio playback.
 
-In `feature/player/PlayerScreen.kt`, Rovia loads a small `64 × 64` artwork thumbnail with `ContentResolver.loadThumbnail()` and calls `WallpaperColors.fromBitmap(bitmap)` on `Dispatchers.IO`. The returned colors are converted by `playerArtworkPaletteFromWallpaperColors(...)` into `PlayerArtworkPalette`.
+## 48.1. Artwork-derived Player and MiniPlayer colors
 
-The palette in `feature/player/PlayerArtworkColors.kt` contains:
+Rovia uses Android's public `WallpaperColors.fromBitmap(bitmap)` API to obtain representative colors from album artwork. This API accepts a bitmap; the image does not need to be the device wallpaper. `WallpaperColors` provides representative colors, while Rovia's additional palette fields and accent transformations are application logic.
 
-- `seedColor`: the primary artwork-derived seed used for Player-local background color treatment;
-- `secondaryColor` and `tertiaryColor`: additional representative artwork colors, when available;
-- `vividAccentColor`: a more vivid artwork accent for emphasis;
-- `controlAccentColor`: a softer accent for media controls.
+### Common extraction source
 
-`LocalPlayerArtworkPalette` provides the full palette to Player descendants, while `LocalPlayerArtworkColor` preserves the seed-color value for existing UI paths. Use the helpers in `PlayerArtworkColors.kt` (`playerArtworkAccentColor()`, `playerArtworkControlAccentColor()`, and the related control-container/content helpers) instead of duplicating color transformations in each Player component. The palette uses local HSV adjustments where needed and falls back safely when an extracted color or artwork is unavailable.
+Both `feature/player/PlayerScreen.kt` and `core/ui/component/MiniPlayer.kt` prefer embedded artwork from the active audio source `Track.uri`, using `MediaMetadataRetriever.embeddedPicture`. The image bytes are decoded through `BitmapFactory` with a power-of-two sample size, limiting the palette bitmap to approximately `64 × 64` pixels. This common audio-source-first path is intended to make the same track yield a consistent artwork palette in Regular Player, External Player, and MiniPlayer when the same embedded picture is available.
 
-The current palette feeds Player-local artwork/background treatment, lyric accents, the seekbar, playback options, action buttons, and audio-output control styling. Keep contrast appropriate for the final container color, including in both light and dark themes.
+If no embedded picture can be obtained, both paths use the existing `Track.artworkUri` fallback. A `file://` fallback is handled by `ArtworkBitmapLoader`; other URIs first try `ContentResolver.loadThumbnail()` and then `ArtworkBitmapLoader`. If neither path succeeds, Player/MiniPlayer use the established Material 3 fallback. Different provider-generated fallback images may produce different colors when no embedded image is available, so never assume `WallpaperColors` itself can make different source bitmaps identical.
 
-The shared `MiniPlayer` in `:core:ui` extracts artwork colors independently using `WallpaperColors.fromBitmap()`. This is intentional module separation: `:core:ui` must not depend on `:feature:player`. Keep the MiniPlayer's extraction lightweight and use a safe fallback when artwork cannot be loaded or the representative colors are not useful.
+The extraction runs on `Dispatchers.IO`. Temporary palette bitmaps are recycled after `WallpaperColors` is created. Do not move `MediaMetadataRetriever`, thumbnail I/O, or bitmap decoding to the UI thread or add a per-library-track retriever loop to catalog synchronization.
 
-## 48.2 Color-system boundary
+### Player palette
 
-Two color systems coexist, with different responsibilities:
+`playerArtworkPaletteFromWallpaperColors(...)` in `feature/player/PlayerArtworkColors.kt` chooses the first sufficiently chromatic representative color in primary, secondary, tertiary order. The current chromatic filter uses HSV saturation `>= 0.12` and value `>= 0.08`. If no representative color satisfies the filter, the function returns null and the relevant components fall back to Material 3.
+
+`PlayerArtworkPalette` contains:
+
+- `seedColor`: the selected representative artwork color, used for Player background treatment;
+- `secondaryColor` and `tertiaryColor`: additional representative colors when present;
+- `vividAccentColor`: a vivid accent for lyrics and seekbar emphasis;
+- `controlAccentColor`: a softer, brighter accent for media controls.
+
+`LocalPlayerArtworkPalette` supplies the palette to Player descendants. `LocalPlayerArtworkColor` preserves the selected seed color for compatibility with components such as the seekbar. Use `playerArtworkAccentColor()`, `playerArtworkControlAccentColor()`, and existing control-container/content helpers instead of inventing a separate formula in each Player component.
+
+`WallpaperColors` does not itself create `vividAccentColor`, `controlAccentColor`, the Player background tint, or a complete Monet tonal palette. Current Rovia code makes local HSV adjustments after extraction: the vivid accent keeps the selected hue and raises saturation with the existing minimum/maximum bounds; the softer control accent lowers saturation and uses a bright value. Player background tint applies its own restrained saturation/value adjustment according to light/dark mode. These are Rovia-local presentation transformations, not a replacement for Android's system Dynamic Color and not a reproduction of System UI's internal Monet/HCT algorithm.
+
+### MiniPlayer palette
+
+The reusable `MiniPlayer` in `:core:ui` derives its accent independently from the same active audio URI-first source and `WallpaperColors` API. Its logic intentionally stays in `:core:ui` because that module must not depend on `:feature:player`. It uses the same representative-color selection thresholds and vivid-accent HSV formula as `PlayerArtworkColors.kt`; do not replace it with the old thumbnail-only path or a new unrelated palette formula. The MiniPlayer keeps its current visual contract: the card retains Material 3 colors, while its playback controls receive artwork-derived accents.
+
+### Artwork color versus app-wide theme
+
+Two systems coexist, with strictly different responsibilities:
 
 ```text
 App-wide UI
     -> Android dynamic color / Monet
     -> MaterialTheme.colorScheme and native component defaults
 
-Player and MiniPlayer media accents
-    -> local artwork thumbnail
+Player / External Player / MiniPlayer media accents
+    -> Track.uri embedded picture via MediaMetadataRetriever
+    -> bounded bitmap decode (~64 x 64)
     -> WallpaperColors.fromBitmap(bitmap)
+    -> Rovia-local representative-color selection and HSV adjustments
     -> PlayerArtworkPalette / MiniPlayer-local accent
-    -> media-specific backgrounds and controls
+    -> media-specific Player background and controls
 ```
 
-The artwork palette is **not** a replacement for `dynamicLightColorScheme()` / `dynamicDarkColorScheme()`, is not a second app-wide theme, and must not recolor unrelated Home, Search, Library, Settings, or navigation UI.
-
-This in-app palette also does not configure the Android notification or lock-screen media color scheme. Media3/MediaSession supplies real media metadata and artwork; Android System UI makes its own presentation/color decisions. Do not claim that Rovia's `PlayerArtworkPalette` is shared with, or exactly reproduces, System UI's internal Monet palette algorithm.
+The artwork palette is not a replacement for `dynamicLightColorScheme()` / `dynamicDarkColorScheme()`, is not a second app-wide theme, and must not recolor unrelated Home, Search, Library, Settings, or navigation UI. It also does not configure notification or lock-screen media colors. Media3/MediaSession supplies real media metadata and artwork; Android System UI makes its own presentation/color decisions. Do not claim that Rovia's palette is shared with, or exactly reproduces, System UI's internal Monet palette algorithm.
 
 ---
 
@@ -3085,33 +3213,41 @@ This in-app palette also does not configure the Android notification or lock-scr
 Artwork must be:
 
 - local and real;
-- loaded with Android platform APIs;
-- lightweight, with thumbnail-sized bitmaps for palette extraction;
-- optional, with a safe fallback when missing.
+- loaded through Android platform APIs;
+- optional, with the existing safe fallback when missing;
+- decoded off the main thread;
+- bounded to thumbnail-sized bitmaps for palette extraction;
+- cleaned up when Rovia owns a temporary external-artwork cache file.
 
-Do not add remote image URLs, a network image loader, a third-party palette library, or unnecessary full-resolution bitmap decoding.
+Do not add remote image URLs, a network image loader, a third-party palette library, another audio decoder, or unnecessary full-resolution bitmap decoding.
+
+### Required source-selection rules
+
+1. The image rendered by `AlbumArtwork` uses its display-loading path (`ContentResolver.loadThumbnail()` followed by `ArtworkBitmapLoader` when necessary).
+2. Player and MiniPlayer color extraction prefer the embedded picture extracted from the active `Track.uri` with `MediaMetadataRetriever`.
+3. If that embedded picture is unavailable, color extraction falls back to `Track.artworkUri`: `ArtworkBitmapLoader` for `file://`, otherwise `ContentResolver.loadThumbnail()` followed by `ArtworkBitmapLoader`.
+4. Both Player and MiniPlayer call `WallpaperColors.fromBitmap()` and apply the same representative-color selection thresholds and vivid-accent formula. Player has additional local control/background roles as defined in `PlayerArtworkColors.kt`.
+5. Do not conflate `WallpaperColors` extraction with HSV post-processing. `WallpaperColors` supplies representative colors; HSV is Rovia's current, explicit transformation for vivid/control/background accents. Neither step is a complete implementation of Android's internal Monet/HCT palette algorithm.
+6. If extraction fails or only neutral colors are present, use the current Material 3 fallback. Do not create artificial artwork or invent a seed color.
 
 ### Android API reference
 
 - [`WallpaperColors`](https://developer.android.com/reference/android/app/WallpaperColors) — Android API reference for representative wallpaper/image colors.
 - [`WallpaperColors.fromBitmap(Bitmap)`](https://developer.android.com/reference/android/app/WallpaperColors#fromBitmap(android.graphics.Bitmap)) — constructs `WallpaperColors` from a bitmap and extracts its main colors. Available since API 27; Rovia's minimum API is 36.
+- [`MediaMetadataRetriever`](https://developer.android.com/reference/android/media/MediaMetadataRetriever) — Android platform API used to extract embedded audio metadata and picture bytes from the active audio URI.
 - [`ContentResolver.loadThumbnail(Uri, Size, CancellationSignal)`](https://developer.android.com/reference/android/content/ContentResolver#loadThumbnail(android.net.Uri,android.util.Size,android.os.CancellationSignal)) — platform API for efficiently loading a visual thumbnail. Available since API 29.
-- [AOSP `WallpaperColors.java`](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/app/WallpaperColors.java) — implementation reference, useful for understanding framework behavior; do not depend on hidden/internal methods.
+- [`OpenableColumns`](https://developer.android.com/reference/android/provider/OpenableColumns) — optional display-name and size columns exposed by content providers for external URIs.
+- [AOSP `WallpaperColors.java`](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/app/WallpaperColors.java) — implementation reference; do not depend on hidden/internal methods.
 
 Relevant API behavior:
 
 - `primaryColor` is the most visually representative color returned by the framework;
-- `secondaryColor` and `tertiaryColor` may be `null` and must not be assumed present;
-- the API extracts representative colors but does not itself create Rovia's `PlayerArtworkPalette` or generate the app's full Monet `ColorScheme`;
-- `WallpaperColors` is part of the Android framework, so no third-party color extraction dependency is required.
+- `secondaryColor` and `tertiaryColor` may be null and must not be assumed present;
+- `WallpaperColors` extracts representative colors but does not itself create `PlayerArtworkPalette` or generate the full app-wide Monet `ColorScheme`;
+- `MediaMetadataRetriever` must be released after use and must not be run as part of catalog listing for every track;
+- no third-party image-loading or color-extraction dependency is required.
 
-Example of the core API call (illustrative; preserve the current coroutine, fallback, and CompositionLocal wiring in the actual implementation):
-
-```kotlin
-val wallpaperColors = WallpaperColors.fromBitmap(bitmap)
-```
-
-Do not replace this mechanism with a different palette library or rewrite the global app theme as part of unrelated Player UI work. If the extraction path, fallback rules, palette fields, or component usage changes, update this section to match the code.
+If the extraction path, fallback rules, palette fields, temporary-cache lifecycle, or component usage changes, update this section to match the actual code.
 
 ---
 
@@ -3791,11 +3927,10 @@ Current important constraints:
   intentionally a synchronized local catalog, not a user-data-only table.
 - Use per-volume MediaStore version/generation checkpoints to avoid querying the entire catalog when nothing
   changed and use incremental synchronization when supported by the current checkpoint.
-- Do not run `MediaMetadataRetriever` as part of catalog listing for every track. Enrich selected embedded tags
-  separately in bounded batches.
-- Recent Play is ordered by last-played time and is not trimmed to the Home preview size.
-- Album artwork uses Android thumbnail loading.
-- There is only one playback service/player path.
+- Do not run `MediaMetadataRetriever` as part of catalog listing for every track. Enrich selected catalog tags separately in bounded batches. Direct extraction for the one active Player/MiniPlayer artwork URI and the one explicit external URI is a different, bounded operation and must remain off the main thread.
+- Recent Play is ordered by last-played time and is not trimmed to the Home preview size; external playback never writes to it.
+- Displayed album artwork uses Android thumbnail loading with `ArtworkBitmapLoader` fallback. Palette extraction prefers embedded art from the active audio URI and decodes only a small bitmap.
+- There is one playback service and one `MediaSession`, but it owns two isolated ExoPlayer instances: regular and external. Do not add a separate service, second framework, or shared queue that destroys restore semantics.
 - The app does not continuously scan the raw filesystem.
 - No network image loading exists.
 - No background worker is introduced without a real requirement.
@@ -4041,9 +4176,15 @@ Treat these files/modules as high-impact:
 app/src/main/kotlin/com/rovia/music/Navigation.kt
 app/src/main/kotlin/com/rovia/music/UnifiedPlayerSheet.kt
 app/src/main/kotlin/com/rovia/music/MainActivity.kt
+app/src/main/kotlin/com/rovia/music/ExternalPlayerHost.kt
+app/src/main/AndroidManifest.xml
 app/src/main/kotlin/com/rovia/music/theme/Theme.kt
 core/playback-api/src/main/kotlin/com/rovia/music/core/playback/PlaybackController.kt
+core/playback-api/src/main/kotlin/com/rovia/music/core/playback/PlayerPlaybackController.kt
+core/playback-api/src/main/kotlin/com/rovia/music/core/playback/ExternalPlaybackController.kt
+core/playback-api/src/main/kotlin/com/rovia/music/core/playback/PlaybackContextState.kt
 playback/media3/src/main/kotlin/com/rovia/music/playback/media3/Media3PlaybackController.kt
+playback/media3/src/main/kotlin/com/rovia/music/playback/media3/ExternalMedia3PlaybackController.kt
 playback/media3/src/main/kotlin/com/rovia/music/playback/media3/RoviaMediaSessionService.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/RoviaDatabase.kt
 data/database/src/main/kotlin/com/rovia/music/data/database/RoviaDatabaseProvider.kt
@@ -4066,6 +4207,9 @@ data/media-store/src/main/kotlin/com/rovia/music/data/media/store/MediaCatalogSy
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedMetadataEnrichmentProcessor.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedMetadataSignature.kt
 data/media-store/src/main/kotlin/com/rovia/music/data/media/store/EmbeddedLyricsRepository.kt
+data/media-store/src/main/kotlin/com/rovia/music/data/media/store/ExternalAudioMetadataResolver.kt
+core/ui/src/main/kotlin/com/rovia/music/core/ui/component/ArtworkBitmapLoader.kt
+core/ui/src/main/kotlin/com/rovia/music/core/ui/component/MiniPlayer.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerScreen.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerPortraitContent.kt
 feature/player/src/main/kotlin/com/rovia/music/feature/player/PlayerLandscapeContent.kt
@@ -4346,6 +4490,21 @@ After changing Player, MiniPlayer, or `UnifiedPlayerSheet`, verify:
 [ ] fixed system volume disables the slider and shows the explanatory message
 [ ] Audio Output control aligns with Repeat/Shuffle in portrait and landscape without a large empty gap or overflow menu
 [ ] fullscreen lyrics remains minimal and does not show the Audio Output indicator
+[ ] file-manager `Open with -> Rovia` opens supported `content://` audio URI
+[ ] external title/artist/album/duration use metadata resolved from that URI when available
+[ ] external embedded artwork appears when available
+[ ] external embedded lyrics appear when available
+[ ] external playback works even when the source folder is excluded by Folder Filter
+[ ] external item does not appear in Recently Added or persistent Recent Play
+[ ] external item is not inserted into Room `music_tracks`
+[ ] external Repeat/Shuffle controls work without adding regular library tracks to the one-item external queue
+[ ] external Previous/Next never moves into the regular queue
+[ ] system Back and Player close return to the invoking file manager
+[ ] external playback stops/clears on close and its temporary artwork cache is released
+[ ] regular queue and current position remain intact after an external session
+[ ] regular playback resumes after external close only if regular playback was playing before hand-off
+[ ] external playback continues when the Activity is backgrounded or the screen is locked
+[ ] Player, External Player, and MiniPlayer derive consistent colors from the same embedded artwork when available
 ```
 
 ---
@@ -4466,6 +4625,9 @@ Catalog synchronization checks:
 [ ] Room-backed Home, Library, and Search show the synchronized catalog
 [ ] active Player Track Info observes catalog metadata by URI without restarting playback
 [ ] Recent Play metadata is refreshed by URI when embedded release metadata is discovered later
+[ ] regular Player artwork-color extraction prefers embedded art from `Track.uri` before falling back to `artworkUri`
+[ ] regular displayed artwork retains `AlbumArtwork` thumbnail loading and `ArtworkBitmapLoader` fallback
+[ ] palette extraction remains limited to the active track and uses a small bitmap off the main thread
 ```
 
 No metadata should be fabricated. Missing embedded copyright/release-date tags are valid absent values and must not be displayed as synthetic metadata.
@@ -4576,7 +4738,13 @@ Home Recent Play collection detail pages for Artist / Album / Genre
 Room-backed synchronized music catalog
 per-volume MediaStore generation/version synchronization
 separate bounded embedded-metadata enrichment
-URI-based active-player metadata observation
+URI-based active regular-player metadata observation
+file-manager external audio `ACTION_VIEW` playback
+isolated regular/external ExoPlayer contexts behind one MediaSessionService
+direct external metadata and temporary embedded-artwork resolution
+external playback bypasses catalog, Folder Filter, Recently Added, and Recent Play writes
+regular queue/position preservation and session restoration after external playback
+shared embedded-artwork-first color extraction for Player and MiniPlayer
 explicit dp geometry contracts
 Kotlin-only source tree
 no src/main/java directories
