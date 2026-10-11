@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
@@ -76,6 +77,39 @@ internal fun AudioOutputIndicator(
     if (state == null) {
         return
     }
+
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val artworkControlAccent =
+        playerArtworkControlAccentColor()
+
+    /*
+     * Match the idle Repeat and Shuffle controls:
+     * - surfaceContainerHigh as the base
+     * - 12% artwork tint
+     * - onSurface for the icon
+     */
+    val outputButtonContainerColor =
+        playerArtworkControlContainerColor(
+            baseColor = colorScheme.surfaceContainerHigh,
+            tintFraction = 0.12f,
+        )
+
+    val outputButtonIconColor =
+        colorScheme.onSurface
+
+    /*
+     * Bottom-sheet device and volume icons retain the
+     * softer artwork accent.
+     */
+    val sheetControlIconColor =
+        artworkControlAccent
+            ?: colorScheme.onSurfaceVariant
+
+    val volumeAccentColor =
+        artworkControlAccent
+            ?: colorScheme.primary
 
     var isBottomSheetVisible by remember {
         mutableStateOf(false)
@@ -154,11 +188,6 @@ internal fun AudioOutputIndicator(
             (outputButtonWidth - 36.dp)
                 .coerceAtLeast(0.dp)
 
-        /*
-         * The Player button always keeps its own icon instance.
-         * Opening the bottom sheet does not replace the icon
-         * with an empty Spacer.
-         */
         Surface(
             onClick = {
                 isBottomSheetVisible = true
@@ -174,14 +203,10 @@ internal fun AudioOutputIndicator(
             shape =
                 RoundedCornerShape(18.dp),
             color =
-                MaterialTheme
-                    .colorScheme
-                    .surfaceContainerHigh,
+                outputButtonContainerColor,
             contentColor =
-                MaterialTheme
-                    .colorScheme
-                    .onSurface,
-            tonalElevation = 1.dp,
+                outputButtonIconColor,
+            tonalElevation = 0.dp,
             shadowElevation = 0.dp,
         ) {
             Box(
@@ -209,9 +234,7 @@ internal fun AudioOutputIndicator(
                         modifier =
                             Modifier.size(20.dp),
                         tint =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant,
+                            outputButtonIconColor,
                     )
 
                     Text(
@@ -232,9 +255,7 @@ internal fun AudioOutputIndicator(
                                 .typography
                                 .labelMedium,
                         color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface,
+                            colorScheme.onSurface,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Clip,
@@ -247,11 +268,8 @@ internal fun AudioOutputIndicator(
 
     if (isBottomSheetVisible) {
         /*
-         * Create separate Painter instances for the bottom sheet.
-         *
-         * The Player button continues using the Painter parameters
-         * passed into AudioOutputIndicator. The sheet uses these
-         * independent instances of the same shared vector resources.
+         * Use independent Painter instances for the bottom sheet.
+         * The main player button keeps its own icon instance.
          */
         val sheetBluetoothIcon =
             painterResource(
@@ -274,10 +292,6 @@ internal fun AudioOutputIndicator(
                     ),
             )
 
-        /*
-         * Keep the original Material 3 ModalBottomSheet lifecycle,
-         * transparent scrim, and native predictive-back handling.
-         */
         ModalBottomSheet(
             modifier =
                 Modifier.fillMaxHeight(),
@@ -309,9 +323,7 @@ internal fun AudioOutputIndicator(
                             .typography
                             .headlineSmall,
                     color =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurface,
+                        colorScheme.onSurface,
                 )
 
                 Row(
@@ -333,9 +345,7 @@ internal fun AudioOutputIndicator(
                         modifier =
                             Modifier.size(32.dp),
                         tint =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant,
+                            sheetControlIconColor,
                     )
 
                     Column(
@@ -351,9 +361,7 @@ internal fun AudioOutputIndicator(
                                     .typography
                                     .titleMedium,
                             color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
+                                colorScheme.onSurface,
                             maxLines = 2,
                             overflow =
                                 TextOverflow.Ellipsis,
@@ -367,9 +375,7 @@ internal fun AudioOutputIndicator(
                                         .typography
                                         .bodyMedium,
                                 color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurfaceVariant,
+                                    colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -386,9 +392,7 @@ internal fun AudioOutputIndicator(
                                 .typography
                                 .titleMedium,
                         color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface,
+                            colorScheme.onSurface,
                     )
 
                     Row(
@@ -403,9 +407,7 @@ internal fun AudioOutputIndicator(
                             painter = volumeDownIcon,
                             contentDescription = null,
                             tint =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                                sheetControlIconColor,
                             modifier =
                                 Modifier.size(24.dp),
                         )
@@ -445,15 +447,20 @@ internal fun AudioOutputIndicator(
                                 (
                                     state.maxMediaVolume - 1
                                 ).coerceAtLeast(0),
+                            colors =
+                                SliderDefaults.colors(
+                                    thumbColor =
+                                        volumeAccentColor,
+                                    activeTrackColor =
+                                        volumeAccentColor,
+                                ),
                         )
 
                         Icon(
                             painter = volumeUpIcon,
                             contentDescription = null,
                             tint =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                                sheetControlIconColor,
                             modifier =
                                 Modifier.size(24.dp),
                         )
@@ -467,9 +474,7 @@ internal fun AudioOutputIndicator(
                                     .typography
                                     .bodyMedium,
                             color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                                colorScheme.onSurfaceVariant,
                         )
                     } else {
                         Text(
@@ -480,9 +485,7 @@ internal fun AudioOutputIndicator(
                                     .typography
                                     .labelMedium,
                             color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                                colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.End,
                             modifier =
                                 Modifier.fillMaxWidth(),
