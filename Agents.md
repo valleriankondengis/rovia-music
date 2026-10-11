@@ -22,8 +22,8 @@ It is written so a human developer or AI coding agent can understand the applica
 | Package | `com.rovia.music` |
 | Version name | `0.1.0` |
 | Version code | `1` |
-| Minimum Android | Android 16 / API 36 |
-| Target Android | Android 16 / API 36 |
+| Minimum Android | Android 13 / API 33 (`minSdk = 33`) |
+| Target Android | Android 17 / API 37 (`targetSdk = 37`) |
 | Compile SDK | API 37 |
 | Language | Kotlin only |
 | UI | Jetpack Compose |
@@ -203,9 +203,10 @@ Feature modules should depend on API/model layers and shared UI, not concrete Me
 
 # 4. TOOLCHAIN BASELINE
 
-Current version catalog baseline, checked against `gradle/libs.versions.toml`:
+Current Gradle, version-catalog, and toolchain baseline, checked against `gradle/libs.versions.toml` and the project build configuration:
 
 ```text
+Gradle Wrapper              : 9.6.0
 Android Gradle Plugin       : 9.4.0
 Kotlin                      : 2.4.20
 AndroidX Core KTX           : 1.19.1
@@ -228,8 +229,8 @@ AndroidX SQLite              : 2.7.1
 JDK                         : 17
 Java source/target           : 17
 compileSdk                  : 37
-minSdk                      : 36
-targetSdk                   : 36
+minSdk                      : 33
+targetSdk                   : 37
 ```
 
 The library and plugin versions above mirror the version keys currently declared in `gradle/libs.versions.toml`. The SDK levels and JDK/source compatibility values are build configuration and toolchain settings, not version-catalog keys.
@@ -247,6 +248,106 @@ Current Media3 artifacts declared in the version catalog use the same `androidxM
 - `androidx-media3-inspector` → `androidx.media3:media3-inspector`; metadata inspection dependency used by `:data:media-store`.
 
 `:data:media-store` declares `implementation(libs.androidx.media3.inspector)`. `EmbeddedLyricsRepository` uses the Inspector API for a best-effort metadata pass before its existing native parser fallback. The Inspector dependency does not add another playback engine, a software decoder, or a guarantee that every format/tag is supported. Module build files must use version-catalog aliases instead of hardcoded library versions.
+
+## 4.1. ANDROID SDK BASELINE AND STRICT API-COMPATIBILITY POLICY
+
+This section is mandatory for every source, build, and feature change. `minSdk = 33` is intentional: Rovia must continue to work on Android 13 and later. A feature requiring a newer Android version must not raise the application's minimum SDK merely to avoid implementing a fallback unless the developer explicitly changes the product's compatibility policy.
+
+### Authoritative build configuration
+
+| Setting | Required value | Source of truth / scope |
+|---|---:|---|
+| Gradle Wrapper | `9.6.0` | `gradle/wrapper/gradle-wrapper.properties` |
+| Android Gradle Plugin (AGP) | `9.4.0` | Plugin version alias in `gradle/libs.versions.toml` |
+| Kotlin | `2.4.20` | Version/plugin aliases in `gradle/libs.versions.toml` and current project plugin configuration |
+| `compileSdk` | `37` | Android module `build.gradle.kts` files |
+| `minSdk` | `33` | Application and Android library module `defaultConfig` declarations where applicable |
+| `targetSdk` | `37` | `:app` module `app/build.gradle.kts` |
+| JDK / Java source compatibility | `17` | Existing project toolchain and module build configuration |
+
+SDK mapping used by Rovia:
+
+| Android release | API level | Rovia policy |
+|---|---:|---|
+| Android 13 | 33 | Minimum supported OS; all core playback/library flows must retain a working path |
+| Android 14 | 34 | API-34+ features may be considered, subject to runtime/capability checks |
+| Android 15 | 35 | Keep all existing fallback paths working |
+| Android 16 | 36 | API-36-specific features may run behind explicit API gates |
+| Android 17 | 37 | Current target/compile API; do not assume every device feature is available just because it targets or compiles against API 37 |
+
+Configuration rules:
+
+- Keep `compileSdk = 37` for Android modules in the current baseline. `compileSdk` controls which platform APIs can be referenced at compile time; it does **not** make those APIs available on older runtime devices.
+- Keep `minSdk = 33` for the app and relevant Android library modules. Do not set any module to a higher minimum simply because new code uses a newer API; implement a compatible fallback instead, unless the developer explicitly requests a deliberate minimum-SDK increase.
+- Keep `targetSdk = 37` in the application module. Do not copy `targetSdk` into library modules that do not own it, and do not mistake `targetSdk` for a runtime API-availability check.
+- Keep Gradle Wrapper, AGP, Kotlin, and dependency versions aligned with this documented baseline. Do not upgrade/downgrade them as part of an unrelated feature change.
+- `gradle/libs.versions.toml` is the source of truth for declared dependency/plugin version aliases. The current SDK level values (`compileSdk`, `minSdk`, and `targetSdk`) are build configuration in `build.gradle.kts`, not version-catalog keys. Do not add duplicate SDK-version aliases to the TOML just to document them. If the build architecture is deliberately changed to centralize SDK values, update the actual build configuration and this contract together.
+- Do not hardcode dependency versions in module build files when the catalog already provides an alias. Do not change existing version-catalog entries unless the requested change requires it.
+
+### Strict runtime API gates and fallback requirement
+
+**Every feature must work from `minSdk = 33` onward. Any API or capability that is unavailable on the current device must remain unused, must not crash the feature's parent flow, and must have a real, deterministic fallback or an honest unavailable state.** This is mandatory, not an optional enhancement.
+
+Before implementing a platform feature, the developer/agent must:
+
+1. Identify its minimum Android API level and any additional requirement such as permission, hardware, audio HAL, USB route, system service, or device/vendor support. Verify version-sensitive facts in official Android documentation.
+2. Isolate calls to newer platform APIs behind a runtime version check, and keep version-specific code from being executed on unsupported releases. An annotation such as `@RequiresApi` is documentation/static analysis; it is not a substitute for a runtime guard.
+3. Gate any query/projection/request that contains a newer column, constant, method, or capability. Do not send unsupported fields to a content provider and then hope that a missing-column exception will be handled later.
+4. Implement and preserve an older-API path that uses supported APIs and existing behavior. If equivalent information cannot be obtained reliably, return `null`/unavailable or use the existing normal behavior; never fabricate metadata or falsely report that the newer feature is active.
+5. Check optional device capabilities separately from OS version. A feature that exists in the Android platform may still be optional or unsupported by the ROM, driver, HAL, attached device, or route.
+6. Verify both sides of the gate: the feature on a device meeting its requirements, and the fallback on a device below the minimum API or lacking the required capability.
+
+Use `Build.VERSION.SDK_INT` with the correct `Build.VERSION_CODES` constant for API-level gates. Be precise with terminology: **Android 16 is API 36**, not API 16. For APIs or types that cannot safely be referenced in shared code across supported releases, isolate them in API-specific helpers/classes as appropriate. Do not rely on a compile-time SDK setting as runtime protection.
+
+### Known MediaStore example: `INFERRED_DATE`, `SAMPLERATE`, and `BITS_PER_SAMPLE`
+
+The following columns are API 36 additions in the Android SDK:
+
+- `MediaStore.MediaColumns.INFERRED_DATE`
+- `MediaStore.Audio.Media.SAMPLERATE`
+- `MediaStore.Audio.Media.BITS_PER_SAMPLE`
+
+Rovia's current repository implementation deliberately queries these columns only on Android 16 / API 36 and later. On Android 13–15 (API 33–35), **omit those columns from the projection entirely** and do not read them from the `Cursor`.
+
+For an approximate/inferred track date, use this fallback order:
+
+1. Use `INFERRED_DATE` on API 36+ when available and valid.
+2. Otherwise use `DATE_TAKEN` when it is present and valid.
+3. Otherwise use `DATE_MODIFIED`, converting seconds since epoch to milliseconds when the domain model expects milliseconds.
+4. If none is available, leave the value unavailable (`null`) rather than inventing a date.
+
+For sample rate and bits per sample, the legacy MediaStore query path on API 33–35 must leave these values `null` unless another already-implemented, reliable, API-compatible source supplies them. Do not request unsupported columns or infer technical metadata from a filename/extension. Preserve bitrate/MIME and other independently supported columns when they are available.
+
+The projection, column-index lookup, and value-read logic must all follow the same gate. Guarding only the value read is insufficient if the column is still requested in the projection or looked up with `getColumnIndexOrThrow()` on an unsupported provider.
+
+Official references:
+
+- [`MediaStore.MediaColumns.INFERRED_DATE`](https://developer.android.com/reference/android/provider/MediaStore.MediaColumns#INFERRED_DATE) — added in API 36.
+- [`MediaStore.Audio.AudioColumns.SAMPLERATE` and `BITS_PER_SAMPLE`](https://developer.android.com/reference/android/provider/MediaStore.Audio.AudioColumns) — added in API 36.
+
+### Example future feature: Android 14+ USB bit-perfect audio
+
+If Rovia later implements bit-perfect USB audio, API 33 must continue to use the existing normal Media3/ExoPlayer playback path. It must not call Android 14-only preferred mixer APIs, expose an enabled bit-perfect state, or claim bit-perfect output on Android 13.
+
+Android 14 / API 34 introduced preferred mixer attributes for USB audio, but bit-perfect playback is optional and depends on the Audio HAL/vendor implementation and compatible USB audio device/route. Therefore, even on Android 14 or newer, **the OS version check is necessary but not sufficient**:
+
+- Below API 34: use normal playback; do not invoke API-34-only APIs or activate a bit-perfect mode.
+- API 34+: call the relevant API only behind its runtime gate, then detect/validate the required device/route and platform capability before enabling the feature.
+- If any required capability is missing or a request fails: keep normal playback working and represent bit-perfect as unsupported/unavailable. Do not claim bit-perfect based on sample rate, bit depth, file format, or Android version alone.
+- Do not remove the Android 13 fallback simply because the newer path compiles against `compileSdk = 37`.
+
+Official reference: [AOSP — Preferred mixer attributes on USB devices](https://source.android.com/docs/core/audio/preferred-mixer-attr). It describes the Android 14 APIs and notes that bit-perfect playback is optional and supported only by the AIDL Audio HAL implementation.
+
+### Required compatibility test mindset
+
+For every change introducing an API-gated behavior, include in the development/test plan:
+
+- Android 13 / API 33: minimum-SDK behavior and fallback;
+- the feature's first supported API level (for example, API 34 or API 36): guarded feature behavior;
+- capability-absent behavior on a newer OS when the platform feature is optional;
+- the normal playback/library behavior remains usable if the feature cannot activate.
+
+Do not consider a successful compile on API 37 a compatibility test. Do not claim runtime support until it has been tested on a matching device/emulator or otherwise verified using a relevant test.
 
 ---
 
@@ -4381,7 +4482,7 @@ finishes successfully, install the current Debug build with:
 
 This is the standard Rovia development installation command for AI-agent verification.
 
-Runtime interaction changes should then be tested on the Android 16 device/emulator when possible.
+Runtime interaction changes must be tested on Android 13 (API 33, the minimum supported version) when possible, and on newer API levels required by the changed feature. For API-gated features, verify both the fallback path below the required API and the feature path on a supported device/emulator.
 
 The required sequence is:
 
