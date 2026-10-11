@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.playback.AudioOutputState
 import com.rovia.music.core.playback.AudioOutputType
+import com.rovia.music.core.ui.R as CoreUiR
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -104,8 +109,8 @@ internal fun AudioOutputIndicator(
         "$outputButtonContentDescription, $outputLabel"
 
     /*
-     * Refresh the actual system media volume while the sheet
-     * is visible, including changes made using physical buttons.
+     * Refresh actual system media volume while the sheet
+     * is visible, including physical volume-button changes.
      */
     LaunchedEffect(
         isBottomSheetVisible,
@@ -123,14 +128,10 @@ internal fun AudioOutputIndicator(
 
     /*
      * Portrait:
-     * Keep the output button at a maximum width of 128.dp.
+     * Maximum output-button width is 128.dp.
      *
      * Landscape:
-     * Use the remaining width after reserving 224.dp for
-     * Repeat and Shuffle and 8.dp for spacing between groups.
-     *
-     * This makes the complete landscape control row fill its
-     * available width without pushing Shuffle into overflow.
+     * Reserve 224.dp for Repeat and Shuffle plus 8.dp spacing.
      */
     BoxWithConstraints(
         modifier = modifier,
@@ -153,6 +154,11 @@ internal fun AudioOutputIndicator(
             (outputButtonWidth - 36.dp)
                 .coerceAtLeast(0.dp)
 
+        /*
+         * The Player button always keeps its own icon instance.
+         * Opening the bottom sheet does not replace the icon
+         * with an empty Spacer.
+         */
         Surface(
             onClick = {
                 isBottomSheetVisible = true
@@ -240,6 +246,23 @@ internal fun AudioOutputIndicator(
     }
 
     if (isBottomSheetVisible) {
+        /*
+         * Create separate Painter instances for the bottom sheet.
+         *
+         * The Player button continues using the Painter parameters
+         * passed into AudioOutputIndicator. The sheet uses these
+         * independent instances of the same shared vector resources.
+         */
+        val sheetBluetoothIcon =
+            painterResource(
+                id = CoreUiR.drawable.ic_bluetooth,
+            )
+
+        val sheetLocalDeviceIcon =
+            painterResource(
+                id = CoreUiR.drawable.ic_smartphone,
+            )
+
         val sheetState =
             rememberBottomSheetState(
                 initialValue = SheetValue.PartiallyExpanded,
@@ -251,9 +274,13 @@ internal fun AudioOutputIndicator(
                     ),
             )
 
+        /*
+         * Keep the original Material 3 ModalBottomSheet lifecycle,
+         * transparent scrim, and native predictive-back handling.
+         */
         ModalBottomSheet(
             modifier =
-                Modifier.fillMaxSize(),
+                Modifier.fillMaxHeight(),
             onDismissRequest = {
                 isBottomSheetVisible = false
             },
@@ -264,6 +291,9 @@ internal fun AudioOutputIndicator(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .verticalScroll(
+                            rememberScrollState(),
+                        )
                         .navigationBarsPadding()
                         .padding(
                             horizontal = 24.dp,
@@ -295,9 +325,9 @@ internal fun AudioOutputIndicator(
                     Icon(
                         painter =
                             if (isBluetoothConnected) {
-                                bluetoothIcon
+                                sheetBluetoothIcon
                             } else {
-                                localDeviceIcon
+                                sheetLocalDeviceIcon
                             },
                         contentDescription = null,
                         modifier =
