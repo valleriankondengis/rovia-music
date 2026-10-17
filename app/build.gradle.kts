@@ -13,13 +13,34 @@ val keystorePropertiesFile =
 val keystoreProperties =
     Properties()
 
-if (keystorePropertiesFile.exists()) {
+if (keystorePropertiesFile.isFile) {
     FileInputStream(
         keystorePropertiesFile,
     ).use {
         keystoreProperties.load(it)
     }
 }
+
+val releaseStoreFilePath =
+    keystoreProperties.getProperty("storeFile")
+        ?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile =
+    releaseStoreFilePath?.let {
+        rootProject.file(it)
+    }
+
+val releaseSigningConfigured =
+    releaseStoreFile?.isFile == true &&
+        listOf(
+            "storePassword",
+            "keyAlias",
+            "keyPassword",
+        ).all {
+            !keystoreProperties
+                .getProperty(it)
+                .isNullOrBlank()
+        }
 
 android {
     namespace = "com.rovia.music"
@@ -35,28 +56,32 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile =
-                rootProject.file(
-                    keystoreProperties.getProperty(
-                        "storeFile",
-                    ),
-                )
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile =
+                    checkNotNull(releaseStoreFile)
 
-            storePassword =
-                keystoreProperties.getProperty(
-                    "storePassword",
-                )
+                storePassword =
+                    checkNotNull(
+                        keystoreProperties.getProperty(
+                            "storePassword",
+                        ),
+                    )
 
-            keyAlias =
-                keystoreProperties.getProperty(
-                    "keyAlias",
-                )
+                keyAlias =
+                    checkNotNull(
+                        keystoreProperties.getProperty(
+                            "keyAlias",
+                        ),
+                    )
 
-            keyPassword =
-                keystoreProperties.getProperty(
-                    "keyPassword",
-                )
+                keyPassword =
+                    checkNotNull(
+                        keystoreProperties.getProperty(
+                            "keyPassword",
+                        ),
+                    )
+            }
         }
     }
 
@@ -65,10 +90,12 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
 
-            signingConfig =
-                signingConfigs.getByName(
-                    "release",
-                )
+            if (releaseSigningConfigured) {
+                signingConfig =
+                    signingConfigs.getByName(
+                        "release",
+                    )
+            }
 
             proguardFiles(
                 getDefaultProguardFile(
@@ -193,11 +220,11 @@ dependencies {
         project(":feature:settings"),
     )
 
-    debugImplementation(
-        libs.androidx.compose.ui.tooling,
+    implementation(
+        libs.kotlinx.coroutines.android,
     )
 
-    testImplementation(
-        libs.junit,
+    debugImplementation(
+        libs.androidx.compose.ui.tooling,
     )
 }
