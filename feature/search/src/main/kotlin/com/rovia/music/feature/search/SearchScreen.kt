@@ -1,3 +1,4 @@
+
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
@@ -6,14 +7,16 @@
 package com.rovia.music.feature.search
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.painterResource
@@ -31,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
+import com.rovia.music.core.ui.component.ExpressiveScrollbar
 import com.rovia.music.core.ui.component.TrackRow
 
 @Composable
@@ -265,38 +270,58 @@ private fun SearchResults(
             100.dp
         }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding =
-            PaddingValues(
-                top = 8.dp,
-                bottom = bottomContentPadding,
-            ),
-    ) {
-        itemsIndexed(
-            items = results,
-            key = { _, track ->
-                track.id
-            },
-        ) { index, track ->
-            val isCurrentTrack =
-                track.id == currentTrackId
+    val listState = rememberLazyListState()
 
-            TrackRow(
-                track = track,
-                onClick = {
-                    if (isCurrentTrack) {
-                        onRestartCurrentTrack()
-                    } else {
-                        onTrackClick(
-                            results,
-                            index,
-                        )
-                    }
+    /*
+     * Keep the song list at full width.
+     * Draw the scrollbar over the right edge instead of
+     * reserving a separate column for it.
+     */
+    Box(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding =
+                androidx.compose.foundation.layout.PaddingValues(
+                    top = 8.dp,
+                    bottom = bottomContentPadding,
+                ),
+        ) {
+            itemsIndexed(
+                items = results,
+                key = { _, track ->
+                    track.id
                 },
-                showAlbum = true,
-                isCurrentTrack = isCurrentTrack,
-            )
+            ) { index, track ->
+                val isCurrentTrack =
+                    track.id == currentTrackId
+
+                TrackRow(
+                    track = track,
+                    onClick = {
+                        if (isCurrentTrack) {
+                            onRestartCurrentTrack()
+                        } else {
+                            onTrackClick(
+                                results,
+                                index,
+                            )
+                        }
+                    },
+                    showAlbum = true,
+                    isCurrentTrack = isCurrentTrack,
+                )
+            }
         }
+
+        ExpressiveScrollbar(
+            state = listState,
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight(),
+        )
     }
 }
