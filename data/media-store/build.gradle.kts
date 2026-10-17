@@ -28,6 +28,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Official AndroidX Media3 metadata inspection API.
+    // Media3 APIs imported directly by EmbeddedLyricsRepository.
+    implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.extractor)
     implementation(libs.androidx.media3.inspector)
 }
