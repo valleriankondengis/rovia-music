@@ -1,38 +1,25 @@
-
 package com.rovia.music.feature.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rovia.music.core.library.MusicRepository
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.playback.PlaybackController
 import java.util.Locale
 
 @Composable
 fun RecentCollectionRoute(
-    musicRepository: MusicRepository,
     playbackController: PlaybackController,
     collectionType: RecentCollectionType,
     collectionName: String,
     albumArtist: String? = null,
     onBack: () -> Unit,
 ) {
-    val allTracksFlow =
-        remember(musicRepository) {
-            musicRepository.observeAllTracks()
-        }
-
     val allRecentPlaysFlow =
         remember(playbackController) {
             playbackController.recentPlays
         }
-
-    val allTracks by
-        allTracksFlow.collectAsStateWithLifecycle(
-            initialValue = emptyList(),
-        )
 
     val allRecentPlays by
         allRecentPlaysFlow.collectAsStateWithLifecycle(
@@ -43,14 +30,22 @@ fun RecentCollectionRoute(
         playbackController.playbackState
             .collectAsStateWithLifecycle()
 
+    /*
+     * Recent collection detail pages must only show tracks
+     * that exist in the recent-play history.
+     *
+     * Do not use the full music catalog here. Otherwise,
+     * opening a recently played artist, album, or genre
+     * would display tracks that have never been played.
+     */
     val matchingTracks =
         remember(
-            allTracks,
+            allRecentPlays,
             collectionType,
             collectionName,
             albumArtist,
         ) {
-            allTracks.filter { track ->
+            allRecentPlays.filter { track ->
                 track.matchesRecentCollection(
                     collectionType = collectionType,
                     collectionName = collectionName,
@@ -60,7 +55,7 @@ fun RecentCollectionRoute(
         }
 
     /*
-     * The source of collection artwork is the most recently
+     * Collection artwork comes from the most recently
      * played track that belongs to the selected collection.
      *
      * Do not fall back to an unrelated catalog track.
