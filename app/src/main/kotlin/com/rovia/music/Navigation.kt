@@ -61,7 +61,6 @@ import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import kotlin.math.roundToInt
 
-
 internal val NavigationBarHeight =
     80.dp
 
@@ -230,8 +229,6 @@ fun MainNavigation(
                     entry<ArtistDetail> { key ->
                         NavigationDestinationSurface {
                             RecentCollectionRoute(
-                                musicRepository =
-                                    musicRepository,
                                 playbackController =
                                     playbackController,
                                 collectionType =
@@ -248,8 +245,6 @@ fun MainNavigation(
                     entry<AlbumDetail> { key ->
                         NavigationDestinationSurface {
                             RecentCollectionRoute(
-                                musicRepository =
-                                    musicRepository,
                                 playbackController =
                                     playbackController,
                                 collectionType =
@@ -268,8 +263,6 @@ fun MainNavigation(
                     entry<GenreDetail> { key ->
                         NavigationDestinationSurface {
                             RecentCollectionRoute(
-                                musicRepository =
-                                    musicRepository,
                                 playbackController =
                                     playbackController,
                                 collectionType =
