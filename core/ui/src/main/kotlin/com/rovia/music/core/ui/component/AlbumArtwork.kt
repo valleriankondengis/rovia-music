@@ -2,8 +2,6 @@
 package com.rovia.music.core.ui.component
 
 import android.graphics.Bitmap
-import android.net.Uri
-import android.util.Size
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -17,16 +15,14 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 fun AlbumArtwork(
@@ -45,56 +41,25 @@ fun AlbumArtwork(
             size.roundToPx()
         }.coerceAtLeast(1)
 
+    /*
+     * The shared loader handles both Android thumbnails and fallback
+     * decoding. Its bounded LRU cache avoids repeating expensive
+     * artwork reads and bitmap decoding when scrolling.
+     *
+     * Artwork loading and decoding run on Dispatchers.IO inside
+     * ArtworkBitmapLoader rather than on the main thread.
+     */
     val bitmap by produceState<Bitmap?>(
         initialValue = null,
         artworkUri,
         sizePx,
+        context,
     ) {
-        value =
-            artworkUri?.let { uriString ->
-                withContext(Dispatchers.IO) {
-                    val uri =
-                        runCatching {
-                            Uri.parse(uriString)
-                        }.getOrNull()
-
-                    if (uri == null) {
-                        null
-                    } else {
-                        /*
-                         * Preserve the existing MediaStore artwork path.
-                         * This remains the first choice for normal Rovia
-                         * library artwork and thumbnail content URIs.
-                         */
-                        val thumbnail =
-                            runCatching {
-                                context.contentResolver.loadThumbnail(
-                                    uri,
-                                    Size(
-                                        sizePx,
-                                        sizePx,
-                                    ),
-                                    null,
-                                )
-                            }.getOrNull()
-
-                        /*
-                         * If the thumbnail API cannot load this URI,
-                         * fall back to the shared bitmap loader.
-                         *
-                         * This supports temporary file:// artwork
-                         * extracted from an externally opened audio file,
-                         * along with other URIs readable by ContentResolver.
-                         */
-                        thumbnail
-                            ?: ArtworkBitmapLoader.load(
-                                context = context,
-                                artworkUri = uriString,
-                                maxDimension = sizePx,
-                            )
-                    }
-                }
-            }
+        value = ArtworkBitmapLoader.loadArtwork(
+            context = context,
+            artworkUri = artworkUri,
+            maxDimension = sizePx,
+        )
     }
 
     Box(
@@ -109,12 +74,13 @@ fun AlbumArtwork(
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        if (bitmap != null) {
+        val loadedBitmap = bitmap
+
+        if (loadedBitmap != null && !loadedBitmap.isRecycled) {
             Image(
-                bitmap = bitmap!!.asImageBitmap(),
+                bitmap = loadedBitmap.asImageBitmap(),
                 contentDescription = contentDescription,
-                modifier =
-                    Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
         } else {
@@ -127,12 +93,8 @@ fun AlbumArtwork(
                         .ifBlank {
                             "R"
                         },
-                style =
-                    MaterialTheme.typography.headlineMedium,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
             )
