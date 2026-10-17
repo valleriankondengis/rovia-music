@@ -284,8 +284,8 @@ fun RecentCollectionScreen(
             } else {
                 itemsIndexed(
                     items = tracks,
-                    key = { _, track ->
-                        track.id
+                    key = { index, track ->
+                        "collection_track_${index}_${track.id}"
                     },
                 ) { index, track ->
                     val isCurrentTrack =
