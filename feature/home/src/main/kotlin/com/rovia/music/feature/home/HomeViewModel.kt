@@ -17,9 +17,14 @@ class HomeViewModel(
     playbackController: PlaybackController,
 ) : ViewModel() {
 
+    /*
+     * Home only needs the five most recently added tracks.
+     * The full catalog will be observed separately by the
+     * dedicated Recently Added screen.
+     */
     private val recentlyAdded =
         musicRepository.observeRecentlyAdded(
-            limit = 10,
+            limit = 5,
         )
 
     private val homeContent: Flow<HomeUiState> =
