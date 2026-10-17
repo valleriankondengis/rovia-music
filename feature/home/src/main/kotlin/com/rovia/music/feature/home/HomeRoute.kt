@@ -16,6 +16,7 @@ fun HomeRoute(
     onOpenArtist: (String) -> Unit = {},
     onOpenAlbum: (String, String?) -> Unit = { _, _ -> },
     onOpenGenre: (String) -> Unit = {},
+    onOpenRecentlyAdded: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel =
         viewModel(
@@ -57,5 +58,6 @@ fun HomeRoute(
         onOpenArtist = onOpenArtist,
         onOpenAlbum = onOpenAlbum,
         onOpenGenre = onOpenGenre,
+        onOpenRecentlyAdded = onOpenRecentlyAdded,
     )
 }
