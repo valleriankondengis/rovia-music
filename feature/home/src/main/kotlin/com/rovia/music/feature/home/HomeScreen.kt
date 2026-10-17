@@ -8,24 +8,30 @@ package com.rovia.music.feature.home
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -75,6 +81,7 @@ fun HomeScreen(
     onOpenArtist: (String) -> Unit = {},
     onOpenAlbum: (String, String?) -> Unit = { _, _ -> },
     onOpenGenre: (String) -> Unit = {},
+    onOpenRecentlyAdded: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (uiState) {
@@ -86,34 +93,21 @@ fun HomeScreen(
 
         is HomeUiState.Content -> {
             HomeContent(
-                recentlyAdded =
-                    uiState.recentlyAdded,
-                recentPlays =
-                    uiState.recentPlays,
-                recentArtists =
-                    uiState.recentArtists,
-                recentAlbums =
-                    uiState.recentAlbums,
-                recentGenres =
-                    uiState.recentGenres,
-                onTrackClick =
-                    onTrackClick,
-                onRestartCurrentTrack =
-                    onRestartCurrentTrack,
-                currentTrackId =
-                    currentTrackId,
-                onOpenSettings =
-                    onOpenSettings,
-                hasMiniPlayer =
-                    hasMiniPlayer,
-                onOpenArtist =
-                    onOpenArtist,
-                onOpenAlbum =
-                    onOpenAlbum,
-                onOpenGenre =
-                    onOpenGenre,
-                modifier =
-                    modifier,
+                recentlyAdded = uiState.recentlyAdded,
+                recentPlays = uiState.recentPlays,
+                recentArtists = uiState.recentArtists,
+                recentAlbums = uiState.recentAlbums,
+                recentGenres = uiState.recentGenres,
+                onTrackClick = onTrackClick,
+                onRestartCurrentTrack = onRestartCurrentTrack,
+                currentTrackId = currentTrackId,
+                onOpenSettings = onOpenSettings,
+                hasMiniPlayer = hasMiniPlayer,
+                onOpenArtist = onOpenArtist,
+                onOpenAlbum = onOpenAlbum,
+                onOpenGenre = onOpenGenre,
+                onOpenRecentlyAdded = onOpenRecentlyAdded,
+                modifier = modifier,
             )
         }
 
@@ -130,12 +124,9 @@ private fun LoadingContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier.fillMaxSize(),
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-        verticalArrangement =
-            Arrangement.Center,
+        modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         LoadingIndicator()
     }
@@ -156,169 +147,120 @@ private fun HomeContent(
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String, String?) -> Unit,
     onOpenGenre: (String) -> Unit,
+    onOpenRecentlyAdded: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    /*
-     * NavigationBar is an overlay in MainNavigation.
-     * Reserve enough bottom space for the player and navigation.
-     */
     val bottomContentPadding =
-        if (hasMiniPlayer) {
-            200.dp
-        } else {
-            100.dp
-        }
+        if (hasMiniPlayer) 200.dp else 100.dp
 
     Column(
-        modifier =
-            modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
     ) {
         TopAppBar(
-            modifier =
-                Modifier.padding(
-                    horizontal = 4.dp,
-                ),
+            modifier = Modifier.padding(horizontal = 4.dp),
             title = {},
             actions = {
                 FilledIconButton(
                     onClick = onOpenSettings,
-                    shapes =
-                        IconButtonDefaults.shapes(
-                            shape =
-                                CircleShape,
-                            pressedShape =
-                                MaterialTheme.shapes.medium,
-                        ),
-                    colors =
-                        IconButtonDefaults
-                            .filledIconButtonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceContainerHigh,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-                            ),
+                    shapes = IconButtonDefaults.shapes(
+                        shape = CircleShape,
+                        pressedShape = MaterialTheme.shapes.medium,
+                    ),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor =
+                            MaterialTheme.colorScheme.onSurface,
+                    ),
                 ) {
                     Icon(
-                        painter =
-                            painterResource(
-                                CoreUiR.drawable.ic_settings,
-                            ),
+                        painter = painterResource(
+                            CoreUiR.drawable.ic_settings,
+                        ),
                         contentDescription =
-                            stringResource(
-                                R.string.action_settings,
-                            ),
+                            stringResource(R.string.action_settings),
                     )
                 }
             },
         )
 
         LazyColumn(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            contentPadding =
-                PaddingValues(
-                    top = 8.dp,
-                    bottom = bottomContentPadding,
-                ),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(
+                top = 8.dp,
+                bottom = bottomContentPadding,
+            ),
         ) {
-            /*
-             * Home shows at most ten Recent Play tracks.
-             * The stored collection remains unrestricted.
-             */
             if (recentPlays.isNotEmpty()) {
-                item(
-                    key = "recent_play_section",
-                ) {
+                item(key = "recent_play_section") {
                     RecentPlaySection(
-                        tracks =
-                            recentPlays.take(10),
-                        onTrackClick =
-                            onTrackClick,
-                        modifier =
-                            Modifier.padding(
-                                start = HomeSectionHorizontalPadding,
-                                end = HomeSectionHorizontalPadding,
-                                bottom = HomeSectionBottomSpacing,
-                            ),
+                        tracks = recentPlays.take(10),
+                        onTrackClick = onTrackClick,
+                        modifier = Modifier.padding(
+                            start = HomeSectionHorizontalPadding,
+                            end = HomeSectionHorizontalPadding,
+                            bottom = HomeSectionBottomSpacing,
+                        ),
                     )
                 }
             }
 
             if (recentArtists.isNotEmpty()) {
-                item(
-                    key = "recent_artists_section",
-                ) {
+                item(key = "recent_artists_section") {
                     RecentArtistsSection(
-                        artists =
-                            recentArtists,
-                        onArtistClick =
-                            onOpenArtist,
-                        modifier =
-                            Modifier.padding(
-                                start = HomeSectionHorizontalPadding,
-                                end = HomeSectionHorizontalPadding,
-                                bottom = HomeSectionBottomSpacing,
-                            ),
+                        artists = recentArtists,
+                        onArtistClick = onOpenArtist,
+                        modifier = Modifier.padding(
+                            start = HomeSectionHorizontalPadding,
+                            end = HomeSectionHorizontalPadding,
+                            bottom = HomeSectionBottomSpacing,
+                        ),
                     )
                 }
             }
 
             if (recentAlbums.isNotEmpty()) {
-                item(
-                    key = "recent_albums_section",
-                ) {
+                item(key = "recent_albums_section") {
                     RecentAlbumsSection(
-                        albums =
-                            recentAlbums,
-                        onAlbumClick =
-                            onOpenAlbum,
-                        modifier =
-                            Modifier.padding(
-                                start = HomeSectionHorizontalPadding,
-                                end = HomeSectionHorizontalPadding,
-                                bottom = HomeSectionBottomSpacing,
-                            ),
+                        albums = recentAlbums,
+                        onAlbumClick = onOpenAlbum,
+                        modifier = Modifier.padding(
+                            start = HomeSectionHorizontalPadding,
+                            end = HomeSectionHorizontalPadding,
+                            bottom = HomeSectionBottomSpacing,
+                        ),
                     )
                 }
             }
 
             if (recentGenres.isNotEmpty()) {
-                item(
-                    key = "recent_genres_section",
-                ) {
+                item(key = "recent_genres_section") {
                     RecentGenresSection(
-                        genres =
-                            recentGenres,
-                        onGenreClick =
-                            onOpenGenre,
-                        modifier =
-                            Modifier.padding(
-                                start = HomeSectionHorizontalPadding,
-                                end = HomeSectionHorizontalPadding,
-                                bottom = HomeSectionBottomSpacing,
-                            ),
+                        genres = recentGenres,
+                        onGenreClick = onOpenGenre,
+                        modifier = Modifier.padding(
+                            start = HomeSectionHorizontalPadding,
+                            end = HomeSectionHorizontalPadding,
+                            bottom = HomeSectionBottomSpacing,
+                        ),
                     )
                 }
             }
 
-            item(
-                key = "recently_added_section",
-            ) {
+            item(key = "recently_added_section") {
                 RecentlyAddedSection(
-                    tracks =
-                        recentlyAdded,
-                    onTrackClick =
-                        onTrackClick,
-                    onRestartCurrentTrack =
-                        onRestartCurrentTrack,
-                    currentTrackId =
-                        currentTrackId,
+                    tracks = recentlyAdded,
+                    onTrackClick = onTrackClick,
+                    onRestartCurrentTrack = onRestartCurrentTrack,
+                    currentTrackId = currentTrackId,
+                    onOpenRecentlyAdded = onOpenRecentlyAdded,
+                    modifier = Modifier.padding(
+                        start = HomeSectionHorizontalPadding,
+                        end = HomeSectionHorizontalPadding,
+                        bottom = HomeSectionBottomSpacing,
+                    ),
                 )
             }
         }
@@ -327,7 +269,6 @@ private fun HomeContent(
 
 /**
  * Morphs between predefined Material 3 Expressive polygons.
- * No crossfade or scale animation is applied.
  */
 @Composable
 private fun ExpressiveMorphArtwork(
@@ -348,21 +289,14 @@ private fun ExpressiveMorphArtwork(
         )
     }
 
-    val morphProgress by
-        animateFloatAsState(
-            targetValue =
-                if (isPressed) {
-                    1f
-                } else {
-                    0f
-                },
-            animationSpec =
-                tween(
-                    durationMillis = 140,
-                    easing = FastOutSlowInEasing,
-                ),
-            label = "${label}_progress",
-        )
+    val morphProgress by animateFloatAsState(
+        targetValue = if (isPressed) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 140,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "${label}_progress",
+    )
 
     Box(
         modifier = modifier,
@@ -371,23 +305,16 @@ private fun ExpressiveMorphArtwork(
             artworkUri = artworkUri,
             fallbackText = fallbackText,
             contentDescription = contentDescription,
-            modifier =
-                Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             size = sizeDp,
-            shape =
-                MorphPolygonShape(
-                    morph = morph,
-                    percentage = morphProgress,
-                ),
+            shape = MorphPolygonShape(
+                morph = morph,
+                percentage = morphProgress,
+            ),
         )
     }
 }
 
-/**
- * Compose Shape adapter for the result of AndroidX graphics-shapes Morph.
- * The source geometries are MaterialShapes; this adapter maps the
- * generated path to the artwork bounds.
- */
 private class MorphPolygonShape(
     private val morph: Morph,
     private val percentage: Float,
@@ -398,31 +325,22 @@ private class MorphPolygonShape(
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val matrix =
-            Matrix().apply {
-                scale(
-                    x = size.width,
-                    y = size.height,
-                )
-            }
-
-        val path =
-            morph.toPath(
-                progress = percentage,
+        val matrix = Matrix().apply {
+            scale(
+                x = size.width,
+                y = size.height,
             )
+        }
+
+        val path = morph.toPath(
+            progress = percentage,
+        )
 
         path.transform(matrix)
 
-        val bounds =
-            path.getBounds()
-
-        val offsetX =
-            size.width / 2f -
-                bounds.center.x
-
-        val offsetY =
-            size.height / 2f -
-                bounds.center.y
+        val bounds = path.getBounds()
+        val offsetX = size.width / 2f - bounds.center.x
+        val offsetY = size.height / 2f - bounds.center.y
 
         path.translate(
             Offset(
@@ -441,120 +359,78 @@ private fun RecentPlaySection(
     onTrackClick: (List<Track>, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val artworkSize = HomeArtworkSize
-    val itemHeight = HomeArtworkRowHeight
     val visibleTracks = tracks.take(10)
 
     Column(
         modifier = modifier,
-        verticalArrangement =
-            Arrangement.spacedBy(HomeArtworkSpacing),
+        verticalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
     ) {
         Text(
-            text =
-                stringResource(
-                    R.string.section_recent_play,
-                ),
-            style =
-                MaterialTheme.typography.titleLarge,
+            text = stringResource(R.string.section_recent_play),
+            style = MaterialTheme.typography.titleLarge,
         )
 
         LazyRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(itemHeight),
-            contentPadding =
-                PaddingValues(
-                    end = HomeArtworkSpacing,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(HomeArtworkSpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(HomeArtworkRowHeight),
+            contentPadding = PaddingValues(
+                end = HomeArtworkSpacing,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
         ) {
             itemsIndexed(
                 items = visibleTracks,
-                key = { _, track ->
-                    track.id
-                },
+                key = { _, track -> track.id },
             ) { index, track ->
                 val artist = track.artist
-
-                val interactionSource =
-                    remember {
-                        MutableInteractionSource()
-                    }
-
+                val interactionSource = remember {
+                    MutableInteractionSource()
+                }
                 val isPressed by
-                    interactionSource
-                        .collectIsPressedAsState()
+                    interactionSource.collectIsPressedAsState()
 
                 Column(
-                    modifier =
-                        Modifier.width(
-                            artworkSize,
-                        ),
+                    modifier = Modifier.width(HomeArtworkSize),
                 ) {
                     ExpressiveMorphArtwork(
-                        artworkUri =
-                            track.artworkUri,
-                        fallbackText =
+                        artworkUri = track.artworkUri,
+                        fallbackText = track.title,
+                        contentDescription = stringResource(
+                            R.string.action_play_track,
                             track.title,
-                        contentDescription =
-                            stringResource(
-                                R.string.action_play_track,
-                                track.title,
-                            ),
-                        sizeDp =
-                            artworkSize,
-                        isPressed =
-                            isPressed,
-                        startShape =
-                            MaterialShapes.Cookie4Sided,
-                        endShape =
-                            MaterialShapes.Circle,
-                        label =
-                            "recent_play_morph",
-                        modifier =
-                            Modifier
-                                .width(artworkSize)
-                                .aspectRatio(1f)
-                                .clickable(
-                                    interactionSource =
-                                        interactionSource,
-                                    indication = null,
-                                ) {
-                                    onTrackClick(
-                                        visibleTracks,
-                                        index,
-                                    )
-                                },
+                        ),
+                        sizeDp = HomeArtworkSize,
+                        isPressed = isPressed,
+                        startShape = MaterialShapes.Cookie4Sided,
+                        endShape = MaterialShapes.Circle,
+                        label = "recent_play_morph",
+                        modifier = Modifier
+                            .width(HomeArtworkSize)
+                            .aspectRatio(1f)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                            ) {
+                                onTrackClick(visibleTracks, index)
+                            },
                     )
 
                     Text(
                         text = track.title,
-                        style =
-                            MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier.padding(
-                                top = 6.dp,
-                            ),
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
 
                     if (!artist.isNullOrBlank()) {
                         Text(
                             text = artist,
-                            style =
-                                MaterialTheme.typography.bodySmall,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow =
-                                TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -570,96 +446,66 @@ private fun RecentArtistsSection(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier.fillMaxWidth(),
-        verticalArrangement =
-            Arrangement.spacedBy(HomeArtworkSpacing),
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
     ) {
         Text(
-            text =
-                stringResource(
-                    R.string.section_recent_artists,
-                ),
-            style =
-                MaterialTheme.typography.titleLarge,
+            text = stringResource(R.string.section_recent_artists),
+            style = MaterialTheme.typography.titleLarge,
         )
 
         LazyRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(HomeArtworkRowHeight),
-            contentPadding =
-                PaddingValues(
-                    end = HomeArtworkSpacing,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(HomeArtworkSpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(HomeArtworkRowHeight),
+            contentPadding = PaddingValues(
+                end = HomeArtworkSpacing,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
         ) {
             items(
                 items = artists,
-                key = { artist ->
-                    artist.name.trim().lowercase()
-                },
+                key = { artist -> artist.name.trim().lowercase() },
             ) { artist ->
-                val interactionSource =
-                    remember {
-                        MutableInteractionSource()
-                    }
-
+                val interactionSource = remember {
+                    MutableInteractionSource()
+                }
                 val isPressed by
-                    interactionSource
-                        .collectIsPressedAsState()
+                    interactionSource.collectIsPressedAsState()
 
                 Column(
-                    modifier =
-                        Modifier
-                            .width(HomeArtworkSize)
-                            .clickable(
-                                interactionSource =
-                                    interactionSource,
-                                indication = null,
-                            ) {
-                                onArtistClick(
-                                    artist.name,
-                                )
-                            },
-                    verticalArrangement =
-                        Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .width(HomeArtworkSize)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) {
+                            onArtistClick(artist.name)
+                        },
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     ExpressiveMorphArtwork(
-                        artworkUri =
-                            artist.artworkUri,
-                        fallbackText =
+                        artworkUri = artist.artworkUri,
+                        fallbackText = artist.name,
+                        contentDescription = stringResource(
+                            R.string.action_open_artist,
                             artist.name,
-                        contentDescription =
-                            stringResource(
-                                R.string.action_open_artist,
-                                artist.name,
-                            ),
-                        sizeDp =
-                            HomeArtworkSize,
-                        isPressed =
-                            isPressed,
-                        startShape =
-                            MaterialShapes.Circle,
-                        endShape =
-                            MaterialShapes.Cookie4Sided,
-                        label =
-                            "recent_artist_morph",
-                        modifier =
-                            Modifier
-                                .width(HomeArtworkSize)
-                                .aspectRatio(1f),
+                        ),
+                        sizeDp = HomeArtworkSize,
+                        isPressed = isPressed,
+                        startShape = MaterialShapes.Circle,
+                        endShape = MaterialShapes.Cookie4Sided,
+                        label = "recent_artist_morph",
+                        modifier = Modifier
+                            .width(HomeArtworkSize)
+                            .aspectRatio(1f),
                     )
 
                     Text(
                         text = artist.name,
-                        style =
-                            MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -674,115 +520,79 @@ private fun RecentAlbumsSection(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier.fillMaxWidth(),
-        verticalArrangement =
-            Arrangement.spacedBy(HomeArtworkSpacing),
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
     ) {
         Text(
-            text =
-                stringResource(
-                    R.string.section_recent_albums,
-                ),
-            style =
-                MaterialTheme.typography.titleLarge,
+            text = stringResource(R.string.section_recent_albums),
+            style = MaterialTheme.typography.titleLarge,
         )
 
         LazyRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(HomeArtworkRowHeight),
-            contentPadding =
-                PaddingValues(
-                    end = HomeArtworkSpacing,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(HomeArtworkSpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(HomeArtworkRowHeight),
+            contentPadding = PaddingValues(
+                end = HomeArtworkSpacing,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
         ) {
             items(
                 items = albums,
                 key = { album ->
                     "${album.title.trim().lowercase()}|" +
-                        album.artist
-                            ?.trim()
-                            ?.lowercase()
-                            .orEmpty()
+                        album.artist?.trim()?.lowercase().orEmpty()
                 },
             ) { album ->
-                val interactionSource =
-                    remember {
-                        MutableInteractionSource()
-                    }
-
+                val interactionSource = remember {
+                    MutableInteractionSource()
+                }
                 val isPressed by
-                    interactionSource
-                        .collectIsPressedAsState()
+                    interactionSource.collectIsPressedAsState()
 
                 Column(
-                    modifier =
-                        Modifier
-                            .width(HomeArtworkSize)
-                            .clickable(
-                                interactionSource =
-                                    interactionSource,
-                                indication = null,
-                            ) {
-                                onAlbumClick(
-                                    album.title,
-                                    album.artist,
-                                )
-                            },
-                    verticalArrangement =
-                        Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .width(HomeArtworkSize)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) {
+                            onAlbumClick(album.title, album.artist)
+                        },
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     ExpressiveMorphArtwork(
-                        artworkUri =
-                            album.artworkUri,
-                        fallbackText =
+                        artworkUri = album.artworkUri,
+                        fallbackText = album.title,
+                        contentDescription = stringResource(
+                            R.string.action_open_album,
                             album.title,
-                        contentDescription =
-                            stringResource(
-                                R.string.action_open_album,
-                                album.title,
-                            ),
-                        sizeDp =
-                            HomeArtworkSize,
-                        isPressed =
-                            isPressed,
-                        startShape =
-                            MaterialShapes.Square,
-                        endShape =
-                            MaterialShapes.Cookie4Sided,
-                        label =
-                            "recent_album_morph",
-                        modifier =
-                            Modifier
-                                .width(HomeArtworkSize)
-                                .aspectRatio(1f),
+                        ),
+                        sizeDp = HomeArtworkSize,
+                        isPressed = isPressed,
+                        startShape = MaterialShapes.Square,
+                        endShape = MaterialShapes.Cookie4Sided,
+                        label = "recent_album_morph",
+                        modifier = Modifier
+                            .width(HomeArtworkSize)
+                            .aspectRatio(1f),
                     )
 
                     Text(
                         text = album.title,
-                        style =
-                            MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
 
-                    if (!album.artist.isNullOrBlank()) {
+                    val albumArtist = album.artist
+                    if (!albumArtist.isNullOrBlank()) {
                         Text(
-                            text = album.artist,
-                            style =
-                                MaterialTheme.typography.bodySmall,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                            text = albumArtist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow =
-                                TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -798,96 +608,66 @@ private fun RecentGenresSection(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier.fillMaxWidth(),
-        verticalArrangement =
-            Arrangement.spacedBy(HomeArtworkSpacing),
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
     ) {
         Text(
-            text =
-                stringResource(
-                    R.string.section_recent_genres,
-                ),
-            style =
-                MaterialTheme.typography.titleLarge,
+            text = stringResource(R.string.section_recent_genres),
+            style = MaterialTheme.typography.titleLarge,
         )
 
         LazyRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(HomeArtworkRowHeight),
-            contentPadding =
-                PaddingValues(
-                    end = HomeArtworkSpacing,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(HomeArtworkSpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(HomeArtworkRowHeight),
+            contentPadding = PaddingValues(
+                end = HomeArtworkSpacing,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(HomeArtworkSpacing),
         ) {
             items(
                 items = genres,
-                key = { genre ->
-                    genre.name.trim().lowercase()
-                },
+                key = { genre -> genre.name.trim().lowercase() },
             ) { genre ->
-                val interactionSource =
-                    remember {
-                        MutableInteractionSource()
-                    }
-
+                val interactionSource = remember {
+                    MutableInteractionSource()
+                }
                 val isPressed by
-                    interactionSource
-                        .collectIsPressedAsState()
+                    interactionSource.collectIsPressedAsState()
 
                 Column(
-                    modifier =
-                        Modifier
-                            .width(HomeArtworkSize)
-                            .clickable(
-                                interactionSource =
-                                    interactionSource,
-                                indication = null,
-                            ) {
-                                onGenreClick(
-                                    genre.name,
-                                )
-                            },
-                    verticalArrangement =
-                        Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .width(HomeArtworkSize)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) {
+                            onGenreClick(genre.name)
+                        },
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     ExpressiveMorphArtwork(
-                        artworkUri =
-                            genre.artworkUri,
-                        fallbackText =
+                        artworkUri = genre.artworkUri,
+                        fallbackText = genre.name,
+                        contentDescription = stringResource(
+                            R.string.action_open_genre,
                             genre.name,
-                        contentDescription =
-                            stringResource(
-                                R.string.action_open_genre,
-                                genre.name,
-                            ),
-                        sizeDp =
-                            HomeArtworkSize,
-                        isPressed =
-                            isPressed,
-                        startShape =
-                            MaterialShapes.Cookie9Sided,
-                        endShape =
-                            MaterialShapes.Cookie4Sided,
-                        label =
-                            "recent_genre_morph",
-                        modifier =
-                            Modifier
-                                .width(HomeArtworkSize)
-                                .aspectRatio(1f),
+                        ),
+                        sizeDp = HomeArtworkSize,
+                        isPressed = isPressed,
+                        startShape = MaterialShapes.Cookie9Sided,
+                        endShape = MaterialShapes.Cookie4Sided,
+                        label = "recent_genre_morph",
+                        modifier = Modifier
+                            .width(HomeArtworkSize)
+                            .aspectRatio(1f),
                     )
 
                     Text(
                         text = genre.name,
-                        style =
-                            MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -901,62 +681,110 @@ private fun RecentlyAddedSection(
     onTrackClick: (List<Track>, Int) -> Unit,
     onRestartCurrentTrack: () -> Unit,
     currentTrackId: Long?,
+    onOpenRecentlyAdded: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier =
-            Modifier.fillMaxWidth(),
-        verticalArrangement =
-            Arrangement.spacedBy(12.dp),
+    val visibleTracks = tracks.take(5)
+
+    Card(
+        onClick = onOpenRecentlyAdded,
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
     ) {
-        Text(
-            text =
-                stringResource(
-                    R.string.section_recently_added,
-                ),
-            style =
-                MaterialTheme.typography.titleLarge,
-            modifier =
-                Modifier.padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                ),
-        )
-
-        if (tracks.isEmpty()) {
-            EmptySectionText(
-                text =
-                    stringResource(
-                        R.string.recently_added_empty,
-                    ),
-                modifier =
-                    Modifier.padding(
-                        horizontal = 20.dp,
-                    ),
-            )
-        } else {
-            Column(
-                modifier =
-                    Modifier.fillMaxWidth(),
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                tracks.forEachIndexed { index, track ->
-                    val isCurrentTrack =
-                        track.id == currentTrackId
+                Text(
+                    text = stringResource(R.string.section_recently_added),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
 
-                    TrackRow(
-                        track = track,
-                        onClick = {
-                            if (isCurrentTrack) {
-                                onRestartCurrentTrack()
-                            } else {
-                                onTrackClick(
-                                    tracks,
-                                    index,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+            ) {
+                if (visibleTracks.isEmpty()) {
+                    EmptySectionText(
+                        text = stringResource(R.string.recently_added_empty),
+                        modifier = Modifier.padding(
+                            horizontal = 16.dp,
+                            vertical = 16.dp,
+                        ),
+                    )
+                } else {
+                    visibleTracks.forEachIndexed { index, track ->
+                        val isCurrentTrack =
+                            track.id == currentTrackId
+
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Box(
+                                modifier = Modifier.requiredWidth(
+                                    maxWidth + 16.dp,
+                                ),
+                            ) {
+                                TrackRow(
+                                    track = track,
+                                    onClick = {
+                                        if (isCurrentTrack) {
+                                            onRestartCurrentTrack()
+                                        } else {
+                                            onTrackClick(visibleTracks, index)
+                                        }
+                                    },
+                                    showAlbum = true,
+                                    isCurrentTrack = isCurrentTrack,
                                 )
                             }
-                        },
-                        showAlbum = true,
-                        isCurrentTrack =
-                            isCurrentTrack,
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FilledIconButton(
+                    onClick = onOpenRecentlyAdded,
+                    shapes = IconButtonDefaults.shapes(
+                        shape = CircleShape,
+                        pressedShape = MaterialTheme.shapes.medium,
+                    ),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor =
+                            MaterialTheme.colorScheme.onSurface,
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(
+                            CoreUiR.drawable.ic_arrow_forward,
+                        ),
+                        contentDescription = stringResource(
+                            R.string.section_recently_added,
+                        ),
                     )
                 }
             }
@@ -971,16 +799,9 @@ private fun EmptySectionText(
 ) {
     Text(
         text = text,
-        style =
-            MaterialTheme.typography.bodyLarge,
-        color =
-            MaterialTheme
-                .colorScheme
-                .onSurfaceVariant,
-        modifier =
-            modifier.padding(
-                vertical = 8.dp,
-            ),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(vertical = 8.dp),
     )
 }
 
@@ -989,18 +810,12 @@ private fun ErrorContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier.fillMaxSize(),
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-        verticalArrangement =
-            Arrangement.Center,
+        modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text =
-                stringResource(
-                    R.string.home_error,
-                ),
+            text = stringResource(R.string.home_error),
         )
     }
 }
