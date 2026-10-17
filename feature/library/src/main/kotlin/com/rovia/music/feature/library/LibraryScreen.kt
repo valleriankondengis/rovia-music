@@ -11,6 +11,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.FilledIconButton
@@ -49,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,6 +65,7 @@ import com.rovia.music.core.ui.component.TrackRow
 
 private val LibraryHorizontalPadding = 16.dp
 private val LibraryArtworkSize = 56.dp
+private val LibraryListTopCornerRadius = 28.dp
 
 @Composable
 fun LibraryScreen(
@@ -233,6 +238,9 @@ private fun LibraryContent(
             surfaceContainer =
                 MaterialTheme.colorScheme.surfaceContainerHigh,
         )
+
+    val libraryListContainerColor =
+        MaterialTheme.colorScheme.surfaceContainerLow
 
     val motionScheme = MaterialTheme.motionScheme
 
@@ -555,7 +563,14 @@ private fun LibraryContent(
             modifier =
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = LibraryListTopCornerRadius,
+                            topEnd = LibraryListTopCornerRadius,
+                        ),
+                    )
+                    .background(libraryListContainerColor),
         ) {
             LazyColumn(
                 state = listState,
@@ -1149,6 +1164,10 @@ private fun LazyListScope.artistCollectionContent(
             },
             modifier = Modifier.fillMaxWidth(),
             shapes = ListItemDefaults.shapes(),
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
             leadingContent = {
                 AlbumArtwork(
                     artworkUri = artist.artworkTrack.artworkUri,
@@ -1199,6 +1218,10 @@ private fun LazyListScope.albumCollectionContent(
             },
             modifier = Modifier.fillMaxWidth(),
             shapes = ListItemDefaults.shapes(),
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
             leadingContent = {
                 AlbumArtwork(
                     artworkUri = album.artworkTrack.artworkUri,
@@ -1255,6 +1278,10 @@ private fun LazyListScope.genreCollectionContent(
             },
             modifier = Modifier.fillMaxWidth(),
             shapes = ListItemDefaults.shapes(),
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
             leadingContent = {
                 AlbumArtwork(
                     artworkUri = genre.artworkTrack.artworkUri,
@@ -1489,6 +1516,10 @@ private fun FolderRow(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shapes = ListItemDefaults.shapes(),
+        colors =
+            ListItemDefaults.colors(
+                containerColor = Color.Transparent,
+            ),
         leadingContent = {
             Icon(
                 painter = painterResource(CoreUiR.drawable.ic_folder),
