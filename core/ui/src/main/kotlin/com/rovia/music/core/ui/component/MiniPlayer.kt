@@ -24,6 +24,7 @@ import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -32,10 +33,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,15 +68,64 @@ private val LocalMiniPlayerArtworkPalette =
         MiniPlayerArtworkPalette()
     }
 
+/*
+ * Keep callback references stable across recompositions.
+ *
+ * The State holders receive updated callbacks whenever the caller
+ * provides a new one, while this holder itself remains stable.
+ * This allows MiniPlayerContentRow to be skipped when the displayed
+ * track and playback state have not changed.
+ */
+@Stable
+private class MiniPlayerActions(
+    private val previousAction: State<() -> Unit>,
+    private val playPauseAction: State<() -> Unit>,
+    private val nextAction: State<() -> Unit>,
+) {
+    fun previous() {
+        previousAction.value.invoke()
+    }
+
+    fun playPause() {
+        playPauseAction.value.invoke()
+    }
+
+    fun next() {
+        nextAction.value.invoke()
+    }
+}
+
+@Composable
+private fun rememberMiniPlayerActions(
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+): MiniPlayerActions {
+    val previousAction =
+        rememberUpdatedState(onPrevious)
+
+    val playPauseAction =
+        rememberUpdatedState(onPlayPause)
+
+    val nextAction =
+        rememberUpdatedState(onNext)
+
+    return remember {
+        MiniPlayerActions(
+            previousAction = previousAction,
+            playPauseAction = playPauseAction,
+            nextAction = nextAction,
+        )
+    }
+}
+
 /**
  * Main mini-player.
  *
- * The artwork accent is extracted from the embedded image in the
- * audio source, using the same sampling strategy, WallpaperColors
- * API, representative-color selection, and HSV accent formula
- * as PlayerScreen.
+ * Artwork accent extraction runs asynchronously and only restarts
+ * when the track or artwork URI changes.
  *
- * The card surface remains Material 3. Only its controls are
+ * The card surface remains Material 3. Only the controls are
  * tinted by the artwork accent.
  */
 @Composable
@@ -85,6 +138,13 @@ fun MiniPlayer(
 ) {
     val track =
         playbackState.currentTrack ?: return
+
+    val actions =
+        rememberMiniPlayerActions(
+            onPrevious = onPrevious,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+        )
 
     val artworkAccent =
         rememberMiniPlayerArtworkAccent(
@@ -116,10 +176,11 @@ fun MiniPlayer(
             LocalMiniPlayerArtworkPalette provides artworkPalette,
         ) {
             MiniPlayerContentRow(
-                playbackState = playbackState,
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
+                title = track.title,
+                artist = track.artist,
+                artworkUri = track.artworkUri,
+                isPlaying = playbackState.isPlaying,
+                actions = actions,
                 showArtwork = true,
                 modifier = Modifier,
             )
@@ -143,6 +204,13 @@ fun MiniPlayerContent(
     val track =
         playbackState.currentTrack ?: return
 
+    val actions =
+        rememberMiniPlayerActions(
+            onPrevious = onPrevious,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+        )
+
     val artworkAccent =
         rememberMiniPlayerArtworkAccent(
             trackUri = track.uri,
@@ -158,28 +226,35 @@ fun MiniPlayerContent(
         LocalMiniPlayerArtworkPalette provides artworkPalette,
     ) {
         MiniPlayerContentRow(
-            playbackState = playbackState,
-            onPrevious = onPrevious,
-            onPlayPause = onPlayPause,
-            onNext = onNext,
+            title = track.title,
+            artist = track.artist,
+            artworkUri = track.artworkUri,
+            isPlaying = playbackState.isPlaying,
+            actions = actions,
             showArtwork = showArtwork,
             modifier = modifier,
         )
     }
 }
 
+/**
+ * Optimized content boundary:
+ *
+ * Receives only values actually rendered by this subtree instead
+ * of the complete PlaybackState object. Playback-position updates
+ * therefore need not invalidate the row when these inputs remain
+ * unchanged.
+ */
 @Composable
 private fun MiniPlayerContentRow(
-    playbackState: PlaybackState,
-    onPrevious: () -> Unit,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
+    title: String,
+    artist: String?,
+    artworkUri: String?,
+    isPlaying: Boolean,
+    actions: MiniPlayerActions,
     showArtwork: Boolean,
     modifier: Modifier,
 ) {
-    val track =
-        playbackState.currentTrack ?: return
-
     Row(
         modifier =
             modifier.padding(
@@ -191,8 +266,8 @@ private fun MiniPlayerContentRow(
     ) {
         if (showArtwork) {
             AlbumArtwork(
-                artworkUri = track.artworkUri,
-                fallbackText = track.title,
+                artworkUri = artworkUri,
+                fallbackText = title,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
                 size = 56.dp,
@@ -209,15 +284,15 @@ private fun MiniPlayerContentRow(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
-                text = track.title,
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
 
-            track.artist?.let { artist ->
+            artist?.let { artistName ->
                 Text(
-                    text = artist,
+                    text = artistName,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -227,10 +302,8 @@ private fun MiniPlayerContentRow(
         }
 
         MiniPlayerButtonGroup(
-            isPlaying = playbackState.isPlaying,
-            onPrevious = onPrevious,
-            onPlayPause = onPlayPause,
-            onNext = onNext,
+            isPlaying = isPlaying,
+            actions = actions,
         )
     }
 }
@@ -238,9 +311,7 @@ private fun MiniPlayerContentRow(
 @Composable
 private fun MiniPlayerButtonGroup(
     isPlaying: Boolean,
-    onPrevious: () -> Unit,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
+    actions: MiniPlayerActions,
 ) {
     val colorScheme =
         MaterialTheme.colorScheme
@@ -309,7 +380,7 @@ private fun MiniPlayerButtonGroup(
         customItem(
             buttonGroupContent = {
                 FilledIconButton(
-                    onClick = onPrevious,
+                    onClick = actions::previous,
                     interactionSource = previousSource,
                     modifier =
                         Modifier
@@ -340,7 +411,7 @@ private fun MiniPlayerButtonGroup(
         customItem(
             buttonGroupContent = {
                 FilledIconButton(
-                    onClick = onPlayPause,
+                    onClick = actions::playPause,
                     interactionSource = playPauseSource,
                     modifier =
                         Modifier
@@ -376,7 +447,7 @@ private fun MiniPlayerButtonGroup(
         customItem(
             buttonGroupContent = {
                 FilledIconButton(
-                    onClick = onNext,
+                    onClick = actions::next,
                     interactionSource = nextSource,
                     modifier =
                         Modifier
@@ -407,15 +478,14 @@ private fun MiniPlayerButtonGroup(
 }
 
 /**
- * Loads the artwork accent using the same primary extraction
- * path as PlayerScreen.
+ * Loads the artwork accent using the existing extraction path.
  *
  * Embedded artwork is extracted directly from trackUri, so
  * regular and external playback do not derive their accents
  * from different thumbnail sources.
  *
- * The existing artworkUri path remains a fallback when embedded
- * artwork cannot be read.
+ * The artworkUri path remains a fallback when embedded artwork
+ * cannot be read.
  */
 @Composable
 private fun rememberMiniPlayerArtworkAccent(
@@ -494,7 +564,7 @@ private fun rememberMiniPlayerArtworkAccent(
 
 /**
  * The palette wrapper keeps the existing CompositionLocal
- * structure and allows all controls to share one accent.
+ * structure and allows controls to share one accent.
  */
 @Composable
 private fun rememberMiniPlayerArtworkPalette(
@@ -510,8 +580,7 @@ private fun rememberMiniPlayerArtworkPalette(
 /**
  * Extracts artwork bytes directly from the audio source.
  *
- * Uses the same MediaMetadataRetriever strategy as PlayerScreen.
- * This function must run on a background dispatcher.
+ * Uses MediaMetadataRetriever and runs on a background dispatcher.
  */
 private fun loadEmbeddedArtworkBitmap(
     context: Context,
@@ -555,11 +624,11 @@ private fun loadEmbeddedArtworkBitmap(
 }
 
 /**
- * Loads a fallback artwork bitmap if direct extraction from the
+ * Loads fallback artwork when direct extraction from the
  * audio source is unavailable.
  *
- * For content URIs, the original loadThumbnail() path is retained.
- * For file URIs, ArtworkBitmapLoader reads the cached artwork file.
+ * Content URIs retain the loadThumbnail() path.
+ * File URIs use ArtworkBitmapLoader.
  */
 private suspend fun loadArtworkFallbackBitmap(
     context: Context,
@@ -611,9 +680,9 @@ private suspend fun loadArtworkFallbackBitmap(
 }
 
 /**
- * Decodes the embedded image using the same power-of-two sample
- * strategy as PlayerScreen. The resulting bitmap is bounded to
- * the requested maximum dimension while preserving aspect ratio.
+ * Decodes embedded artwork using the existing power-of-two
+ * sample strategy, preserving aspect ratio while bounding
+ * the resulting bitmap size.
  */
 private fun decodeEmbeddedArtwork(
     bytes: ByteArray,
@@ -671,11 +740,9 @@ private fun decodeEmbeddedArtwork(
 
 /**
  * Selects the first sufficiently chromatic representative color
- * returned by WallpaperColors, in primary, secondary, tertiary
- * order.
+ * returned by WallpaperColors in primary, secondary, tertiary order.
  *
- * The selection criteria and vivid HSV accent formula match
- * PlayerArtworkColors.kt.
+ * The selection criteria and HSV accent formula remain unchanged.
  */
 private fun extractMiniPlayerArtworkAccent(
     bitmap: Bitmap,
