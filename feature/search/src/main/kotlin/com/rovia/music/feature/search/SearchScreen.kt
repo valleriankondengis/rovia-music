@@ -7,8 +7,10 @@
 package com.rovia.music.feature.search
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +32,7 @@ import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -37,6 +41,8 @@ import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
 import com.rovia.music.core.ui.component.ExpressiveScrollbar
 import com.rovia.music.core.ui.component.TrackRow
+
+private val SearchListTopCornerRadius = 28.dp
 
 @Composable
 fun SearchScreen(
@@ -272,20 +278,30 @@ private fun SearchResults(
 
     val listState = rememberLazyListState()
 
+    val listContainerColor =
+        MaterialTheme.colorScheme.surfaceContainerLow
+
     /*
-     * Keep the song list at full width.
-     * Draw the scrollbar over the right edge instead of
-     * reserving a separate column for it.
+     * Use the same Monet surface token as the Library and
+     * Recently Added list panels. TrackRow remains unchanged.
      */
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .clip(
+                    RoundedCornerShape(
+                        topStart = SearchListTopCornerRadius,
+                        topEnd = SearchListTopCornerRadius,
+                    ),
+                )
+                .background(listContainerColor),
     ) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding =
-                androidx.compose.foundation.layout.PaddingValues(
-                    top = 8.dp,
+                PaddingValues(
                     bottom = bottomContentPadding,
                 ),
         ) {
@@ -293,6 +309,9 @@ private fun SearchResults(
                 items = results,
                 key = { _, track ->
                     track.id
+                },
+                contentType = { _, _ ->
+                    "track"
                 },
             ) { index, track ->
                 val isCurrentTrack =
