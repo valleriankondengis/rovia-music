@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.ksp)
@@ -38,9 +37,4 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     ksp(libs.androidx.room3.compiler)
-
-    androidTestImplementation(libs.androidx.room3.testing)
-    androidTestImplementation(libs.androidx.test.core)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
 }
