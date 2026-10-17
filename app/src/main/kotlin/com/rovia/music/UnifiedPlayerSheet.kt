@@ -1,4 +1,3 @@
-
 package com.rovia.music
 
 import androidx.activity.compose.PredictiveBackHandler
@@ -40,7 +39,9 @@ import com.rovia.music.core.playback.PlayerPlaybackController
 import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.player.PlayerRoute
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 
 @Composable
@@ -76,12 +77,8 @@ fun UnifiedPlayerSheet(
      * 0f = collapsed / MiniPlayer
      * 1f = expanded / Full Player
      *
-     * rememberSaveable preserves the sheet state through
-     * configuration changes such as portrait-landscape rotation.
-     *
-     * Regular playback retains its existing collapsed initial state.
-     * An external caller can request an initially expanded sheet
-     * without introducing a separate Player UI.
+     * The saveable progress remains the single source of truth
+     * for the visible state of the sheet.
      */
     val progressState =
         rememberSaveable(initiallyExpanded) {
@@ -95,8 +92,39 @@ fun UnifiedPlayerSheet(
         }
 
     /*
-     * Separate visual progress for MiniPlayer dismissal.
+     * Reuse animation instances instead of allocating a new
+     * Animatable every time the sheet starts settling.
+     */
+    val sheetProgressAnimation =
+        remember(initiallyExpanded) {
+            Animatable(
+                progressState.floatValue,
+            )
+        }
+
+    val dismissProgressAnimation =
+        remember {
+            Animatable(0f)
+        }
+
+    /*
+     * This callback's current consumer only needs to know whether
+     * the player is open (progress > 0f).
      *
+     * Keep reporting the full progress locally for animation, but
+     * notify the parent only when transitioning between the
+     * collapsed and open states. This avoids triggering the
+     * navigation hierarchy on every animation frame.
+     */
+    val reportedOpenState =
+        remember(initiallyExpanded) {
+            booleanArrayOf(
+                progressState.floatValue > 0f,
+            )
+        }
+
+    /*
+     * Separate visual progress for MiniPlayer dismissal.
      * This state intentionally does not survive rotation.
      */
     val miniPlayerDismissProgressState =
@@ -105,8 +133,8 @@ fun UnifiedPlayerSheet(
         }
 
     /*
-     * Animation jobs are explicitly tracked so a new gesture
-     * can always cancel the previous settle animation.
+     * Track active jobs so gesture input can cancel a settle
+     * animation before applying a new progress value.
      */
     val sheetSettleJobState =
         remember {
@@ -120,10 +148,6 @@ fun UnifiedPlayerSheet(
 
     /*
      * PlayerRoute registers its close action here.
-     *
-     * Regular playback uses the default collapse behavior.
-     * An external caller may handle close by ending its session
-     * and finishing its Activity.
      */
     val playerCloseActionState =
         remember {
@@ -146,8 +170,7 @@ fun UnifiedPlayerSheet(
      * NavigationBarBottomPadding = 20dp
      * MiniPlayerNavigationSpacing = 8dp
      *
-     * Therefore the collapsed MiniPlayer bottom position is:
-     *
+     * Collapsed MiniPlayer bottom inset:
      * 80dp + 20dp + 8dp = 108dp
      */
     val miniPlayerBottomInset =
@@ -156,9 +179,8 @@ fun UnifiedPlayerSheet(
 
     /*
      * MiniPlayer and NavigationBar both use 14dp horizontal
-     * inset when collapsed.
-     *
-     * The Player surface expands that inset to 0dp as it opens.
+     * inset when collapsed. The Player surface expands that
+     * inset to 0dp as it opens.
      */
     val currentHorizontalPadding =
         lerpDp(
@@ -173,13 +195,12 @@ fun UnifiedPlayerSheet(
             .dp
 
     /*
-     * Restore the external progress observer after a
-     * configuration change.
-     *
-     * The local saveable state is restored before this effect
-     * runs, so the restored Player state is propagated.
+     * Propagate the restored progress once after composition.
      */
     LaunchedEffect(Unit) {
+        reportedOpenState[0] =
+            progressState.floatValue > 0f
+
         onProgressChanged(
             progressState.floatValue,
         )
@@ -199,7 +220,21 @@ fun UnifiedPlayerSheet(
             )
 
         progressState.floatValue = clamped
-        onProgressChanged(clamped)
+
+        val isOpen =
+            clamped > 0f
+
+        /*
+         * Avoid notifying the parent for every frame. The local
+         * progress state continues updating at animation frequency.
+         */
+        if (isOpen != reportedOpenState[0]) {
+            reportedOpenState[0] = isOpen
+
+            onProgressChanged(
+                clamped,
+            )
+        }
     }
 
     fun cancelSheetAnimation() {
@@ -230,30 +265,57 @@ fun UnifiedPlayerSheet(
                 1f,
             )
 
-        sheetSettleJobState.value =
-            scope.launch {
-                try {
-                    val animation =
-                        Animatable(
-                            startProgress,
-                        )
+        /*
+         * LAZY start ensures the active job is registered before
+         * its coroutine can finish and clear the job reference.
+         */
+        val job =
+            scope.launch(
+                start = CoroutineStart.LAZY,
+            ) {
+                val runningJob =
+                    currentCoroutineContext()[Job]
 
-                    animation.animateTo(
-                        targetValue =
-                            targetProgress,
+                try {
+                    /*
+                     * Synchronize the reused Animatable with the
+                     * latest gesture or predictive-back progress.
+                     */
+                    sheetProgressAnimation.snapTo(
+                        startProgress,
+                    )
+
+                    sheetProgressAnimation.animateTo(
+                        targetValue = targetProgress,
                         animationSpec =
                             motionScheme
                                 .defaultSpatialSpec(),
                     ) {
-                        setProgress(value)
+                        setProgress(
+                            value,
+                        )
                     }
 
-                    setProgress(targetProgress)
+                    setProgress(
+                        targetProgress,
+                    )
+
                     onSettled?.invoke()
                 } finally {
-                    sheetSettleJobState.value = null
+                    /*
+                     * An older cancelled animation must never clear
+                     * the reference to a newer animation job.
+                     */
+                    if (
+                        sheetSettleJobState.value === runningJob
+                    ) {
+                        sheetSettleJobState.value = null
+                    }
                 }
             }
+
+        sheetSettleJobState.value = job
+        job.start()
     }
 
     fun settleMiniPlayerDismiss(
@@ -276,17 +338,20 @@ fun UnifiedPlayerSheet(
                     1f,
                 )
 
-        dismissSettleJobState.value =
-            scope.launch {
-                try {
-                    val animation =
-                        Animatable(
-                            startProgress,
-                        )
+        val job =
+            scope.launch(
+                start = CoroutineStart.LAZY,
+            ) {
+                val runningJob =
+                    currentCoroutineContext()[Job]
 
-                    animation.animateTo(
-                        targetValue =
-                            targetProgress,
+                try {
+                    dismissProgressAnimation.snapTo(
+                        startProgress,
+                    )
+
+                    dismissProgressAnimation.animateTo(
+                        targetValue = targetProgress,
                         animationSpec =
                             motionScheme
                                 .defaultSpatialSpec(),
@@ -305,20 +370,31 @@ fun UnifiedPlayerSheet(
 
                     onSettled?.invoke()
                 } finally {
-                    dismissSettleJobState.value = null
+                    if (
+                        dismissSettleJobState.value === runningJob
+                    ) {
+                        dismissSettleJobState.value = null
+                    }
                 }
             }
+
+        dismissSettleJobState.value = job
+        job.start()
     }
 
     fun expand() {
         cancelDismissAnimation()
+
         miniPlayerDismissProgressState.floatValue = 0f
+
         settleTo(1f)
     }
 
     fun collapse() {
         cancelDismissAnimation()
+
         miniPlayerDismissProgressState.floatValue = 0f
+
         settleTo(0f)
     }
 
@@ -335,11 +411,7 @@ fun UnifiedPlayerSheet(
     ) { backProgress ->
         /*
          * Capture the close action before consuming the gesture.
-         *
-         * The progress can reach zero during the final gesture
-         * event, causing PlayerRoute to leave composition before
-         * the event stream finishes. Keeping this local reference
-         * ensures the completed gesture can still close the Player.
+         * It may otherwise leave composition as progress reaches 0.
          */
         val closePlayerAction =
             playerCloseActionState.value
@@ -357,19 +429,11 @@ fun UnifiedPlayerSheet(
                             1f,
                         )
 
-                setProgress(nextProgress)
+                setProgress(
+                    nextProgress,
+                )
             }
 
-            /*
-             * A completed predictive Back gesture uses the same
-             * close action registered by PlayerRoute.
-             *
-             * For regular playback this collapses the sheet.
-             * For an external session the caller can terminate
-             * that session and finish its Activity.
-             *
-             * A cancelled gesture never invokes this action.
-             */
             if (closePlayerAction != null) {
                 closePlayerAction()
             } else {
@@ -396,11 +460,8 @@ fun UnifiedPlayerSheet(
             )
 
         /*
-         * Full pill shape at collapsed state:
-         * collapsed height = 80dp, corner radius = 40dp.
-         *
-         * Both top and bottom corners transition smoothly
-         * to square corners as the Player expands.
+         * The MiniPlayer pill transitions to square corners
+         * as the Player expands.
          */
         val cornerTop =
             lerpDp(
@@ -416,9 +477,6 @@ fun UnifiedPlayerSheet(
                 fraction = progress,
             )
 
-        /*
-         * Preserve the exact MiniPlayer Card container color.
-         */
         val miniPlayerContainerColor =
             CardDefaults
                 .cardColors()
@@ -455,16 +513,8 @@ fun UnifiedPlayerSheet(
                 )
 
         /*
-         * Player surface visibility:
-         *
-         * Keep the surface visible when bottom chrome is enabled
-         * or when the Full Player is expanded.
-         *
-         * When bottom chrome is disabled and the Player is
-         * collapsed, do not compose the surface at all.
-         *
-         * This prevents an empty 80dp surface from appearing
-         * at the bottom of destinations such as Settings.
+         * Do not compose an empty collapsed Player surface on
+         * destinations that have disabled bottom chrome.
          */
         if (
             showBottomChrome ||
@@ -479,13 +529,6 @@ fun UnifiedPlayerSheet(
                                 currentBottomPadding,
                         ),
             ) {
-                /*
-                 * Single physical Player surface.
-                 *
-                 * Horizontal inset:
-                 * 0f progress -> 14dp
-                 * 1f progress -> 0dp
-                 */
                 Surface(
                     modifier =
                         Modifier
@@ -522,11 +565,8 @@ fun UnifiedPlayerSheet(
                                             1f,
                                         )
 
-                                scaleX =
-                                    dismissScale
-
-                                scaleY =
-                                    dismissScale
+                                scaleX = dismissScale
+                                scaleY = dismissScale
 
                                 translationY =
                                     with(density) {
@@ -542,22 +582,13 @@ fun UnifiedPlayerSheet(
                             }
                             .pointerInput(Unit) {
                                 /*
-                                 * Stable gesture detector.
-                                 *
-                                 * Do not make progress a
-                                 * pointerInput key.
+                                 * Keep gesture recognition stable
+                                 * throughout the expansion animation.
                                  */
-                                var gestureDirection =
-                                    0
-
-                                var dragProgress =
-                                    0f
-
-                                var dragDismissProgress =
-                                    0f
-
-                                var dragStartProgress =
-                                    0f
+                                var gestureDirection = 0
+                                var dragProgress = 0f
+                                var dragDismissProgress = 0f
+                                var dragStartProgress = 0f
 
                                 detectVerticalDragGestures(
                                     onDragStart = {
@@ -603,8 +634,8 @@ fun UnifiedPlayerSheet(
 
                                         when {
                                             /*
-                                             * MiniPlayer ->
-                                             * downward dismissal.
+                                             * MiniPlayer downward
+                                             * dismissal with resistance.
                                              */
                                             dragStartProgress <=
                                                 0.001f &&
@@ -643,7 +674,8 @@ fun UnifiedPlayerSheet(
                                             }
 
                                             /*
-                                             * Upward gesture expands Player.
+                                             * Upward drag expands
+                                             * the Player surface.
                                              */
                                             gestureDirection < 0 -> {
                                                 val heightPx =
@@ -673,7 +705,8 @@ fun UnifiedPlayerSheet(
                                             }
 
                                             /*
-                                             * Downward gesture collapses Player.
+                                             * Downward drag collapses
+                                             * an expanded Player.
                                              */
                                             gestureDirection > 0 &&
                                                 dragStartProgress >
@@ -710,7 +743,7 @@ fun UnifiedPlayerSheet(
                                     onDragEnd = {
                                         when {
                                             /*
-                                             * Dismiss MiniPlayer.
+                                             * Dismiss the MiniPlayer.
                                              */
                                             dragStartProgress <=
                                                 0.001f &&
@@ -727,9 +760,6 @@ fun UnifiedPlayerSheet(
                                                 }
                                             }
 
-                                            /*
-                                             * Finish upward expansion.
-                                             */
                                             gestureDirection < 0 -> {
                                                 if (dragProgress >= 0.5f) {
                                                     expand()
@@ -738,9 +768,6 @@ fun UnifiedPlayerSheet(
                                                 }
                                             }
 
-                                            /*
-                                             * Finish downward collapse.
-                                             */
                                             gestureDirection > 0 &&
                                                 dragStartProgress >
                                                 0.001f -> {
@@ -785,8 +812,7 @@ fun UnifiedPlayerSheet(
                                     },
                                 )
                             },
-                    color =
-                        surfaceColor,
+                    color = surfaceColor,
                     shape =
                         RoundedCornerShape(
                             topStart = cornerTop,
@@ -798,13 +824,8 @@ fun UnifiedPlayerSheet(
                     shadowElevation = 0.dp,
                 ) {
                     Box(
-                        modifier =
-                            Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                     ) {
-                        /*
-                         * PlayerRoute only exists once the surface
-                         * starts expanding.
-                         */
                         if (progress > 0f) {
                             PlayerRoute(
                                 playbackController =
@@ -839,10 +860,6 @@ fun UnifiedPlayerSheet(
                             )
                         }
 
-                        /*
-                         * MiniPlayer stays aligned with the
-                         * same surface.
-                         */
                         if (
                             showBottomChrome &&
                             miniPlayerContentAlpha > 0f
@@ -894,9 +911,6 @@ fun UnifiedPlayerSheet(
 
     /*
      * NavigationBar remains outside the Player surface.
-     *
-     * It is not composed when the Player is fully expanded,
-     * so it cannot intercept Player touch events.
      */
     if (
         showBottomChrome &&
