@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.BasicText
@@ -25,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -35,10 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -58,7 +59,6 @@ import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.model.RepeatMode
 import com.rovia.music.core.model.SyncedLyrics
 import com.rovia.music.core.model.Track
-import kotlinx.coroutines.yield
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -92,7 +92,8 @@ internal fun LandscapePlayerContent(
     seekPosition: Float,
     duration: Long,
     displayedIsPlaying: Boolean,
-    motionEffectsSpec: FiniteAnimationSpec<Float>,
+    motionEffectsSpec:
+        androidx.compose.animation.core.FiniteAnimationSpec<Float>,
     onSeekPositionChange: (Float) -> Unit,
     onSeekFinished: () -> Unit,
     onPrevious: () -> Unit,
@@ -205,8 +206,7 @@ internal fun LandscapePlayerContent(
                             lyrics = lyrics,
                             playbackPositionMs =
                                 playbackState.positionMs,
-                            isPlaying =
-                                playbackState.isPlaying,
+                            isPlaying = playbackState.isPlaying,
                             modifier =
                                 Modifier.fillMaxWidth(),
                         )
@@ -296,7 +296,9 @@ internal fun LandscapePlayerContent(
                                 .fillMaxWidth()
                                 .padding(
                                     top =
-                                        if (compactLandscape) {
+                                        if (
+                                            compactLandscape
+                                        ) {
                                             16.dp
                                         } else {
                                             28.dp
@@ -317,7 +319,9 @@ internal fun LandscapePlayerContent(
                     Spacer(
                         modifier =
                             Modifier.height(
-                                if (compactLandscape) {
+                                if (
+                                    compactLandscape
+                                ) {
                                     8.dp
                                 } else {
                                     24.dp
@@ -335,7 +339,9 @@ internal fun LandscapePlayerContent(
                     Spacer(
                         modifier =
                             Modifier.height(
-                                if (compactLandscape) {
+                                if (
+                                    compactLandscape
+                                ) {
                                     8.dp
                                 } else {
                                     16.dp
@@ -392,8 +398,8 @@ private fun PlayerCurrentLyricLine(
     modifier: Modifier = Modifier,
 ) {
     /*
-     * Use the frame clock to keep word highlighting and floating
-     * motion smooth between playback position updates.
+     * Interpolate playback time with the Compose frame clock.
+     * This keeps word animation smooth between player position updates.
      */
     val lyricClock =
         remember(lyrics) {
@@ -474,6 +480,8 @@ private fun PlayerCurrentLyricLine(
         }
     }
 
+    val displayPositionMs = lyricClock.longValue
+
     val activeLineIndex by remember(
         lyrics,
         lyricClock,
@@ -503,16 +511,14 @@ private fun PlayerCurrentLyricLine(
         return
     }
 
-    val positionMs = lyricClock.longValue
-
     val activeWordIndex =
         activeLine.words.indexOfLast {
-            it.startTimeMs <= positionMs
+            it.startTimeMs <= displayPositionMs
         }
 
     LandscapeInlineLyricContent(
         line = activeLine,
-        positionMs = positionMs,
+        positionMs = displayPositionMs,
         activeWordIndex = activeWordIndex,
         modifier = modifier,
     )
@@ -520,7 +526,7 @@ private fun PlayerCurrentLyricLine(
 
 @Composable
 private fun LandscapeInlineLyricContent(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     positionMs: Long,
     activeWordIndex: Int,
     modifier: Modifier = Modifier,
@@ -586,8 +592,6 @@ private fun LandscapeInlineLyricContent(
             line,
             activeWordIndex,
             inactiveColor,
-            activeColor,
-            activeWordColor,
         ) {
             buildLandscapeInlineLyricText(
                 line = line,
@@ -599,95 +603,119 @@ private fun LandscapeInlineLyricContent(
             )
         }
 
-    val sweptText = regularText
+    val sweptText =
+        remember(
+            line,
+            activeWordIndex,
+            inactiveColor,
+            activeColor,
+            activeWordColor,
+        ) {
+            buildLandscapeInlineLyricText(
+                line = line,
+                activeWordIndex = activeWordIndex,
+                inactiveColor = inactiveColor,
+                activeColor = activeColor,
+                activeWordColor = activeWordColor,
+            )
+        }
 
     Box(
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        if (isWordSynced) {
-            val floatingModifier =
-                Modifier.drawWithContent {
-                    val layout = textLayoutResult
+        /*
+         * Keep the inline player lyric to at most two lines.
+         * Short lyrics retain the current 48dp slot; long lyrics wrap to
+         * the next line and remain vertically centered in the same area.
+         */
+        when {
+            isWordSynced -> {
+                val floatingModifier =
+                    Modifier.drawWithContent {
+                        val layout = textLayoutResult
 
-                    if (layout == null) {
-                        drawContent()
-                    } else {
-                        drawLandscapeInlineFloatingWords(
-                            layout = layout,
-                            line = line,
-                            wordOffsets = wordOffsets,
-                            positionMs = positionMs,
-                        )
+                        if (layout == null) {
+                            drawContent()
+                        } else {
+                            drawLandscapeInlineFloatingWords(
+                                layout = layout,
+                                line = line,
+                                wordOffsets = wordOffsets,
+                                positionMs = positionMs,
+                            )
+                        }
                     }
-                }
 
-            BasicText(
-                text = dimText,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .then(floatingModifier),
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                style =
-                    MaterialTheme.typography.titleMedium.copy(
-                        textAlign = TextAlign.Start,
-                        lineHeight = 22.sp,
-                    ),
-                onTextLayout = onTextLayout,
-            )
+                BasicText(
+                    text = dimText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .then(floatingModifier),
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            textAlign = TextAlign.Start,
+                            lineHeight = 22.sp,
+                        ),
+                    onTextLayout = onTextLayout,
+                )
 
-            BasicText(
-                text = sweptText,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .then(floatingModifier)
-                        .drawWithContent {
-                            val layout = textLayoutResult
+                BasicText(
+                    text = sweptText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .then(floatingModifier)
+                            .drawWithContent {
+                                val layout = textLayoutResult
 
-                            if (layout == null) {
-                                drawContent()
-                            } else {
-                                drawLandscapeInlineRevealedText(
-                                    layout = layout,
-                                    revealedCharacters =
-                                        calculateLandscapeInlineRevealedCharacters(
-                                            line = line,
-                                            wordOffsets = wordOffsets,
-                                            positionMs = positionMs,
-                                        ),
-                                )
-                            }
-                        },
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                style =
-                    MaterialTheme.typography.titleMedium.copy(
-                        textAlign = TextAlign.Start,
-                        lineHeight = 22.sp,
-                    ),
-            )
-        } else {
-            BasicText(
-                text = regularText,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                style =
-                    MaterialTheme.typography.titleMedium.copy(
-                        textAlign = TextAlign.Start,
-                        lineHeight = 22.sp,
-                    ),
-                onTextLayout = onTextLayout,
-            )
+                                if (layout == null) {
+                                    drawContent()
+                                } else {
+                                    drawLandscapeInlineRevealedText(
+                                        layout = layout,
+                                        revealedCharacters =
+                                            calculateLandscapeInlineRevealedCharacters(
+                                                line = line,
+                                                wordOffsets = wordOffsets,
+                                                positionMs = positionMs,
+                                            ),
+                                    )
+                                }
+                            },
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            textAlign = TextAlign.Start,
+                            lineHeight = 22.sp,
+                        ),
+                )
+            }
+
+            else -> {
+                BasicText(
+                    text = regularText,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            textAlign = TextAlign.Start,
+                            lineHeight = 22.sp,
+                        ),
+                    onTextLayout = onTextLayout,
+                )
+            }
         }
     }
 }
 
 private fun buildLandscapeInlineLyricText(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     activeWordIndex: Int,
     inactiveColor: Color,
     activeColor: Color,
@@ -745,7 +773,7 @@ private fun buildLandscapeInlineLyricText(
 }
 
 private fun isLandscapeInlineWordSyncedLine(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
 ): Boolean {
     if (line.words.size < 2) {
         return false
@@ -764,7 +792,7 @@ private fun isLandscapeInlineWordSyncedLine(
 }
 
 private fun buildLandscapeInlineWordStartOffsets(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
 ): List<Int> {
     val offsets = ArrayList<Int>(line.words.size)
     var offset = 0
@@ -782,7 +810,7 @@ private fun buildLandscapeInlineWordStartOffsets(
 }
 
 private fun calculateLandscapeInlineRevealedCharacters(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     wordOffsets: List<Int>,
     positionMs: Long,
 ): Float {
@@ -844,9 +872,9 @@ private fun calculateLandscapeInlineRevealedCharacters(
                 (
                     positionMs -
                         word.startTimeMs
-                    ).toFloat() /
+                ).toFloat() /
                     finalWordDuration.toFloat()
-                ).coerceIn(0f, 1f)
+            ).coerceIn(0f, 1f)
 
         return wordOffset +
             word.text.length * progress
@@ -856,7 +884,7 @@ private fun calculateLandscapeInlineRevealedCharacters(
 }
 
 private fun estimateLandscapeInlineWordDurationMs(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     wordIndex: Int,
 ): Long {
     val word =
@@ -879,7 +907,7 @@ private fun estimateLandscapeInlineWordDurationMs(
 }
 
 private fun calculateLandscapeInlineWordLift(
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     wordIndex: Int,
     positionMs: Long,
 ): Float {
@@ -908,7 +936,7 @@ private fun calculateLandscapeInlineWordLift(
         (
             inferredEnd -
                 word.startTimeMs
-            ).coerceAtLeast(1L)
+        ).coerceAtLeast(1L)
 
     val riseDuration =
         wordDuration.toFloat().coerceIn(
@@ -920,26 +948,24 @@ private fun calculateLandscapeInlineWordLift(
         (
             (positionMs - word.startTimeMs).toFloat() /
                 riseDuration
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val falling =
         (
             1f -
                 (positionMs - inferredEnd).toFloat() /
                     LANDSCAPE_INLINE_WORD_SETTLE_MS
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val heldThrough =
         (
-            (
-                wordDuration.toFloat() -
-                    LANDSCAPE_INLINE_WORD_LIFT_QUICK_MS
-                ) /
+            (wordDuration.toFloat() -
+                LANDSCAPE_INLINE_WORD_LIFT_QUICK_MS) /
                 (
                     LANDSCAPE_INLINE_WORD_LIFT_HELD_MS -
                         LANDSCAPE_INLINE_WORD_LIFT_QUICK_MS
                     )
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val liftHeight =
         LANDSCAPE_INLINE_WORD_LIFT_FLOOR +
@@ -961,7 +987,7 @@ private fun landscapeInlineSmoothStep(
 
 private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
     layout: TextLayoutResult,
-    line: LyricLine,
+    line: com.rovia.music.core.model.LyricLine,
     wordOffsets: List<Int>,
     positionMs: Long,
 ) {
@@ -982,32 +1008,8 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
         return
     }
 
-    val visualLine = 0
-    val lineStart = layout.getLineStart(visualLine)
-    val lineEnd =
-        layout.getLineEnd(
-            visualLine,
-            visibleEnd = true,
-        )
-
-    val left =
-        min(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val right =
-        max(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val top = layout.getLineTop(visualLine)
-    val bottom = layout.getLineBottom(visualLine)
     val peak = LANDSCAPE_INLINE_WORD_RISE_DP.dp.toPx()
-
-    val segments =
-        ArrayList<LandscapeInlineFloatingWordSegment>()
+    val segments = ArrayList<LandscapeInlineFloatingWordSegment>()
 
     for (wordIndex in line.words.indices) {
         if (wordIndex >= wordOffsets.size) {
@@ -1015,16 +1017,8 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
         }
 
         val word = line.words[wordIndex]
-        val start = max(wordOffsets[wordIndex], lineStart)
-        val end =
-            min(
-                wordOffsets[wordIndex] + word.text.length,
-                lineEnd,
-            )
-
-        if (start >= end) {
-            continue
-        }
+        val wordStart = wordOffsets[wordIndex]
+        val wordEnd = wordStart + word.text.length
 
         val lift =
             calculateLandscapeInlineWordLift(
@@ -1037,33 +1031,70 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
             continue
         }
 
-        val from =
-            layout.landscapeInlineHorizontalPosition(
-                offset = start,
+        // A word can appear on either visual line after wrapping.
+        // Segment it by actual layout line so both parts animate correctly
+        // if a very long word itself is split by the text layout.
+        for (visualLine in 0 until layout.lineCount) {
+            val lineStart = layout.getLineStart(visualLine)
+            val lineEnd =
+                layout.getLineEnd(
+                    visualLine,
+                    visibleEnd = true,
+                )
+
+            val start = max(wordStart, lineStart)
+            val end = min(wordEnd, lineEnd)
+
+            if (start >= end) {
+                continue
+            }
+
+            val left =
+                min(
+                    layout.getLineLeft(visualLine),
+                    layout.getLineRight(visualLine),
+                )
+
+            val right =
+                max(
+                    layout.getLineLeft(visualLine),
+                    layout.getLineRight(visualLine),
+                )
+
+            val top = layout.getLineTop(visualLine)
+            val bottom = layout.getLineBottom(visualLine)
+
+            val from =
+                layout.landscapeInlineHorizontalPosition(
+                    offset = start,
+                    visualLine = visualLine,
+                )
+
+            val to =
+                layout.landscapeInlineHorizontalPosition(
+                    offset = end,
+                    visualLine = visualLine,
+                )
+
+            val segmentLeft =
+                min(from, to).coerceIn(left, right)
+
+            val segmentRight =
+                max(from, to).coerceIn(left, right)
+
+            if (segmentRight <= segmentLeft) {
+                continue
+            }
+
+            segments += LandscapeInlineFloatingWordSegment(
                 visualLine = visualLine,
+                left = segmentLeft,
+                right = segmentRight,
+                top = top,
+                bottom = bottom,
+                lift = lift,
             )
-
-        val to =
-            layout.landscapeInlineHorizontalPosition(
-                offset = end,
-                visualLine = visualLine,
-            )
-
-        val segmentLeft =
-            min(from, to).coerceIn(left, right)
-
-        val segmentRight =
-            max(from, to).coerceIn(left, right)
-
-        if (segmentRight <= segmentLeft) {
-            continue
         }
-
-        segments += LandscapeInlineFloatingWordSegment(
-            left = segmentLeft,
-            right = segmentRight,
-            lift = lift,
-        )
     }
 
     if (segments.isEmpty()) {
@@ -1071,38 +1102,62 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
         return
     }
 
+    /*
+     * Draw stationary text outside lifted word ranges for every visible
+     * visual line. Lifted ranges are redrawn separately at their own offset.
+     */
     val flatPath = Path()
-    var edge = left
     var hasFlatContent = false
 
-    for (segment in segments.sortedBy { it.left }) {
-        if (segment.left > edge) {
+    for (visualLine in 0 until layout.lineCount) {
+        val left =
+            min(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val right =
+            max(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val top = layout.getLineTop(visualLine)
+        val bottom = layout.getLineBottom(visualLine)
+        val lineSegments =
+            segments
+                .filter { it.visualLine == visualLine }
+                .sortedBy { it.left }
+
+        var edge = left
+
+        for (segment in lineSegments) {
+            if (segment.left > edge) {
+                flatPath.addRect(
+                    Rect(
+                        left = edge,
+                        top = top,
+                        right = segment.left,
+                        bottom = bottom,
+                    ),
+                )
+                hasFlatContent = true
+            }
+
+            edge = max(edge, segment.right)
+        }
+
+        if (edge < right) {
             flatPath.addRect(
                 Rect(
                     left = edge,
                     top = top,
-                    right = segment.left,
+                    right = right,
                     bottom = bottom,
                 ),
             )
-
             hasFlatContent = true
         }
-
-        edge = max(edge, segment.right)
-    }
-
-    if (edge < right) {
-        flatPath.addRect(
-            Rect(
-                left = edge,
-                top = top,
-                right = right,
-                bottom = bottom,
-            ),
-        )
-
-        hasFlatContent = true
     }
 
     if (hasFlatContent) {
@@ -1114,9 +1169,9 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
     for (segment in segments) {
         clipRect(
             left = segment.left - 0.5f,
-            top = top - peak - 1f,
+            top = segment.top - peak - 1f,
             right = segment.right + 0.5f,
-            bottom = bottom + 1f,
+            bottom = segment.bottom + 1f,
         ) {
             translate(
                 top = -segment.lift * peak,
@@ -1128,8 +1183,11 @@ private fun ContentDrawScope.drawLandscapeInlineFloatingWords(
 }
 
 private data class LandscapeInlineFloatingWordSegment(
+    val visualLine: Int,
     val left: Float,
     val right: Float,
+    val top: Float,
+    val bottom: Float,
     val lift: Float,
 )
 
@@ -1207,119 +1265,122 @@ private fun ContentDrawScope.drawLandscapeInlineRevealedText(
         return
     }
 
-    val visualLine = 0
-    val lineStart = layout.getLineStart(visualLine)
-    val lineEnd =
-        layout.getLineEnd(
-            visualLine,
-            visibleEnd = false,
-        )
+    // Reveal characters on each visual line, not only the first line.
+    for (visualLine in 0 until layout.lineCount) {
+        val lineStart = layout.getLineStart(visualLine)
+        val lineEnd =
+            layout.getLineEnd(
+                visualLine,
+                visibleEnd = false,
+            )
 
-    if (revealedCharacters <= lineStart) {
-        return
-    }
-
-    val lineLeft =
-        min(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val lineRight =
-        max(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val lineTop = layout.getLineTop(visualLine)
-    val lineBottom = layout.getLineBottom(visualLine)
-
-    if (
-        lineRight <= lineLeft ||
-        lineBottom <= lineTop
-    ) {
-        return
-    }
-
-    if (revealedCharacters >= lineEnd) {
-        clipRect(
-            left = lineLeft,
-            top = lineTop,
-            right = lineRight,
-            bottom = lineBottom,
-        ) {
-            this@drawLandscapeInlineRevealedText.drawContent()
+        if (revealedCharacters <= lineStart.toFloat()) {
+            continue
         }
-        return
-    }
 
-    val offset =
-        floor(revealedCharacters)
-            .toInt()
-            .coerceIn(lineStart, lineEnd)
+        val lineLeft =
+            min(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
 
-    val characterProgress =
-        (
-            revealedCharacters -
-                offset
+        val lineRight =
+            max(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val lineTop = layout.getLineTop(visualLine)
+        val lineBottom = layout.getLineBottom(visualLine)
+
+        if (
+            lineRight <= lineLeft ||
+            lineBottom <= lineTop
+        ) {
+            continue
+        }
+
+        if (revealedCharacters >= lineEnd.toFloat()) {
+            clipRect(
+                left = lineLeft,
+                top = lineTop,
+                right = lineRight,
+                bottom = lineBottom,
+            ) {
+                this@drawLandscapeInlineRevealedText.drawContent()
+            }
+            continue
+        }
+
+        val offset =
+            floor(revealedCharacters)
+                .toInt()
+                .coerceIn(lineStart, lineEnd)
+
+        val characterProgress =
+            (
+                revealedCharacters -
+                    offset
             ).coerceIn(0f, 1f)
 
-    val directionIndex =
-        lineStart.coerceIn(
-            0,
-            (textLength - 1).coerceAtLeast(0),
-        )
+        val directionIndex =
+            lineStart.coerceIn(
+                0,
+                (textLength - 1).coerceAtLeast(0),
+            )
 
-    val isRtl =
-        layout.getParagraphDirection(directionIndex) ==
-            ResolvedTextDirection.Rtl
+        val isRtl =
+            layout.getParagraphDirection(directionIndex) ==
+                ResolvedTextDirection.Rtl
 
-    val currentX =
-        layout.getHorizontalPosition(
-            offset,
-            usePrimaryDirection = true,
-        )
-
-    val nextOffset =
-        (offset + 1).coerceAtMost(textLength)
-
-    val nextX =
-        if (
-            nextOffset >= textLength ||
-            layout.getLineForOffset(nextOffset) != visualLine
-        ) {
-            if (isRtl) lineLeft else lineRight
-        } else {
+        val currentX =
             layout.getHorizontalPosition(
-                nextOffset,
+                offset,
                 usePrimaryDirection = true,
             )
-        }
 
-    val revealX =
-        (
-            currentX +
-                (nextX - currentX) *
-                characterProgress
+        val nextOffset =
+            (offset + 1).coerceAtMost(textLength)
+
+        val nextX =
+            if (
+                nextOffset >= textLength ||
+                nextOffset >= lineEnd ||
+                layout.getLineForOffset(nextOffset) != visualLine
+            ) {
+                if (isRtl) lineLeft else lineRight
+            } else {
+                layout.getHorizontalPosition(
+                    nextOffset,
+                    usePrimaryDirection = true,
+                )
+            }
+
+        val revealX =
+            (
+                currentX +
+                    (nextX - currentX) *
+                    characterProgress
             ).coerceIn(
                 lineLeft,
                 lineRight,
             )
 
-    val clipLeft =
-        if (isRtl) revealX else lineLeft
+        val clipLeft =
+            if (isRtl) revealX else lineLeft
 
-    val clipRight =
-        if (isRtl) lineRight else revealX
+        val clipRight =
+            if (isRtl) lineRight else revealX
 
-    if (clipRight > clipLeft) {
-        clipRect(
-            left = clipLeft,
-            top = lineTop,
-            right = clipRight,
-            bottom = lineBottom,
-        ) {
-            this@drawLandscapeInlineRevealedText.drawContent()
+        if (clipRight > clipLeft) {
+            clipRect(
+                left = clipLeft,
+                top = lineTop,
+                right = clipRight,
+                bottom = lineBottom,
+            ) {
+                this@drawLandscapeInlineRevealedText.drawContent()
+            }
         }
     }
 }

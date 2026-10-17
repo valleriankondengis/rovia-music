@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.BasicText
@@ -561,12 +562,13 @@ private fun InlineLyricLineContent(
         }
 
     Box(
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         /*
-         * Keep the inline player lyric to exactly one line.
-         * The existing 48dp slot and player layout remain unchanged.
+         * Keep the inline player lyric to at most two lines.
+         * Short lyrics retain the current 48dp slot; long lyrics wrap to
+         * the next line and remain vertically centered in the same area.
          */
         when {
             isWordSynced -> {
@@ -592,7 +594,7 @@ private fun InlineLyricLineContent(
                         Modifier
                             .fillMaxWidth()
                             .then(floatingModifier),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Clip,
                     style =
                         MaterialTheme.typography.titleMedium.copy(
@@ -625,7 +627,7 @@ private fun InlineLyricLineContent(
                                     )
                                 }
                             },
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Clip,
                     style =
                         MaterialTheme.typography.titleMedium.copy(
@@ -639,7 +641,7 @@ private fun InlineLyricLineContent(
                 BasicText(
                     text = regularText,
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Clip,
                     style =
                         MaterialTheme.typography.titleMedium.copy(
@@ -811,9 +813,9 @@ private fun calculateInlineRevealedCharacters(
                 (
                     positionMs -
                         word.startTimeMs
-                    ).toFloat() /
+                ).toFloat() /
                     finalWordDuration.toFloat()
-                ).coerceIn(0f, 1f)
+            ).coerceIn(0f, 1f)
 
         return wordOffset +
             word.text.length * progress
@@ -875,7 +877,7 @@ private fun calculateInlineWordLift(
         (
             inferredEnd -
                 word.startTimeMs
-            ).coerceAtLeast(1L)
+        ).coerceAtLeast(1L)
 
     val riseDuration =
         wordDuration.toFloat().coerceIn(
@@ -887,14 +889,14 @@ private fun calculateInlineWordLift(
         (
             (positionMs - word.startTimeMs).toFloat() /
                 riseDuration
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val falling =
         (
             1f -
                 (positionMs - inferredEnd).toFloat() /
                     INLINE_WORD_SETTLE_MS
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val heldThrough =
         (
@@ -904,7 +906,7 @@ private fun calculateInlineWordLift(
                     INLINE_WORD_LIFT_HELD_MS -
                         INLINE_WORD_LIFT_QUICK_MS
                     )
-            ).coerceIn(0f, 1f)
+        ).coerceIn(0f, 1f)
 
     val liftHeight =
         INLINE_WORD_LIFT_FLOOR +
@@ -947,32 +949,8 @@ private fun ContentDrawScope.drawInlineFloatingWords(
         return
     }
 
-    val visualLine = 0
-    val lineStart = layout.getLineStart(visualLine)
-    val lineEnd =
-        layout.getLineEnd(
-            visualLine,
-            visibleEnd = true,
-        )
-
-    val left =
-        min(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val right =
-        max(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val top = layout.getLineTop(visualLine)
-    val bottom = layout.getLineBottom(visualLine)
     val peak = INLINE_WORD_RISE_DP.dp.toPx()
-
-    val segments =
-        ArrayList<InlineFloatingWordSegment>()
+    val segments = ArrayList<InlineFloatingWordSegment>()
 
     for (wordIndex in line.words.indices) {
         if (wordIndex >= wordOffsets.size) {
@@ -980,16 +958,8 @@ private fun ContentDrawScope.drawInlineFloatingWords(
         }
 
         val word = line.words[wordIndex]
-        val start = max(wordOffsets[wordIndex], lineStart)
-        val end =
-            min(
-                wordOffsets[wordIndex] + word.text.length,
-                lineEnd,
-            )
-
-        if (start >= end) {
-            continue
-        }
+        val wordStart = wordOffsets[wordIndex]
+        val wordEnd = wordStart + word.text.length
 
         val lift =
             calculateInlineWordLift(
@@ -1002,33 +972,70 @@ private fun ContentDrawScope.drawInlineFloatingWords(
             continue
         }
 
-        val from =
-            layout.inlineHorizontalPosition(
-                offset = start,
+        // A word can appear on either visual line after wrapping.
+        // Segment it by actual layout line so both parts animate correctly
+        // if a very long word itself is split by the text layout.
+        for (visualLine in 0 until layout.lineCount) {
+            val lineStart = layout.getLineStart(visualLine)
+            val lineEnd =
+                layout.getLineEnd(
+                    visualLine,
+                    visibleEnd = true,
+                )
+
+            val start = max(wordStart, lineStart)
+            val end = min(wordEnd, lineEnd)
+
+            if (start >= end) {
+                continue
+            }
+
+            val left =
+                min(
+                    layout.getLineLeft(visualLine),
+                    layout.getLineRight(visualLine),
+                )
+
+            val right =
+                max(
+                    layout.getLineLeft(visualLine),
+                    layout.getLineRight(visualLine),
+                )
+
+            val top = layout.getLineTop(visualLine)
+            val bottom = layout.getLineBottom(visualLine)
+
+            val from =
+                layout.inlineHorizontalPosition(
+                    offset = start,
+                    visualLine = visualLine,
+                )
+
+            val to =
+                layout.inlineHorizontalPosition(
+                    offset = end,
+                    visualLine = visualLine,
+                )
+
+            val segmentLeft =
+                min(from, to).coerceIn(left, right)
+
+            val segmentRight =
+                max(from, to).coerceIn(left, right)
+
+            if (segmentRight <= segmentLeft) {
+                continue
+            }
+
+            segments += InlineFloatingWordSegment(
                 visualLine = visualLine,
+                left = segmentLeft,
+                right = segmentRight,
+                top = top,
+                bottom = bottom,
+                lift = lift,
             )
-
-        val to =
-            layout.inlineHorizontalPosition(
-                offset = end,
-                visualLine = visualLine,
-            )
-
-        val segmentLeft =
-            min(from, to).coerceIn(left, right)
-
-        val segmentRight =
-            max(from, to).coerceIn(left, right)
-
-        if (segmentRight <= segmentLeft) {
-            continue
         }
-
-        segments += InlineFloatingWordSegment(
-            left = segmentLeft,
-            right = segmentRight,
-            lift = lift,
-        )
     }
 
     if (segments.isEmpty()) {
@@ -1037,39 +1044,61 @@ private fun ContentDrawScope.drawInlineFloatingWords(
     }
 
     /*
-     * Draw the stationary text in one pass. Lifted word ranges are
-     * excluded and redrawn separately at their own vertical offsets.
+     * Draw stationary text outside lifted word ranges for every visible
+     * visual line. Lifted ranges are redrawn separately at their own offset.
      */
     val flatPath = Path()
-    var edge = left
     var hasFlatContent = false
 
-    for (segment in segments.sortedBy { it.left }) {
-        if (segment.left > edge) {
+    for (visualLine in 0 until layout.lineCount) {
+        val left =
+            min(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val right =
+            max(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val top = layout.getLineTop(visualLine)
+        val bottom = layout.getLineBottom(visualLine)
+        val lineSegments =
+            segments
+                .filter { it.visualLine == visualLine }
+                .sortedBy { it.left }
+
+        var edge = left
+
+        for (segment in lineSegments) {
+            if (segment.left > edge) {
+                flatPath.addRect(
+                    Rect(
+                        left = edge,
+                        top = top,
+                        right = segment.left,
+                        bottom = bottom,
+                    ),
+                )
+                hasFlatContent = true
+            }
+
+            edge = max(edge, segment.right)
+        }
+
+        if (edge < right) {
             flatPath.addRect(
                 Rect(
                     left = edge,
                     top = top,
-                    right = segment.left,
+                    right = right,
                     bottom = bottom,
                 ),
             )
             hasFlatContent = true
         }
-
-        edge = max(edge, segment.right)
-    }
-
-    if (edge < right) {
-        flatPath.addRect(
-            Rect(
-                left = edge,
-                top = top,
-                right = right,
-                bottom = bottom,
-            ),
-        )
-        hasFlatContent = true
     }
 
     if (hasFlatContent) {
@@ -1081,9 +1110,9 @@ private fun ContentDrawScope.drawInlineFloatingWords(
     for (segment in segments) {
         clipRect(
             left = segment.left - 0.5f,
-            top = top - peak - 1f,
+            top = segment.top - peak - 1f,
             right = segment.right + 0.5f,
-            bottom = bottom + 1f,
+            bottom = segment.bottom + 1f,
         ) {
             translate(
                 top = -segment.lift * peak,
@@ -1095,8 +1124,11 @@ private fun ContentDrawScope.drawInlineFloatingWords(
 }
 
 private data class InlineFloatingWordSegment(
+    val visualLine: Int,
     val left: Float,
     val right: Float,
+    val top: Float,
+    val bottom: Float,
     val lift: Float,
 )
 
@@ -1174,119 +1206,122 @@ private fun ContentDrawScope.drawInlineRevealedText(
         return
     }
 
-    val visualLine = 0
-    val lineStart = layout.getLineStart(visualLine)
-    val lineEnd =
-        layout.getLineEnd(
-            visualLine,
-            visibleEnd = false,
-        )
+    // Reveal characters on each visual line, not only the first line.
+    for (visualLine in 0 until layout.lineCount) {
+        val lineStart = layout.getLineStart(visualLine)
+        val lineEnd =
+            layout.getLineEnd(
+                visualLine,
+                visibleEnd = false,
+            )
 
-    if (revealedCharacters <= lineStart) {
-        return
-    }
-
-    val lineLeft =
-        min(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val lineRight =
-        max(
-            layout.getLineLeft(visualLine),
-            layout.getLineRight(visualLine),
-        )
-
-    val lineTop = layout.getLineTop(visualLine)
-    val lineBottom = layout.getLineBottom(visualLine)
-
-    if (
-        lineRight <= lineLeft ||
-        lineBottom <= lineTop
-    ) {
-        return
-    }
-
-    if (revealedCharacters >= lineEnd) {
-        clipRect(
-            left = lineLeft,
-            top = lineTop,
-            right = lineRight,
-            bottom = lineBottom,
-        ) {
-            this@drawInlineRevealedText.drawContent()
+        if (revealedCharacters <= lineStart.toFloat()) {
+            continue
         }
-        return
-    }
 
-    val offset =
-        floor(revealedCharacters)
-            .toInt()
-            .coerceIn(lineStart, lineEnd)
+        val lineLeft =
+            min(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
 
-    val characterProgress =
-        (
-            revealedCharacters -
-                offset
+        val lineRight =
+            max(
+                layout.getLineLeft(visualLine),
+                layout.getLineRight(visualLine),
+            )
+
+        val lineTop = layout.getLineTop(visualLine)
+        val lineBottom = layout.getLineBottom(visualLine)
+
+        if (
+            lineRight <= lineLeft ||
+            lineBottom <= lineTop
+        ) {
+            continue
+        }
+
+        if (revealedCharacters >= lineEnd.toFloat()) {
+            clipRect(
+                left = lineLeft,
+                top = lineTop,
+                right = lineRight,
+                bottom = lineBottom,
+            ) {
+                this@drawInlineRevealedText.drawContent()
+            }
+            continue
+        }
+
+        val offset =
+            floor(revealedCharacters)
+                .toInt()
+                .coerceIn(lineStart, lineEnd)
+
+        val characterProgress =
+            (
+                revealedCharacters -
+                    offset
             ).coerceIn(0f, 1f)
 
-    val directionIndex =
-        lineStart.coerceIn(
-            0,
-            (textLength - 1).coerceAtLeast(0),
-        )
+        val directionIndex =
+            lineStart.coerceIn(
+                0,
+                (textLength - 1).coerceAtLeast(0),
+            )
 
-    val isRtl =
-        layout.getParagraphDirection(directionIndex) ==
-            ResolvedTextDirection.Rtl
+        val isRtl =
+            layout.getParagraphDirection(directionIndex) ==
+                ResolvedTextDirection.Rtl
 
-    val currentX =
-        layout.getHorizontalPosition(
-            offset,
-            usePrimaryDirection = true,
-        )
-
-    val nextOffset =
-        (offset + 1).coerceAtMost(textLength)
-
-    val nextX =
-        if (
-            nextOffset >= textLength ||
-            layout.getLineForOffset(nextOffset) != visualLine
-        ) {
-            if (isRtl) lineLeft else lineRight
-        } else {
+        val currentX =
             layout.getHorizontalPosition(
-                nextOffset,
+                offset,
                 usePrimaryDirection = true,
             )
-        }
 
-    val revealX =
-        (
-            currentX +
-                (nextX - currentX) *
-                characterProgress
+        val nextOffset =
+            (offset + 1).coerceAtMost(textLength)
+
+        val nextX =
+            if (
+                nextOffset >= textLength ||
+                nextOffset >= lineEnd ||
+                layout.getLineForOffset(nextOffset) != visualLine
+            ) {
+                if (isRtl) lineLeft else lineRight
+            } else {
+                layout.getHorizontalPosition(
+                    nextOffset,
+                    usePrimaryDirection = true,
+                )
+            }
+
+        val revealX =
+            (
+                currentX +
+                    (nextX - currentX) *
+                    characterProgress
             ).coerceIn(
                 lineLeft,
                 lineRight,
             )
 
-    val clipLeft =
-        if (isRtl) revealX else lineLeft
+        val clipLeft =
+            if (isRtl) revealX else lineLeft
 
-    val clipRight =
-        if (isRtl) lineRight else revealX
+        val clipRight =
+            if (isRtl) lineRight else revealX
 
-    if (clipRight > clipLeft) {
-        clipRect(
-            left = clipLeft,
-            top = lineTop,
-            right = clipRight,
-            bottom = lineBottom,
-        ) {
-            this@drawInlineRevealedText.drawContent()
+        if (clipRight > clipLeft) {
+            clipRect(
+                left = clipLeft,
+                top = lineTop,
+                right = clipRight,
+                bottom = lineBottom,
+            ) {
+                this@drawInlineRevealedText.drawContent()
+            }
         }
     }
 }
