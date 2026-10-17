@@ -49,9 +49,9 @@ The current application contains these real features:
 - Per-volume MediaStore version/generation tracking to skip unchanged catalog scans and perform incremental synchronization when possible.
 - Separate bounded enrichment of selected embedded metadata; catalog listing does not open every audio file with `MediaMetadataRetriever`.
 - Home screen.
-- Recently Added section, limited to 10 real tracks.
+- Home Recently Added preview limited to the five newest real tracks, with a dedicated full Recently Added destination opened from the preview card navigation action.
 - Persistent Recent Play history keyed by distinct content URI, with no hard 10-record database cap; Home previews at most 10 recent entries.
-- Home Recent Play collections grouped by Artist, Album, and Genre, with dedicated detail pages and real track lists.
+- Home Recent Play collection previews for Artist, Album, and Genre are derived only from the latest 10 distinct-URI tracks shown in the Home Recent Play preview, not from the entire library. Groups are deduplicated by their real metadata; missing artist/album/genre metadata does not create a placeholder group. Dedicated detail pages show real matching Recent Play records.
 - Library screen containing the complete local audio collection.
 - Library All Songs / Folders mode selector using Material 3 Expressive `ButtonGroup`.
 - Context-aware Library sorting through `LibrarySortBottomSheet`, with options filtered by the current browse mode.
@@ -481,7 +481,8 @@ Rovia/
     │       ├── HomeViewModelFactory.kt
     │       ├── RecentCollectionRoute.kt
     │       ├── RecentCollectionScreen.kt
-    │       └── RecentPlayCollection.kt
+    │       ├── RecentPlayCollection.kt
+    │       └── RecentlyAddedScreen.kt
     │
     ├── search/
     │   └── src/main/kotlin/com/rovia/music/feature/search/
@@ -612,6 +613,7 @@ ic_bluetooth
 ic_smartphone
 ic_volume_down
 ic_volume_up
+ic_arrow_forward
 ```
 
 Shared vector icons belong in `:core:ui`. Do not duplicate a shared icon in a feature resource directory when the feature can use `CoreUiR.drawable.*`.
@@ -681,7 +683,7 @@ The playback module does not know about Room or SQLite. `AndroidAudioOutputContr
 
 ## `:feature:home`
 
-Owns Home UI and Home ViewModel state, including the 10-entry Recent Play preview, Artist/Album/Genre grouping derived from persisted Recent Play records, collection detail navigation, and collection detail track lists. The collection UI must not fabricate metadata or silently switch its source to the full library catalog.
+Owns Home UI and Home ViewModel state, including the 10-entry Recent Play preview, the five-track Recently Added Home preview card, the dedicated full Recently Added child screen, Artist/Album/Genre grouping derived from persisted Recent Play records, collection detail navigation, and collection detail track lists. The Recently Added detail screen reads the complete Room-backed catalog list independently of the five-track Home preview. The collection UI must not fabricate metadata or silently switch its source to the full library catalog.
 
 ## `:feature:search`
 
@@ -1124,6 +1126,8 @@ the explicit `surfaceContainer` role.
 
 Do not blindly copy this mechanism to every component. First inspect the working component and
 use the official Material 3 default color API for that component where available.
+
+Rovia also has an intentional semantic surface contract for music lists: Library, Search, the full Recently Added screen, and the track-list area inside the Home Recently Added card use `MaterialTheme.colorScheme.surfaceContainerLow` so their track rows share a consistent parent surface. The Home Recently Added header/footer retain `primaryContainer`; its arrow control uses `surfaceContainerHigh` / `onSurface`. This is an explicit two-tone composition, not a reason to hardcode colors or replace the semantic roles. On the developer’s custom ROM, avoid `surfaceContainerLowest` for this list panel because it has been observed to render as pure black.
 
 Important:
 
@@ -1766,8 +1770,11 @@ Library
 Settings
 FolderFilter
 About
+RecentlyAdded (full track list)
 RecentCollection detail (Artist / Album / Genre)
 ```
+
+The Recently Added full-list destination is opened from the navigation action on Home's Recently Added preview card. It is a child page, not a bottom-navigation tab. The Home preview presents five tracks; the dedicated destination observes the complete recently-added catalog list. Back returns to Home.
 
 Recent collection detail is opened from the corresponding Artist, Album, or Genre collection on Home. It is a child page, not a fourth bottom-navigation tab. Back returns to the originating Home context. The currently supported top-level bottom-navigation siblings remain Home, Search, and Library.
 
@@ -1798,6 +1805,7 @@ Top-level siblings:
 
 Child navigation:
     Home
+        ├── RecentlyAdded (full track list)
         └── RecentCollection detail
                 ├── Artist
                 ├── Album
@@ -2028,6 +2036,9 @@ Future navigation changes must preserve:
 Home / Search / Library
     = top-level siblings
 
+RecentlyAdded full-list screen
+    = child route opened from the Home Recently Added preview card
+
 RecentCollection detail (Artist / Album / Genre)
     = child route opened from Home's recent collection sections
 
@@ -2059,7 +2070,7 @@ When adding a new navigation destination:
 1. Add the destination key.
 2. Register the destination in Navigation 3.
 3. Wrap it in NavigationDestinationSurface.
-4. Define the parent/back-stack behavior explicitly (recent collection details are child pages opened from Home).
+4. Define the parent/back-stack behavior explicitly (RecentlyAdded and RecentCollection details are child pages opened from Home).
 5. Keep forward navigation instantaneous.
 5. Keep normal/programmatic Back instantaneous.
 6. Preserve the existing Predictive Back motion.
@@ -2117,15 +2128,15 @@ FolderFilter
 
 Back removes FolderFilter first, then Settings.
 
-Recent collection details follow the same child-page principle:
+Recently Added and Recent collection details follow the child-page principle:
 
 ```text
 Home
-   ↓
-RecentCollection detail (Artist / Album / Genre)
+   ├── RecentlyAdded (full track list)
+   └── RecentCollection detail (Artist / Album / Genre)
 ```
 
-Back returns from the collection detail to Home; the collection is not a bottom-navigation sibling.
+The explicit navigation action on the Recently Added preview opens the complete recently-added track list. Back returns from either child page to Home; neither is a bottom-navigation sibling.
 
 Do not add special-case logic that makes Home behave differently from Search or Library.
 
@@ -2803,15 +2814,33 @@ The data layer must not hardcode localized user-facing strings such as `Unknown 
 
 # 37. RECENTLY ADDED
 
-Home observes the Room-backed catalog through:
+Recently Added uses the Room-backed synchronized catalog, sorted by real MediaStore `DATE_ADDED` values. Room emits updates when catalog rows change; neither Home nor the dedicated list screen may launch a full MediaStore scan or open every audio file just to render this section. Do not fabricate recently added tracks.
+
+Home preview:
 
 ```text
-MusicRepository.observeRecentlyAdded(limit = 10)
+MusicRepository.observeRecentlyAdded(limit = 5)
 ```
 
-The list is sorted using real MediaStore `DATE_ADDED` values. Room emits updates when catalog rows change;
-Home must not launch a full MediaStore scan or open every audio file just to render this section.
-Do not fabricate recently added tracks.
+The Home card intentionally displays only the five newest tracks. It is a compact preview, not the complete listing. The visible arrow button is the dedicated navigation affordance for opening the full Recently Added screen; the preview card uses the same route callback for its clickable non-row surface.
+
+Full Recently Added screen:
+
+```text
+MusicRepository.observeRecentlyAdded(limit = Int.MAX_VALUE)
+```
+
+`RecentlyAddedScreen.kt` presents the complete list from the repository rather than the Home preview’s five-item subset. The screen must continue to show real catalog records and preserve track playback behavior. Its native top app bar remains a distinct header surface above the track-list panel, which uses `MaterialTheme.colorScheme.surfaceContainerLow`.
+
+### Recently Added color and layout contract
+
+- Home card header and footer use `MaterialTheme.colorScheme.primaryContainer`; the header text uses `onPrimaryContainer`.
+- The Home preview track-list area and the full Recently Added track-list panel use `MaterialTheme.colorScheme.surfaceContainerLow` for visual consistency.
+- The Home arrow button is visually separate from the footer surface and uses `surfaceContainerHigh` / `onSurface`, consistent with other neutral filled icon actions such as Settings. Do not recolor it to `primary` or make it blend into the footer.
+- Preserve the native Material 3 `TopAppBar` on the full screen and keep its own themed header surface visually distinct from the track-list panel; do not flatten the header and list into one surface.
+- The dedicated Recently Added list panel uses 28dp rounding at its top corners and the shared `ExpressiveScrollbar`. Keep the scrollbar aligned to the trailing edge and constrain its modifier to the scrollbar rail so its gesture area does not cover the track list.
+- Do not substitute `surfaceContainerLowest` for the list panel on the developer’s custom ROM: this role has been observed to be forced to pure black. Keep the documented `surfaceContainerLow` role unless device testing and an explicit design decision justify a change.
+- Keep the card’s header and footer geometry symmetrical and preserve the dedicated page’s rounded list-panel geometry and shared Expressive scrollbar.
 
 ---
 
@@ -3469,11 +3498,17 @@ Recent Play collections: Artist / Album / Genre
 Recently Added
 ```
 
-The Recent Play preview is a presentation limit only. The persisted history and the Artist/Album/Genre collections are derived from the complete database-backed distinct-URI history. Opening a collection leads to a dedicated detail page whose track list is derived from real Recent Play records for that collection.
+The persistent Recent Play history is the complete database-backed distinct-URI history and has no hard 10-record cap. The Home Recent Play track preview displays only the latest 10 records from that history.
+
+The Home Artist / Album / Genre collection previews must be derived only from those same latest 10 Home Recent Play tracks, not from the complete music catalog and not from older Recent Play records outside the Home preview subset. Each group is based on actual, nonblank metadata on those tracks and is deduplicated by the corresponding collection identity. For example, if the Home Recent Play subset contains one track, only the Artist, Album, and Genre represented by that track may appear (and only where the metadata exists). If it contains three tracks, the displayed groups may contain only the distinct Artist / Album / Genre values represented by those three tracks; repeated values collapse into one group. Do not fill the sections with unrelated library collections or fabricate missing metadata.
+
+Opening an Artist / Album / Genre group leads to its dedicated detail page. The detail track list must contain real Recent Play records matching that selected collection; it must not fabricate tracks or silently switch its source to the full music catalog.
 
 The Home Recent Play preview uses a horizontal two-row artwork grid when enough entries exist. Collection group entries use the actual collection label and associated artwork when available. Do not invent artists, albums, genres, artwork, or track counts.
 
-Recently Added uses `TrackRow`.
+Recently Added on Home is a compact card containing the five newest real tracks. Its header and footer share the `primaryContainer` surface, while the inner track list uses `surfaceContainerLow` to match the full Recently Added page. The trailing arrow is a separate neutral filled icon button (`surfaceContainerHigh` / `onSurface`) and opens the full Recently Added destination. The page is a child destination of Home, not a bottom-navigation tab.
+
+The Home preview and the full Recently Added screen both render tracks through the shared `TrackRow`. Keep its parent list surface visible through the row’s transparent default container.
 
 If a section has no data, it remains empty instead of showing fake tracks.
 
@@ -3488,9 +3523,14 @@ artwork
 track title
 artist / album supporting text
 formatted duration
+overflow actions where provided by the row implementation
 ```
 
-Supporting text is assembled only from non-null actual metadata.
+Supporting text is assembled only from non-null actual metadata. `TrackRow` uses the native Material 3 `ListItem` and its official shape behavior. Its normal container is transparent so the parent surface (Library, Search, or the Home Recently Added list panel) remains visible rather than each row looking like a separate opaque card.
+
+The currently playing track is highlighted through the row’s active/selected state, using the semantic `surfaceContainerHighest` selected-container color. Keep the current-track indicator tied to the actual playback state; do not infer it from list position or fabricate active state. Normal rows remain transparent.
+
+Library and Search already align their shared `TrackRow` trailing content correctly. If the Home preview needs a different trailing-edge alignment, correct the local Home card/list wrapper rather than changing shared `TrackRow` geometry and regressing those screens.
 
 ---
 
@@ -4007,11 +4047,11 @@ Do not let screens construct services directly.
 `HomeViewModel` observes:
 
 ```text
-MusicRepository.observeRecentlyAdded(limit = 10)
+MusicRepository.observeRecentlyAdded(limit = 5)
 PlaybackController.recentPlays
 ```
 
-and exposes a `HomeUiState` through `StateFlow`. Recently Added comes from Room's synchronized catalog. `PlaybackController.recentPlays` exposes the complete persistent distinct-URI Recent Play history; `HomeViewModel` limits only the Home preview to 10 and derives Artist/Album/Genre collection groups from the history records. Collection detail state is based on the same persisted history. Errors are represented as actual error states.
+and exposes a `HomeUiState` through `StateFlow`. Recently Added comes from Room's synchronized catalog and is limited to five tracks for the Home preview only. `RecentlyAddedScreen.kt` independently observes the full recently-added list through `MusicRepository.observeRecentlyAdded(limit = Int.MAX_VALUE)`. `PlaybackController.recentPlays` exposes the complete persistent distinct-URI Recent Play history. `HomeViewModel` limits the Home Recent Play preview to the latest 10 records and derives Home Artist/Album/Genre preview groups only from those same 10 tracks, deduplicating real metadata values and omitting missing metadata. It must not populate those Home groups from the complete library or from older history entries outside the preview subset. Collection detail state and track lists use real matching persisted Recent Play records for the selected collection. Errors are represented as actual error states.
 
 ---
 
@@ -4075,8 +4115,8 @@ Keep Rovia intentionally lightweight.
 
 Current important constraints:
 
-- Home Recently Added is limited to 10.
-- Recent Play persistence retains every distinct content URI; only the Home preview is limited to 10 entries.
+- Home Recently Added preview is limited to the five newest tracks; the dedicated Recently Added screen observes the complete Room-backed list.
+- Recent Play persistence retains every distinct content URI; only the Home Recent Play preview is limited to 10 entries.
 - Search exposes at most 50 results.
 - Home, Library, Search, and active-player metadata read from Room-backed catalog Flows.
 - MediaStore remains the source of truth for media availability and indexed source values; `music_tracks` is
@@ -4904,7 +4944,12 @@ MediaStore-derived folder browsing
 context-aware Library sorting with a mode-specific option matrix
 Artist / Album / Genre collection artwork and sorting
 persistent distinct-URI Recent Play history without a hard 10-row cap
-Home Recent Play preview limited to 10 entries
+Home Recent Play preview limited to the latest 10 distinct-URI entries
+Home Artist / Album / Genre previews derived only from those same Home Recent Play entries
+Home Recently Added preview limited to five tracks
+Dedicated Recently Added full-list child destination opened from Home
+Dual-tone Recently Added card and full-list surface styling
+Transparent TrackRow containers with active-track selected-state highlight
 Home Recent Play collection detail pages for Artist / Album / Genre
 Room-backed synchronized music catalog
 per-volume MediaStore generation/version synchronization
@@ -5148,7 +5193,7 @@ Path segments must remain actual interactive items.
 
 # 106. LIST ITEM AND SHAPE CONTRACT
 
-Current Library list rows intentionally use native Material 3 `ListItem`.
+Current Library, Search, and Recently Added track rows intentionally use native Material 3 `ListItem`.
 
 `TrackRow` uses:
 
@@ -5164,7 +5209,7 @@ Track artwork size:
 56dp × 56dp
 ```
 
-The folder row also uses native `ListItem` and `ListItemDefaults.shapes()`.
+The folder row also uses native `ListItem` and `ListItemDefaults.shapes()`. `TrackRow` normal container color remains transparent; its selected/current-track container uses `MaterialTheme.colorScheme.surfaceContainerHighest`. Parent screens own the list surface color. Do not add a per-row opaque container or change the shared row to solve a padding issue isolated to Home Recently Added.
 
 Do not replace these rows with custom rounded `Row` + `clickable` constructions unless the official
 Material component can no longer satisfy a real requirement.
@@ -5464,7 +5509,7 @@ Keep the package declaration unchanged unless the developer explicitly requests 
 
 # 111. UI ALIGNMENT REGRESSION CHECKLIST
 
-Whenever Library, Settings, Folder Filter, or shared playback UI spacing is modified, verify:
+Whenever Library, Search, Home Recently Added, Settings, Folder Filter, or shared playback UI spacing is modified, verify:
 
 ```text
 [ ] TopAppBar is used where the current screen contract requires it
@@ -5477,6 +5522,14 @@ Whenever Library, Settings, Folder Filter, or shared playback UI spacing is modi
 [ ] Library folder breadcrumb/path remains tappable
 [ ] folder navigation does not trigger a MediaStore/filesystem rescan
 [ ] TrackRow artwork remains 56dp
+[ ] TrackRow normal container remains transparent
+[ ] Current track is highlighted using the real playback state and semantic selected-row styling
+[ ] Home Recently Added preview shows no more than five tracks
+[ ] Recently Added arrow opens the dedicated full track list
+[ ] Home Recently Added card keeps primaryContainer header/footer and surfaceContainerLow track-list area
+[ ] Recently Added arrow button remains visually distinct from the footer using surfaceContainerHigh / onSurface
+[ ] Home Recently Added trailing track actions/duration align to the intended card edge without regressing Library/Search
+[ ] Recently Added full-list panel retains 28dp top corners and the scrollbar stays within its own rail
 [ ] FolderRow uses native ListItem shape defaults
 [ ] Library / Search / Home bottom padding is 200dp with MiniPlayer
 [ ] Library / Search / Home bottom padding is 100dp without MiniPlayer
