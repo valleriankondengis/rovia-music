@@ -1485,10 +1485,10 @@ Library folder breadcrumb/path
     → ButtonGroup / connected toggle-style items
 
 Track rows
-    → ListItem
+    → shared TrackRow built on a clickable Material 3 Surface with a theme-based rounded-rectangle shape
 
-Folder rows
-    → ListItem
+Folder and Artist / Album / Genre collection rows
+    → ListItem + ListItemDefaults.shapes()
 
 Player top actions
     → ButtonGroup + FilledIconButton / FilledIconToggleButton
@@ -3508,7 +3508,7 @@ The Home Recent Play preview uses a horizontal two-row artwork grid when enough 
 
 Recently Added on Home is a compact card containing the five newest real tracks. Its header and footer share the `primaryContainer` surface, while the inner track list uses `surfaceContainerLow` to match the full Recently Added page. The trailing arrow is a separate neutral filled icon button (`surfaceContainerHigh` / `onSurface`) and opens the full Recently Added destination. The page is a child destination of Home, not a bottom-navigation tab.
 
-The Home preview and the full Recently Added screen both render tracks through the shared `TrackRow`. Keep its parent list surface visible through the row’s transparent default container.
+The Home preview and the full Recently Added screen both render tracks through the shared `TrackRow`. In Library, Search, the Home Recently Added preview, and the full Recently Added destination, each track is an individual rounded-rectangle card over the `surfaceContainerLow` list panel. Keep these shared card-shape, color, spacing, and interaction rules aligned as documented in Sections 54 and 106.
 
 If a section has no data, it remains empty instead of showing fake tracks.
 
@@ -3516,21 +3516,65 @@ If a section has no data, it remains empty instead of showing fake tracks.
 
 # 54. TRACK ROW
 
-`TrackRow` currently renders:
+`TrackRow` is the shared track presentation component in `:core:ui`. It renders:
 
 ```text
-artwork
+rounded-rectangle card surface
+56dp album artwork
 track title
-artist / album supporting text
+artist / album supporting text when actual metadata is available
 formatted duration
-overflow actions where provided by the row implementation
+overflow actions for track information
 ```
 
-Supporting text is assembled only from non-null actual metadata. `TrackRow` uses the native Material 3 `ListItem` and its official shape behavior. Its normal container is transparent so the parent surface (Library, Search, or the Home Recently Added list panel) remains visible rather than each row looking like a separate opaque card.
+Supporting text is assembled only from real, non-null metadata. `TrackRow` uses a clickable Material 3 `Surface` rather than a bare, transparent `ListItem`. The surface shape is `MaterialTheme.shapes.extraLarge`, so each track reads as a distinct rounded-rectangle card while remaining tied to the active app theme. The component retains its `Row` layout and `AlbumArtwork`; do not replace it with an unrelated custom drawing implementation.
 
-The currently playing track is highlighted through the row’s active/selected state, using the semantic `surfaceContainerHighest` selected-container color. Keep the current-track indicator tied to the actual playback state; do not infer it from list position or fabricate active state. Normal rows remain transparent.
+## 54.1. TRACK CARD SHAPE, COLOR, SPACING, AND INTERACTION
 
-Library and Search already align their shared `TrackRow` trailing content correctly. If the Home preview needs a different trailing-edge alignment, correct the local Home card/list wrapper rather than changing shared `TrackRow` geometry and regressing those screens.
+The following track-list contexts share the same visual contract:
+
+- Library track lists, including All Songs, selected collections, and tracks inside folders;
+- Search results;
+- the Recently Added track list inside the Home preview card;
+- the complete Recently Added destination.
+
+### Shape and color roles
+
+- Use `MaterialTheme.shapes.extraLarge` for each `TrackRow` card's rounded rectangle.
+- The parent list/panel surface uses `MaterialTheme.colorScheme.surfaceContainerLow`.
+- In the four contexts above, a normal track card uses the live theme's `MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)` as a restrained primary tint. Do not hardcode a color value; the tint must follow Monet/dynamic color.
+- The current track uses `MaterialTheme.colorScheme.surfaceContainerHigh`, making it visibly distinct from ordinary cards without relying on `surfaceContainerHighest`.
+- Avoid `surfaceContainerLowest` for these list panels and avoid `surfaceContainerHighest` for current-track emphasis. The developer's custom ROM has been observed to render some of these roles as pure black; see Section 12.1.
+- `TrackRow` exposes color overrides so screen callers can apply the same card treatment without adding separate wrapping surfaces or duplicating the row implementation. Preserve sensible shared defaults for callers that do not pass overrides.
+
+### Shared list geometry
+
+For the Library, Search, Home Recently Added preview, and full Recently Added card lists, keep these measurements aligned:
+
+| Property | Value |
+|---|---:|
+| Track card outer horizontal margin | `12dp` per side |
+| Track card outer vertical spacing | `4dp` per side |
+| Track content horizontal padding | `6dp` per side |
+| Track content vertical padding | `8dp` per side within the row layout |
+| Artwork | `56dp × 56dp` |
+| Artwork-to-title gap | `8dp` |
+| Duration-to-overflow spacing | `8dp` |
+| Trailing overflow visual offset | `6dp` where the shared list style specifies it |
+| Library / Search / full Recently Added list top content padding | `18dp` |
+
+The Home Recently Added preview also uses `4dp` vertical padding around its inner track-list area. Together with each track card's `4dp` outer vertical margin, this keeps the breathing room between the card header/footer and the first/last track visually consistent with the spacing between adjacent cards. Keep the header/footer geometry intact when adjusting this inner list.
+
+Do not accumulate multiple outer padding layers to correct a spacing issue. Check the card's `outerPadding`, the row's own content padding, and the parent `LazyColumn`/panel padding separately. Keep left/right margins symmetric; if the Home preview needs a special trailing-edge offset because it sits inside a clipped/nested card, solve it through the documented `TrackRow` parameters and local wrapper rather than disturbing Library or Search.
+
+### Interaction contract
+
+- Use `Surface(onClick = ...)` as the card's click target so the row keeps Material click semantics and normal pressed/ripple feedback.
+- Keep the whole card's primary click separate from its overflow menu action. Opening track information must not accidentally trigger playback.
+- Determine the active card from the real `currentTrackId`/playback state, never from list index, last-tapped state, or fabricated selection.
+- Preserve current behavior for clicking the active track (restart according to the caller's established callback) and for selecting a different track (play/select through the existing queue callback).
+- Keep the pressed state responsive, but do not add a custom scale animation, manually drawn ripple, or improvised shape morph solely for decoration. If a stronger press-driven shape transformation is requested later, first check for an official Material 3 Expressive shape/morph API and preserve accessibility and click semantics.
+- Do not alter global `TrackRow` dimensions to fix only one screen. Pass the available geometry/color parameters from the screen wrapper when a local adjustment is required.
 
 ---
 
@@ -4982,7 +5026,7 @@ The current baseline includes:
 Material 3 Expressive UI
 native TopAppBar headers
 native ButtonGroup controls
-native ListItem rows
+native ListItem collection/folder rows and rounded clickable TrackRow cards
 tappable folder breadcrumb/path
 MediaStore-derived folder browsing
 context-aware Library sorting with a mode-specific option matrix
@@ -4993,7 +5037,7 @@ Home Artist / Album / Genre previews derived only from those same Home Recent Pl
 Home Recently Added preview limited to five tracks
 Dedicated Recently Added full-list child destination opened from Home
 Dual-tone Recently Added card and full-list surface styling
-Transparent TrackRow containers with active-track selected-state highlight
+Rounded-rectangle TrackRow cards with restrained primary tint, native click feedback, and a distinct active-track surface
 Home Recent Play collection detail pages for Artist / Album / Genre
 Room-backed synchronized music catalog
 per-volume MediaStore generation/version synchronization
@@ -5131,6 +5175,14 @@ Library All Songs / Folders ButtonGroup spacing = 8dp
 
 TrackRow album artwork size = 56dp
 TrackRow artwork slot = 56dp
+Track card shape = MaterialTheme.shapes.extraLarge
+Track card outer horizontal margin = 12dp per side
+Track card outer vertical spacing = 4dp per side
+Track content horizontal padding = 6dp per side
+Track artwork-to-title gap = 8dp
+Track duration-to-overflow spacing = 8dp
+Track trailing overflow visual offset = 6dp where configured
+Library / Search / full Recently Added list top content padding = 18dp
 
 Library / Search / Home bottom content padding:
     with MiniPlayer    = 200dp
@@ -5237,15 +5289,7 @@ Path segments must remain actual interactive items.
 
 # 106. LIST ITEM AND SHAPE CONTRACT
 
-Current Library, Search, and Recently Added track rows intentionally use native Material 3 `ListItem`.
-
-`TrackRow` uses:
-
-```text
-ListItem
-ListItemDefaults.shapes()
-AlbumArtwork
-```
+Library, Search, and Recently Added track lists use the shared `TrackRow` card component. It is implemented with a clickable Material 3 `Surface`, a `Row` for layout, and `AlbumArtwork`; its card shape is `MaterialTheme.shapes.extraLarge`. See Section 54 for the full track-card contract.
 
 Track artwork size:
 
@@ -5253,12 +5297,22 @@ Track artwork size:
 56dp × 56dp
 ```
 
-The folder row also uses native `ListItem` and `ListItemDefaults.shapes()`. `TrackRow` normal container color remains transparent; its selected/current-track container uses `MaterialTheme.colorScheme.surfaceContainerHighest`. Parent screens own the list surface color. Do not add a per-row opaque container or change the shared row to solve a padding issue isolated to Home Recently Added.
+The folder row and Artist / Album / Genre collection rows continue to use native Material 3 `ListItem` and `ListItemDefaults.shapes()`. Do not migrate those different row types to the track-card style unless explicitly requested.
 
-Do not replace these rows with custom rounded `Row` + `clickable` constructions unless the official
-Material component can no longer satisfy a real requirement.
+Track-card color and parent-surface contract:
 
-Shape handling should prefer:
+```text
+Parent list panel       = MaterialTheme.colorScheme.surfaceContainerLow
+Normal track card       = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+Current/active track     = MaterialTheme.colorScheme.surfaceContainerHigh
+Track card shape        = MaterialTheme.shapes.extraLarge
+```
+
+The normal-card tint uses dynamic theme color rather than a hardcoded palette. Do not use `surfaceContainerLowest` for these panels or `surfaceContainerHighest` for current-track indication, because both roles can render as pure black on the developer's custom ROM. The active-track color must remain distinct from the low-opacity primary tint.
+
+Keep the track card's `Surface(onClick = ...)` as the native interactive surface. Preserve its ripple/click semantics and keep the overflow-menu action independent from the card's playback action. For consistent list geometry, use the shared values from Section 54.1. Do not add a second wrapping card or duplicate outer padding to simulate the same shape.
+
+For other row types and controls, continue to prefer official shape APIs such as:
 
 ```text
 ListItemDefaults.shapes()
@@ -5266,10 +5320,7 @@ IconButtonDefaults.shapes()
 ButtonDefaults.shapes()
 ```
 
-or the relevant official Material 3 Expressive shape API.
-
-Do not freeze expressive controls to a single arbitrary shape when a native morphing/default API
-already provides the correct interaction behavior.
+Do not freeze a control to an arbitrary static shape when an official Material 3 Expressive interaction/morph API already provides the required behavior. The track row's documented `extraLarge` card shape is intentional; do not invent a custom morph animation unless requested and supported by an appropriate official API.
 
 ---
 
@@ -5566,8 +5617,13 @@ Whenever Library, Search, Home Recently Added, Settings, Folder Filter, or share
 [ ] Library folder breadcrumb/path remains tappable
 [ ] folder navigation does not trigger a MediaStore/filesystem rescan
 [ ] TrackRow artwork remains 56dp
-[ ] TrackRow normal container remains transparent
-[ ] Current track is highlighted using the real playback state and semantic selected-row styling
+[ ] TrackRow uses its rounded Material 3 Surface card with `MaterialTheme.shapes.extraLarge`
+[ ] Normal track cards use the subtle dynamic `primary` tint only in the designated list contexts
+[ ] Parent track-list panels use `surfaceContainerLow`
+[ ] The current track uses `surfaceContainerHigh` and is driven by actual playback state
+[ ] Track card margins, inner padding, artwork/text gap, and trailing alignment follow Section 54.1
+[ ] Track cards retain native pressed/ripple and accessibility/click semantics
+[ ] Overflow-menu interaction remains independent from the card's playback click
 [ ] Home Recently Added preview shows no more than five tracks
 [ ] Recently Added arrow opens the dedicated full track list
 [ ] Home Recently Added card keeps primaryContainer header/footer and surfaceContainerLow track-list area
