@@ -1,4 +1,3 @@
-
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
@@ -43,6 +42,12 @@ import com.rovia.music.core.ui.component.ExpressiveScrollbar
 import com.rovia.music.core.ui.component.TrackRow
 
 private val SearchListTopCornerRadius = 28.dp
+private val SearchTrackHorizontalPadding = 12.dp
+private val SearchTrackVerticalSpacing = 4.dp
+private val SearchTrackContentHorizontalPadding = 6.dp
+private val SearchTrackArtworkTextSpacing = 8.dp
+private val SearchTrackTrailingContentOffset = 6.dp
+private val SearchListTopContentPadding = 18.dp
 
 @Composable
 fun SearchScreen(
@@ -281,10 +286,12 @@ private fun SearchResults(
     val listContainerColor =
         MaterialTheme.colorScheme.surfaceContainerLow
 
-    /*
-     * Use the same Monet surface token as the Library and
-     * Recently Added list panels. TrackRow remains unchanged.
-     */
+    val trackCardColor =
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+
+    val currentTrackCardColor =
+        MaterialTheme.colorScheme.surfaceContainerHigh
+
     Box(
         modifier =
             modifier
@@ -302,6 +309,7 @@ private fun SearchResults(
             modifier = Modifier.fillMaxSize(),
             contentPadding =
                 PaddingValues(
+                    top = SearchListTopContentPadding,
                     bottom = bottomContentPadding,
                 ),
         ) {
@@ -331,6 +339,16 @@ private fun SearchResults(
                     },
                     showAlbum = true,
                     isCurrentTrack = isCurrentTrack,
+                    outerPadding =
+                        PaddingValues(
+                            horizontal = SearchTrackHorizontalPadding,
+                            vertical = SearchTrackVerticalSpacing,
+                        ),
+                    contentHorizontalPadding = SearchTrackContentHorizontalPadding,
+                    artworkTextSpacing = SearchTrackArtworkTextSpacing,
+                    trailingContentOffset = SearchTrackTrailingContentOffset,
+                    containerColorOverride = trackCardColor,
+                    currentTrackContainerColorOverride = currentTrackCardColor,
                 )
             }
         }

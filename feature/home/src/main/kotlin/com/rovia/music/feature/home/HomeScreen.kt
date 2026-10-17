@@ -716,7 +716,8 @@ private fun RecentlyAddedSection(
                     .fillMaxWidth()
                     .background(
                         MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
+                    )
+                    .padding(vertical = 4.dp),
             ) {
                 if (visibleTracks.isEmpty()) {
                     EmptySectionText(
@@ -750,6 +751,20 @@ private fun RecentlyAddedSection(
                                     },
                                     showAlbum = true,
                                     isCurrentTrack = isCurrentTrack,
+                                    outerPadding =
+                                        PaddingValues(
+                                            horizontal = 12.dp,
+                                            vertical = 4.dp,
+                                        ),
+                                    contentHorizontalPadding = 6.dp,
+                                    artworkTextSpacing = 8.dp,
+                                    trailingContentOffset = 6.dp,
+                                    containerColorOverride =
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = 0.08f,
+                                        ),
+                                    currentTrackContainerColorOverride =
+                                        MaterialTheme.colorScheme.surfaceContainerHigh,
                                 )
                             }
                         }

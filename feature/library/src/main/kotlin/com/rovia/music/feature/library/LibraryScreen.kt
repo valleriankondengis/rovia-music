@@ -66,6 +66,11 @@ import com.rovia.music.core.ui.component.TrackRow
 private val LibraryHorizontalPadding = 16.dp
 private val LibraryArtworkSize = 56.dp
 private val LibraryListTopCornerRadius = 28.dp
+private val LibraryTrackHorizontalPadding = 12.dp
+private val LibraryTrackVerticalSpacing = 4.dp
+private val LibraryTrackContentHorizontalPadding = 6.dp
+private val LibraryTrackArtworkTextSpacing = 8.dp
+private val LibraryTrackTrailingContentOffset = 6.dp
 
 @Composable
 fun LibraryScreen(
@@ -239,6 +244,7 @@ private fun LibraryContent(
                 MaterialTheme.colorScheme.surfaceContainerHigh,
         )
 
+    // Match the Search results panel background.
     val libraryListContainerColor =
         MaterialTheme.colorScheme.surfaceContainerLow
 
@@ -577,6 +583,7 @@ private fun LibraryContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding =
                     PaddingValues(
+                        top = 18.dp,
                         bottom = bottomContentPadding,
                     ),
             ) {
@@ -1393,6 +1400,34 @@ private fun FolderBreadcrumb(
     }
 }
 
+@Composable
+private fun LibraryTrackCard(
+    track: Track,
+    onClick: () -> Unit,
+    showAlbum: Boolean,
+    isCurrentTrack: Boolean,
+) {
+    TrackRow(
+        track = track,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        showAlbum = showAlbum,
+        isCurrentTrack = isCurrentTrack,
+        // Use a subtle primary tint for ordinary cards, while the active
+        // track keeps a stronger tonal surface so it remains easy to identify.
+        containerColorOverride = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        currentTrackContainerColorOverride = MaterialTheme.colorScheme.surfaceContainerHigh,
+        outerPadding =
+            PaddingValues(
+                horizontal = LibraryTrackHorizontalPadding,
+                vertical = LibraryTrackVerticalSpacing,
+            ),
+        contentHorizontalPadding = LibraryTrackContentHorizontalPadding,
+        artworkTextSpacing = LibraryTrackArtworkTextSpacing,
+        trailingContentOffset = LibraryTrackTrailingContentOffset,
+    )
+}
+
 private fun LazyListScope.allSongsContent(
     tracks: List<Track>,
     onTrackClick: (List<Track>, Int) -> Unit,
@@ -1410,7 +1445,7 @@ private fun LazyListScope.allSongsContent(
     ) { index, track ->
         val isCurrentTrack = track.id == currentTrackId
 
-        TrackRow(
+        LibraryTrackCard(
             track = track,
             onClick = {
                 if (isCurrentTrack) {
@@ -1483,7 +1518,7 @@ private fun LazyListScope.folderContent(
         ) { index, track ->
             val isCurrentTrack = track.id == currentTrackId
 
-            TrackRow(
+            LibraryTrackCard(
                 track = track,
                 onClick = {
                     if (isCurrentTrack) {

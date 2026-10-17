@@ -1,4 +1,3 @@
-
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
@@ -44,6 +43,12 @@ import com.rovia.music.core.ui.component.ExpressiveScrollbar
 import com.rovia.music.core.ui.component.TrackRow
 
 private val RecentlyAddedListTopCornerRadius = 28.dp
+private val RecentlyAddedTrackHorizontalPadding = 12.dp
+private val RecentlyAddedTrackVerticalSpacing = 4.dp
+private val RecentlyAddedTrackContentHorizontalPadding = 6.dp
+private val RecentlyAddedTrackArtworkTextSpacing = 8.dp
+private val RecentlyAddedTrackTrailingContentOffset = 6.dp
+private val RecentlyAddedListTopContentPadding = 18.dp
 
 @Composable
 fun RecentlyAddedRoute(
@@ -102,6 +107,15 @@ private fun RecentlyAddedScreen(
     val bottomContentPadding =
         if (hasMiniPlayer) 200.dp else 100.dp
 
+    val listContainerColor =
+        MaterialTheme.colorScheme.surfaceContainerLow
+
+    val trackCardColor =
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+
+    val currentTrackCardColor =
+        MaterialTheme.colorScheme.surfaceContainerHigh
+
     val panelShape =
         RoundedCornerShape(
             topStart = RecentlyAddedListTopCornerRadius,
@@ -156,9 +170,7 @@ private fun RecentlyAddedScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .clip(panelShape)
-                .background(
-                    MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
+                .background(listContainerColor),
         ) {
             if (tracks.isEmpty()) {
                 Column(
@@ -180,6 +192,7 @@ private fun RecentlyAddedScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
+                        top = RecentlyAddedListTopContentPadding,
                         bottom = bottomContentPadding,
                     ),
                 ) {
@@ -187,6 +200,9 @@ private fun RecentlyAddedScreen(
                         items = tracks,
                         key = { index, track ->
                             "recently_added_${index}_${track.id}"
+                        },
+                        contentType = { _, _ ->
+                            "track"
                         },
                     ) { index, track ->
                         val isCurrentTrack =
@@ -206,6 +222,16 @@ private fun RecentlyAddedScreen(
                             },
                             showAlbum = true,
                             isCurrentTrack = isCurrentTrack,
+                            outerPadding =
+                                PaddingValues(
+                                    horizontal = RecentlyAddedTrackHorizontalPadding,
+                                    vertical = RecentlyAddedTrackVerticalSpacing,
+                                ),
+                            contentHorizontalPadding = RecentlyAddedTrackContentHorizontalPadding,
+                            artworkTextSpacing = RecentlyAddedTrackArtworkTextSpacing,
+                            trailingContentOffset = RecentlyAddedTrackTrailingContentOffset,
+                            containerColorOverride = trackCardColor,
+                            currentTrackContainerColorOverride = currentTrackCardColor,
                         )
                     }
                 }
