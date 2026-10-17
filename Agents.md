@@ -91,7 +91,7 @@ The current application contains these real features:
 - Existing native lyric fallback for ID3 `USLT`/`ULT` frames and FLAC Vorbis-comment blocks.
 - Line-synced and word-synced lyrics from the lyric text formats the current parser recognizes.
 - Automatic lyric scrolling and active-word highlighting.
-- Active lyric-line scaling with adaptive handling for long lyric lines.
+- Rovia Animation with Material 3 Expressive: timestamp-driven word reveal, subtle floating-word motion, progressive inactive-line blur/opacity, adaptive active-line scaling, animated three-dot indicators for inferred gaps of at least five seconds, and coordinated fullscreen lyrics entrance motion.
 - Fullscreen lyrics mode that replaces the Player artwork area with the lyric viewer.
 - Fullscreen lyrics mode remains active while Previous/Next changes tracks; only the lyric content is reloaded.
 - Dedicated fullscreen lyrics MiniPlayer with independent playback controls and a separate seekbar surface.
@@ -3646,6 +3646,50 @@ The active line receives a stronger visual emphasis through a smooth scale anima
 adaptive for long lines so text remains usable instead of growing excessively.
 
 The active word gets stronger visual emphasis and primary coloring.
+
+## 59.1. ROVIA ANIMATION WITH MATERIAL 3 EXPRESSIVE
+
+Rovia's lyric motion system is an original implementation named **Rovia Animation with Material 3 Expressive**. It is built for Rovia using the existing Jetpack Compose animation/drawing APIs and Material 3 Expressive theme tokens. Do not describe it as a copy of another music application's design or animation system, and do not introduce third-party product names as the identity or inspiration for these animations.
+
+### Full lyric viewer
+
+The current `LyricViewer` combines playback synchronization with restrained visual motion:
+
+- **Active-line tracking:** the current line is derived from the playback clock and the line timestamps. Word-synced lines also identify the active word from its timestamp.
+- **Automatic scrolling:** the current/next line is brought toward the visual focus using a smooth, bounded scroll animation. The viewer estimates off-screen target placement so a newly targeted line does not have to jump to the top before being centered.
+- **Active-line emphasis:** the active row remains sharp and uses a smooth scale transition. Long active lines use adaptive text scaling so they remain within the available width.
+- **Word-by-word reveal:** for word-synced lyrics, the foreground text is progressively revealed according to word timestamps, while the unrevealed text remains dimmed. The active word receives accent coloring.
+- **Floating-word motion:** synchronized words lift subtly as their timestamps become active, then settle. The movement is drawn within each word's measured text bounds and does not change the LazyColumn's layout geometry.
+- **Inactive-line depth:** rows farther from the active line progressively reduce opacity and apply a small blur. The active line stays clear; gap rows are not blurred.
+- **Frame-driven timing:** the lyric clock advances using Compose frame timestamps while playback is active, keeping word reveal, word lift, and gap-dot progress moving between playback-state updates. When playback pauses, the clock holds the current playback position.
+
+These effects are intentionally separate from layout measurement. Do not implement lyric motion by repeatedly changing row heights, font sizes, or padding every frame; that can fight LazyColumn scrolling and cause visible jumps. Preserve the established font, line height, row spacing, easing, and word-lift values unless the requested change explicitly concerns them.
+
+### Three-dot gap indicator
+
+When a sufficiently long instrumental/vocal gap can be inferred between two lyric lines, the viewer inserts a dedicated row containing **three animated dots**. This is intended for pauses such as an instrumental break or a delayed vocal entrance.
+
+- A gap must be at least `GAP_MIN_DURATION_MS` (currently 5,000 ms) after estimating the previous line's end.
+- Since lyric timestamps commonly identify line starts rather than exact vocal endings, the viewer estimates the line end conservatively and adds `GAP_LINE_END_SAFETY_MS` before the gap can begin. Word-synced lines use their word timestamps plus a final-word/whole-line estimate; unsynchronized lines use a conservative fraction of the interval to the next line.
+- The gap row is active only within its inferred `[startTimeMs, endTimeMs)` interval. It should not replace a lyric row while that line may still be sung.
+- The three dots use the current artwork-derived accent color when available, otherwise the Material theme's primary color. Their brightness and scale advance with playback progress through the gap.
+- An initial gap may be shown from playback start to the first lyric when that timestamp is at least `INITIAL_GAP_MIN_DURATION_MS` (currently 5,000 ms).
+
+Do not remove the three-dot indicator simply because the lyric source lacks explicit line-end timestamps. Keep the conservative estimation logic and test instrumental breaks, long vocal lines, pauses of less than five seconds, and the initial silence before the first lyric.
+
+### Inline portrait and landscape lyrics
+
+The compact lyric previews in `PlayerPortraitContent` and `PlayerLandscapeContent` use the same Rovia-owned visual language in a constrained single-line slot: timestamp-driven word highlighting/reveal and a subtle floating lift where supported by the current implementation. Keep the slot's established height and one-line behavior stable so the lyric preview does not push adjacent Player controls around as words animate.
+
+### Fullscreen entrance transition
+
+`PlayerLyricsFullscreenContent` animates the lyric area upward from below with a fade-in. The fullscreen MiniPlayer and seekbar enter together slightly later, also moving upward and fading in. These are **visual-layer transforms**: they must not change the measured height, content padding, or initial scroll position of `LyricViewer`.
+
+The lyric viewer's own centering/auto-scroll logic must not interpret the entrance translation as a layout change. Keep the lyric list's layout stable during the fullscreen transition; avoid adding entrance padding, animating the list container's height, or triggering a second scroll merely to match the transition. Verify that opening fullscreen lyrics leaves the active lyric centered without a brief upward jump followed by a correction.
+
+### Naming and maintenance
+
+Use the exact name **Rovia Animation with Material 3 Expressive** when referring to this collection of lyric effects. Describe its actual behavior and implementation rather than comparing it to another branded player. These animations are Rovia's own implementation and should continue to use the project's existing Compose and Material 3 Expressive dependencies.
 
 ---
 
