@@ -1,3 +1,4 @@
+
 package com.rovia.music
 
 import androidx.compose.animation.EnterTransition
@@ -47,19 +48,19 @@ import com.rovia.music.core.library.FolderFilterRepository
 import com.rovia.music.core.library.FolderScannerRepository
 import com.rovia.music.core.library.LyricsRepository
 import com.rovia.music.core.library.MusicRepository
-import com.rovia.music.core.model.PlaybackState
 import com.rovia.music.core.playback.AudioOutputController
 import com.rovia.music.core.playback.PlaybackController
-import com.rovia.music.core.ui.component.MiniPlayerContent
 import com.rovia.music.feature.home.HomeRoute
 import com.rovia.music.feature.home.RecentCollectionRoute
 import com.rovia.music.feature.home.RecentCollectionType
+import com.rovia.music.feature.home.RecentlyAddedRoute
 import com.rovia.music.feature.library.LibraryRoute
 import com.rovia.music.feature.search.SearchRoute
 import com.rovia.music.feature.settings.AboutScreen
 import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import kotlin.math.roundToInt
+import kotlinx.serialization.Serializable
 
 internal val NavigationBarHeight =
     80.dp
@@ -85,6 +86,12 @@ private val NavigationBarContainerWidthFraction =
 
 private val NavigationBarContentWidthFraction =
     0.9f
+
+/**
+ * Destination for the complete Recently Added collection.
+ */
+@Serializable
+data object RecentlyAdded : NavKey
 
 @Composable
 fun MainNavigation(
@@ -135,16 +142,14 @@ fun MainNavigation(
         }
 
     Box(
-        modifier =
-            Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
     ) {
         NavDisplay(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding(),
-            backStack =
-                backStack,
+            backStack = backStack,
             onBack = {
                 if (backStack.size > 1) {
                     backStack.removeLastOrNull()
@@ -172,9 +177,8 @@ fun MainNavigation(
                             slideOutHorizontally(
                                 targetOffsetX = { fullWidth ->
                                     (
-                                        (
-                                            fullWidth * 0.05f
-                                        ) - eightDpInPixels
+                                        (fullWidth * 0.05f) -
+                                            eightDpInPixels
                                     )
                                         .coerceAtLeast(0f)
                                         .roundToInt()
@@ -221,6 +225,23 @@ fun MainNavigation(
                                             genreName = genreName,
                                         ),
                                     )
+                                },
+                                onOpenRecentlyAdded = {
+                                    backStack.add(RecentlyAdded)
+                                },
+                            )
+                        }
+                    }
+
+                    entry<RecentlyAdded> {
+                        NavigationDestinationSurface {
+                            RecentlyAddedRoute(
+                                musicRepository =
+                                    musicRepository,
+                                playbackController =
+                                    playbackController,
+                                onBack = {
+                                    backStack.removeLastOrNull()
                                 },
                             )
                         }
@@ -353,31 +374,23 @@ fun MainNavigation(
         )
 
         UnifiedPlayerSheet(
-            playbackState =
-                playbackState,
-            playbackController =
-                playbackController,
-            lyricsRepository =
-                lyricsRepository,
-            musicRepository =
-                musicRepository,
+            playbackState = playbackState,
+            playbackController = playbackController,
+            lyricsRepository = lyricsRepository,
+            musicRepository = musicRepository,
             onProgressChanged = { progress ->
                 playerProgress = progress
             },
-            showBottomChrome =
-                showBottomChrome,
+            showBottomChrome = showBottomChrome,
             navigationBar = {
                 RoviaNavigationBar(
                     currentDestination =
                         currentDestination,
-                    backStack =
-                        backStack,
+                    backStack = backStack,
                 )
             },
-            modifier =
-                Modifier.fillMaxSize(),
-            audioOutputController =
-                audioOutputController,
+            modifier = Modifier.fillMaxSize(),
+            audioOutputController = audioOutputController,
         )
     }
 }
@@ -419,10 +432,8 @@ private fun RoviaNavigationBar(
      * Only the floating pill and its button group are narrowed.
      */
     Box(
-        modifier =
-            Modifier.fillMaxWidth(),
-        contentAlignment =
-            Alignment.Center,
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier =
@@ -431,17 +442,12 @@ private fun RoviaNavigationBar(
                         NavigationBarContainerWidthFraction,
                     )
                     .padding(
-                        bottom =
-                            NavigationBarBottomPadding,
+                        bottom = NavigationBarBottomPadding,
                     )
-                    .height(
-                        NavigationBarHeight,
-                    )
+                    .height(NavigationBarHeight)
                     .background(
-                        color =
-                            cardColors.containerColor,
-                        shape =
-                            navigationBarShape,
+                        color = cardColors.containerColor,
+                        shape = navigationBarShape,
                     ),
         ) {
             NavigationBar(
@@ -450,18 +456,11 @@ private fun RoviaNavigationBar(
                         .fillMaxWidth(
                             NavigationBarContentWidthFraction,
                         )
-                        .height(
-                            NavigationBarHeight,
-                        )
-                        .align(
-                            Alignment.Center,
-                        ),
-                containerColor =
-                    Color.Transparent,
-                contentColor =
-                    cardColors.contentColor,
-                tonalElevation =
-                    0.dp,
+                        .height(NavigationBarHeight)
+                        .align(Alignment.Center),
+                containerColor = Color.Transparent,
+                contentColor = cardColors.contentColor,
+                tonalElevation = 0.dp,
                 windowInsets =
                     WindowInsets(
                         left = 0,
@@ -476,20 +475,16 @@ private fun RoviaNavigationBar(
                             horizontal =
                                 NavigationBarItemPadding,
                         ),
-                    selected =
-                        currentDestination == Home,
+                    selected = currentDestination == Home,
                     onClick = {
                         navigateToTopLevel(
-                            backStack =
-                                backStack,
-                            destination =
-                                Home,
+                            backStack = backStack,
+                            destination = Home,
                         )
                     },
                     icon = {
                         Icon(
-                            imageVector =
-                                Icons.Filled.Home,
+                            imageVector = Icons.Filled.Home,
                             contentDescription =
                                 stringResource(
                                     R.string.nav_home,
@@ -534,20 +529,16 @@ private fun RoviaNavigationBar(
                             horizontal =
                                 NavigationBarItemPadding,
                         ),
-                    selected =
-                        currentDestination == Search,
+                    selected = currentDestination == Search,
                     onClick = {
                         navigateToTopLevel(
-                            backStack =
-                                backStack,
-                            destination =
-                                Search,
+                            backStack = backStack,
+                            destination = Search,
                         )
                     },
                     icon = {
                         Icon(
-                            imageVector =
-                                Icons.Filled.Search,
+                            imageVector = Icons.Filled.Search,
                             contentDescription =
                                 stringResource(
                                     R.string.nav_search,
@@ -592,14 +583,11 @@ private fun RoviaNavigationBar(
                             horizontal =
                                 NavigationBarItemPadding,
                         ),
-                    selected =
-                        currentDestination == Library,
+                    selected = currentDestination == Library,
                     onClick = {
                         navigateToTopLevel(
-                            backStack =
-                                backStack,
-                            destination =
-                                Library,
+                            backStack = backStack,
+                            destination = Library,
                         )
                     },
                     icon = {
