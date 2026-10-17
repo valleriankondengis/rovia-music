@@ -1,8 +1,9 @@
+
 package com.rovia.music.core.ui.component
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -42,93 +43,71 @@ fun TrackRow(
     }
 
     val supportingText =
-        if (showAlbum) {
-            listOfNotNull(
-                track.artist,
-                track.album,
-            ).joinToString(" • ")
-        } else {
-            track.artist.orEmpty()
+        remember(
+            track.artist,
+            track.album,
+            showAlbum,
+        ) {
+            if (showAlbum) {
+                listOfNotNull(
+                    track.artist,
+                    track.album,
+                ).joinToString(" • ")
+            } else {
+                track.artist.orEmpty()
+            }
+        }
+
+    val formattedDuration =
+        remember(track.durationMs) {
+            formatDuration(track.durationMs)
         }
 
     ListItem(
-        selected =
-            isCurrentTrack,
-        onClick =
-            onClick,
-        modifier =
-            modifier,
+        selected = isCurrentTrack,
+        onClick = onClick,
+        modifier = modifier,
         shapes =
             ListItemDefaults.shapes(
-                shape =
-                    RectangleShape,
-                selectedShape =
-                    RectangleShape,
-                pressedShape =
-                    RectangleShape,
-                focusedShape =
-                    RectangleShape,
-                hoveredShape =
-                    RectangleShape,
-                draggedShape =
-                    RectangleShape,
+                shape = RectangleShape,
+                selectedShape = RectangleShape,
+                pressedShape = RectangleShape,
+                focusedShape = RectangleShape,
+                hoveredShape = RectangleShape,
+                draggedShape = RectangleShape,
             ),
         colors =
             ListItemDefaults.colors(
                 selectedContainerColor =
-                    MaterialTheme
-                        .colorScheme
-                        .surfaceContainerLow,
+                    MaterialTheme.colorScheme.surfaceContainerLow,
             ),
         leadingContent = {
             AlbumArtwork(
-                artworkUri =
-                    track.artworkUri,
-                fallbackText =
-                    track.title,
-                contentDescription =
-                    null,
-                modifier =
-                    Modifier.size(
-                        56.dp,
-                    ),
-                size =
-                    56.dp,
-                shape =
-                    MaterialTheme
-                        .shapes
-                        .large,
+                artworkUri = track.artworkUri,
+                fallbackText = track.title,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                size = 56.dp,
+                shape = MaterialTheme.shapes.large,
             )
         },
         supportingContent = {
             if (supportingText.isNotBlank()) {
                 Text(
-                    text =
-                        supportingText,
+                    text = supportingText,
                     maxLines = 1,
-                    overflow =
-                        TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         },
         trailingContent = {
             Row(
-                verticalAlignment =
-                    Alignment.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text =
-                        formatDuration(
-                            track.durationMs,
-                        ),
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyMedium,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant,
+                    text = formattedDuration,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Box {
@@ -147,15 +126,12 @@ fun TrackRow(
                                     com.rovia.music.core.ui.R.string.track_action_more,
                                 ),
                             tint =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                                MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
 
                     DropdownMenu(
-                        expanded =
-                            isMenuExpanded,
+                        expanded = isMenuExpanded,
                         onDismissRequest = {
                             isMenuExpanded = false
                         },
@@ -180,11 +156,9 @@ fun TrackRow(
         },
     ) {
         Text(
-            text =
-                track.title,
+            text = track.title,
             maxLines = 1,
-            overflow =
-                TextOverflow.Ellipsis,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 
@@ -205,17 +179,13 @@ private fun formatDuration(
         return "--:--"
     }
 
-    val totalSeconds =
-        durationMs / 1_000
+    val totalSeconds = durationMs / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
 
-    val minutes =
-        totalSeconds / 60
-
-    val seconds =
-        totalSeconds % 60
-
-    return "%d:%02d".format(
-        minutes,
-        seconds,
-    )
+    return if (seconds < 10L) {
+        "$minutes:0$seconds"
+    } else {
+        "$minutes:$seconds"
+    }
 }
