@@ -1,4 +1,3 @@
-
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
 )
@@ -27,6 +26,7 @@ internal fun PlayerLyric(
     playbackPositionMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
 ) {
     if (!isLyricsLoading && hasLyrics && lyrics != null) {
         LyricViewer(
@@ -34,6 +34,7 @@ internal fun PlayerLyric(
             positionMs = playbackPositionMs,
             onSeek = onSeek,
             modifier = modifier,
+            isPlaying = isPlaying,
         )
     } else {
         val lyricPlaceholderColor =
