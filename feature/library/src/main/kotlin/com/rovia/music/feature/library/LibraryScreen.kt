@@ -13,10 +13,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.FilledIconButton
@@ -53,6 +56,7 @@ import com.rovia.music.core.model.MusicFolder
 import com.rovia.music.core.model.Track
 import com.rovia.music.core.ui.R as CoreUiR
 import com.rovia.music.core.ui.component.AlbumArtwork
+import com.rovia.music.core.ui.component.ExpressiveScrollbar
 import com.rovia.music.core.ui.component.TrackRow
 
 private val LibraryHorizontalPadding = 16.dp
@@ -170,10 +174,8 @@ private fun LibraryContent(
     val bottomContentPadding =
         if (hasMiniPlayer) 200.dp else 100.dp
 
-    /*
-     * A collection detail shows tracks. Its sort options therefore
-     * follow the All Songs options rather than the parent category.
-     */
+    val listState = rememberLazyListState()
+
     val sortingBrowseMode =
         if (uiState.selectedCollection != null) {
             LibraryBrowseMode.ALL_SONGS
@@ -181,10 +183,6 @@ private fun LibraryContent(
             uiState.browseMode
         }
 
-    /*
-     * Each browsing mode exposes only the options that apply
-     * to the content shown on that page.
-     */
     val supportedSortOptions =
         when (sortingBrowseMode) {
             LibraryBrowseMode.ALL_SONGS,
@@ -225,10 +223,6 @@ private fun LibraryContent(
                 )
         }
 
-    /*
-     * A sort option from another browsing mode must not affect this
-     * page. Default is used until a supported option is selected.
-     */
     val activeSortOption =
         uiState.sortOption.takeIf {
             it in supportedSortOptions
@@ -243,16 +237,28 @@ private fun LibraryContent(
     val motionScheme = MaterialTheme.motionScheme
 
     val sortedTracks =
-        uiState.tracks.sortedForLibrary(
-            option = activeSortOption,
-            order = uiState.sortOrder,
-        )
+        remember(
+            uiState.tracks,
+            activeSortOption,
+            uiState.sortOrder,
+        ) {
+            uiState.tracks.sortedForLibrary(
+                option = activeSortOption,
+                order = uiState.sortOrder,
+            )
+        }
 
     val sortedFolderTracks =
-        uiState.folderTracks.sortedForLibrary(
-            option = activeSortOption,
-            order = uiState.sortOrder,
-        )
+        remember(
+            uiState.folderTracks,
+            activeSortOption,
+            uiState.sortOrder,
+        ) {
+            uiState.folderTracks.sortedForLibrary(
+                option = activeSortOption,
+                order = uiState.sortOrder,
+            )
+        }
 
     val artists =
         remember(
@@ -545,86 +551,103 @@ private fun LibraryContent(
             }
         }
 
-        LazyColumn(
+        Box(
             modifier =
                 Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-            contentPadding =
-                PaddingValues(
-                    bottom = bottomContentPadding,
-                ),
         ) {
-            when {
-                uiState.selectedCollection != null -> {
-                    if (selectedCollectionTracks.isEmpty()) {
-                        item {
-                            EmptyContent()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding =
+                    PaddingValues(
+                        bottom = bottomContentPadding,
+                    ),
+            ) {
+                when {
+                    uiState.selectedCollection != null -> {
+                        if (selectedCollectionTracks.isEmpty()) {
+                            item(
+                                contentType = "empty",
+                            ) {
+                                EmptyContent()
+                            }
+                        } else {
+                            allSongsContent(
+                                tracks = selectedCollectionTracks,
+                                onTrackClick = onTrackClick,
+                                onRestartCurrentTrack = onRestartCurrentTrack,
+                                currentTrackId = currentTrackId,
+                            )
                         }
-                    } else {
-                        allSongsContent(
-                            tracks = selectedCollectionTracks,
-                            onTrackClick = onTrackClick,
-                            onRestartCurrentTrack = onRestartCurrentTrack,
-                            currentTrackId = currentTrackId,
+                    }
+
+                    uiState.browseMode == LibraryBrowseMode.ALL_SONGS -> {
+                        if (sortedTracks.isEmpty()) {
+                            item(
+                                contentType = "empty",
+                            ) {
+                                EmptyContent()
+                            }
+                        } else {
+                            allSongsContent(
+                                tracks = sortedTracks,
+                                onTrackClick = onTrackClick,
+                                onRestartCurrentTrack = onRestartCurrentTrack,
+                                currentTrackId = currentTrackId,
+                            )
+                        }
+                    }
+
+                    uiState.browseMode == LibraryBrowseMode.ARTIST -> {
+                        artistCollectionContent(
+                            artists = artists,
+                            onArtistClick = onOpenArtist,
                         )
                     }
-                }
 
-                uiState.browseMode == LibraryBrowseMode.ALL_SONGS -> {
-                    if (sortedTracks.isEmpty()) {
-                        item {
-                            EmptyContent()
-                        }
-                    } else {
-                        allSongsContent(
-                            tracks = sortedTracks,
-                            onTrackClick = onTrackClick,
-                            onRestartCurrentTrack = onRestartCurrentTrack,
-                            currentTrackId = currentTrackId,
+                    uiState.browseMode == LibraryBrowseMode.ALBUM -> {
+                        albumCollectionContent(
+                            albums = albums,
+                            onAlbumClick = onOpenAlbum,
                         )
                     }
-                }
 
-                uiState.browseMode == LibraryBrowseMode.ARTIST -> {
-                    artistCollectionContent(
-                        artists = artists,
-                        onArtistClick = onOpenArtist,
-                    )
-                }
-
-                uiState.browseMode == LibraryBrowseMode.ALBUM -> {
-                    albumCollectionContent(
-                        albums = albums,
-                        onAlbumClick = onOpenAlbum,
-                    )
-                }
-
-                uiState.browseMode == LibraryBrowseMode.GENRE -> {
-                    genreCollectionContent(
-                        genres = genres,
-                        onGenreClick = onOpenGenre,
-                    )
-                }
-
-                uiState.browseMode == LibraryBrowseMode.FOLDER -> {
-                    if (uiState.currentFolderPath == null) {
-                        rootFolderContent(
-                            folders = uiState.folders,
-                            onFolderClick = onFolderClick,
+                    uiState.browseMode == LibraryBrowseMode.GENRE -> {
+                        genreCollectionContent(
+                            genres = genres,
+                            onGenreClick = onOpenGenre,
                         )
-                    } else {
-                        folderContent(
-                            folders = uiState.folders,
-                            tracks = sortedFolderTracks,
-                            onFolderClick = onFolderClick,
-                            onTrackClick = onTrackClick,
-                            onRestartCurrentTrack = onRestartCurrentTrack,
-                            currentTrackId = currentTrackId,
-                        )
+                    }
+
+                    uiState.browseMode == LibraryBrowseMode.FOLDER -> {
+                        if (uiState.currentFolderPath == null) {
+                            rootFolderContent(
+                                folders = uiState.folders,
+                                onFolderClick = onFolderClick,
+                            )
+                        } else {
+                            folderContent(
+                                folders = uiState.folders,
+                                tracks = sortedFolderTracks,
+                                onFolderClick = onFolderClick,
+                                onTrackClick = onTrackClick,
+                                onRestartCurrentTrack = onRestartCurrentTrack,
+                                currentTrackId = currentTrackId,
+                            )
+                        }
                     }
                 }
             }
+
+            ExpressiveScrollbar(
+                state = listState,
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
+            )
         }
     }
 
@@ -900,18 +923,7 @@ private fun buildGenreCollections(
                     LibrarySortOption.DEFAULT ->
                         compareMetadata(first.name, second.name)
 
-                    /*
-                     * In Genre mode, sort the genre names themselves.
-                     * This is distinct from sorting by track title,
-                     * artist, or album.
-                     */
-                    LibrarySortOption.GENRE ->
-                        compareOrderedMetadata(
-                            first.name,
-                            second.name,
-                            order,
-                        )
-
+                    LibrarySortOption.GENRE,
                     LibrarySortOption.TITLE ->
                         compareOrderedMetadata(
                             first.name,
@@ -1114,7 +1126,9 @@ private fun LazyListScope.artistCollectionContent(
     onArtistClick: (String) -> Unit,
 ) {
     if (artists.isEmpty()) {
-        item {
+        item(
+            contentType = "empty",
+        ) {
             EmptyCollectionContent(
                 text = stringResource(R.string.library_empty_artists),
             )
@@ -1127,6 +1141,7 @@ private fun LazyListScope.artistCollectionContent(
         key = { artist ->
             "artist:${normalizeMetadataName(artist.name)}"
         },
+        contentType = { "artist" },
     ) { artist ->
         ListItem(
             onClick = {
@@ -1155,7 +1170,9 @@ private fun LazyListScope.albumCollectionContent(
     onAlbumClick: (String, String?) -> Unit,
 ) {
     if (albums.isEmpty()) {
-        item {
+        item(
+            contentType = "empty",
+        ) {
             EmptyCollectionContent(
                 text = stringResource(R.string.library_empty_albums),
             )
@@ -1171,6 +1188,7 @@ private fun LazyListScope.albumCollectionContent(
                     ?.let(::normalizeMetadataName)
                     .orEmpty()
         },
+        contentType = { "album" },
     ) { album ->
         ListItem(
             onClick = {
@@ -1214,7 +1232,9 @@ private fun LazyListScope.genreCollectionContent(
     onGenreClick: (String) -> Unit,
 ) {
     if (genres.isEmpty()) {
-        item {
+        item(
+            contentType = "empty",
+        ) {
             EmptyCollectionContent(
                 text = stringResource(R.string.library_empty_genres),
             )
@@ -1227,6 +1247,7 @@ private fun LazyListScope.genreCollectionContent(
         key = { genre ->
             "genre:${normalizeMetadataName(genre.name)}"
         },
+        contentType = { "genre" },
     ) { genre ->
         ListItem(
             onClick = {
@@ -1353,7 +1374,12 @@ private fun LazyListScope.allSongsContent(
 ) {
     itemsIndexed(
         items = tracks,
-        key = { _, track -> track.id },
+        key = { _, track ->
+            track.id
+        },
+        contentType = { _, _ ->
+            "track"
+        },
     ) { index, track ->
         val isCurrentTrack = track.id == currentTrackId
 
@@ -1377,7 +1403,9 @@ private fun LazyListScope.rootFolderContent(
     onFolderClick: (String) -> Unit,
 ) {
     if (folders.isEmpty()) {
-        item {
+        item(
+            contentType = "empty",
+        ) {
             EmptyFolderContent()
         }
         return
@@ -1386,6 +1414,7 @@ private fun LazyListScope.rootFolderContent(
     items(
         items = folders,
         key = { folder -> folder.relativePath },
+        contentType = { "folder" },
     ) { folder ->
         FolderRow(
             folder = folder,
@@ -1408,6 +1437,7 @@ private fun LazyListScope.folderContent(
         items(
             items = folders,
             key = { folder -> folder.relativePath },
+            contentType = { "folder" },
         ) { folder ->
             FolderRow(
                 folder = folder,
@@ -1422,6 +1452,7 @@ private fun LazyListScope.folderContent(
         itemsIndexed(
             items = tracks,
             key = { _, track -> track.id },
+            contentType = { _, _ -> "track" },
         ) { index, track ->
             val isCurrentTrack = track.id == currentTrackId
 
@@ -1441,7 +1472,9 @@ private fun LazyListScope.folderContent(
     }
 
     if (folders.isEmpty() && tracks.isEmpty()) {
-        item {
+        item(
+            contentType = "empty",
+        ) {
             EmptyFolderContent()
         }
     }
