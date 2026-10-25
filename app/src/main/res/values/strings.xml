@@ -1,3 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">Rovia</string>
+
+    <string name="navigation_home">Home</string>
+    <string name="navigation_search">Search</string>
+    <string name="navigation_library">Library</string>
+
+    <string name="home_title">Home</string>
+    <string name="home_recently_added_title">Recently added</string>
+    <string name="home_recently_added_view_all">View all recently added tracks</string>
+    <string name="home_recently_added_empty">No recently added tracks</string>
+    <string name="home_recently_added_load_error">Unable to load recently added tracks.</string>
+
+    <string name="search_hint">Search</string>
+    <string name="search_clear">Clear search</string>
+    <string name="search_no_results">No results found</string>
+
+    <string name="library_title">Library</string>
+    <string name="library_permission_title">Audio permission required</string>
+    <string name="library_permission_message">Allow Rovia to access audio files on your device so you can play your music.</string>
+    <string name="library_grant_permission">Grant permission</string>
+    <string name="library_loading">Loading music…</string>
+    <string name="library_no_tracks">No music was found on this device.</string>
+    <string name="library_load_error">Unable to load audio files.</string>
+    <string name="library_retry">Try again</string>
+
+    <string name="player_title">Now playing</string>
+    <string name="player_back">Back</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_previous">Previous track</string>
+    <string name="player_next">Next track</string>
+    <string name="player_seek">Playback position</string>
+    <string name="player_no_track">Choose a song from Library to start playback.</string>
+    <string name="player_connecting">Connecting to the player…</string>
+    <string name="player_unknown_track">Unknown title</string>
+    <string name="player_unknown_artist">Unknown artist</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="folder_filter_title">Folder filter</string>
+    <string name="about_menu_title">About</string>
+
+    <string name="about_title">About Rovia</string>
+    <string name="about_back">Back</string>
+    <string name="about_version_label">Version</string>
+    <string name="about_maintainer_label">Maintainer</string>
+    <string name="about_maintainer_name">Vallerian Kondengis</string>
+    <string name="about_github">GitHub</string>
+    <string name="folder_filter_back">Back</string>
+    <string name="folder_filter_add">Add folders to filter</string>
+    <string name="folder_filter_count_one">%1$d excluded folder</string>
+    <string name="folder_filter_count_other">%1$d excluded folders</string>
+    <string name="folder_filter_empty_exclusions">No folders are excluded. Tap Add to choose folders.</string>
+    <string name="folder_filter_picker_title">Choose folders</string>
+    <string name="folder_filter_loading">Loading folders…</string>
+    <string name="folder_filter_empty">No music folders were found on this device.</string>
+    <string name="folder_filter_load_error">Unable to load music folders.</string>
+    <string name="folder_filter_retry">Try again</string>
+    <string name="folder_filter_done">Done</string>
+    <string name="folder_filter_cancel">Cancel</string>
+    <string name="folder_filter_delete">Delete</string>
+    <string name="folder_filter_remove">Remove folder from filter</string>
+    <string name="folder_filter_save_error">Unable to save folder filter. Please try again.</string>
+    <string name="about_version_unknown">Unknown</string>
 </resources>

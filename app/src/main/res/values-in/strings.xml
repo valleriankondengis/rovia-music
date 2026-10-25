@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rovia</string>
+
+    <string name="navigation_home">Beranda</string>
+    <string name="navigation_search">Cari</string>
+    <string name="navigation_library">Pustaka</string>
+
+    <string name="home_title">Beranda</string>
+    <string name="home_recently_added_title">Baru ditambahkan</string>
+    <string name="home_recently_added_view_all">Lihat semua lagu yang baru ditambahkan</string>
+    <string name="home_recently_added_empty">Belum ada lagu yang baru ditambahkan</string>
+    <string name="home_recently_added_load_error">Musik yang baru ditambahkan tidak dapat dimuat.</string>
+
+    <string name="search_hint">Cari</string>
+    <string name="search_clear">Hapus pencarian</string>
+    <string name="search_no_results">Tidak ada hasil</string>
+
+    <string name="library_title">Pustaka</string>
+    <string name="library_permission_title">Izin audio diperlukan</string>
+    <string name="library_permission_message">Izinkan Rovia mengakses file audio di perangkat agar kamu dapat memutar musik.</string>
+    <string name="library_grant_permission">Berikan izin</string>
+    <string name="library_loading">Memuat musik…</string>
+    <string name="library_no_tracks">Tidak ada musik yang ditemukan di perangkat ini.</string>
+    <string name="library_load_error">File audio tidak dapat dimuat.</string>
+    <string name="library_retry">Coba lagi</string>
+
+    <string name="player_title">Sedang diputar</string>
+    <string name="player_back">Kembali</string>
+    <string name="player_play">Putar</string>
+    <string name="player_pause">Jeda</string>
+    <string name="player_previous">Lagu sebelumnya</string>
+    <string name="player_next">Lagu berikutnya</string>
+    <string name="player_seek">Posisi pemutaran</string>
+    <string name="player_no_track">Pilih lagu dari Pustaka untuk mulai memutar.</string>
+    <string name="player_connecting">Menghubungkan pemutar…</string>
+    <string name="player_unknown_track">Judul tidak diketahui</string>
+    <string name="player_unknown_artist">Artis tidak diketahui</string>
+
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_back">Kembali</string>
+    <string name="folder_filter_title">Filter folder</string>
+    <string name="about_menu_title">Tentang</string>
+
+    <string name="about_title">Tentang Rovia</string>
+    <string name="about_back">Kembali</string>
+    <string name="about_version_label">Versi</string>
+    <string name="about_maintainer_label">Maintainer</string>
+    <string name="about_maintainer_name">Vallerian Kondengis</string>
+    <string name="about_github">GitHub</string>
+    <string name="folder_filter_back">Kembali</string>
+    <string name="folder_filter_add">Tambahkan folder ke filter</string>
+    <string name="folder_filter_count_one">%1$d folder dikecualikan</string>
+    <string name="folder_filter_count_other">%1$d folder dikecualikan</string>
+    <string name="folder_filter_empty_exclusions">Belum ada folder yang dikecualikan. Tekan Tambah untuk memilih folder.</string>
+    <string name="folder_filter_picker_title">Pilih folder</string>
+    <string name="folder_filter_loading">Memuat folder…</string>
+    <string name="folder_filter_empty">Tidak ditemukan folder musik di perangkat ini.</string>
+    <string name="folder_filter_load_error">Folder musik tidak dapat dimuat.</string>
+    <string name="folder_filter_retry">Coba lagi</string>
+    <string name="folder_filter_done">Selesai</string>
+    <string name="folder_filter_cancel">Batal</string>
+    <string name="folder_filter_delete">Hapus</string>
+    <string name="folder_filter_remove">Hapus folder dari filter</string>
+    <string name="folder_filter_save_error">Filter folder tidak dapat disimpan. Silakan coba lagi.</string>
+    <string name="about_version_unknown">Tidak diketahui</string>
+</resources>

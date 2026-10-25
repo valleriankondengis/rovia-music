@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.Rovia" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Rovia" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@android:color/system_neutral2_50</item>
+        <item name="android:windowBackground">@android:color/system_neutral2_50</item>
+        <item name="android:statusBarColor">@android:color/system_neutral2_50</item>
+        <item name="android:navigationBarColor">@android:color/system_neutral2_50</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
 </resources>
