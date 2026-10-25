@@ -35,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -58,7 +57,6 @@ import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 private data object HomeDestination
 
@@ -99,8 +97,6 @@ fun Navigation(appContainer: AppContainer) {
     var showPlayerSheet by rememberSaveable {
         mutableStateOf(false)
     }
-
-    val coroutineScope = rememberCoroutineScope()
 
     val playerSheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -505,17 +501,6 @@ fun Navigation(appContainer: AppContainer) {
             ) {
                 PlayerScreen(
                     playbackController = appContainer.playbackController,
-                    onBack = {
-                        coroutineScope
-                            .launch {
-                                playerSheetState.hide()
-                            }
-                            .invokeOnCompletion {
-                                if (!playerSheetState.isVisible) {
-                                    showPlayerSheet = false
-                                }
-                            }
-                    },
                 )
             }
         }

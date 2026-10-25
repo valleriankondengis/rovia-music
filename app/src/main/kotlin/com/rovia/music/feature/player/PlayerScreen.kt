@@ -85,7 +85,6 @@ import kotlin.math.floor
 @Composable
 fun PlayerScreen(
     playbackController: PlaybackController,
-    onBack: () -> Unit = {},
 ) {
     val controller by playbackController.mediaController
         .collectAsStateWithLifecycle()
