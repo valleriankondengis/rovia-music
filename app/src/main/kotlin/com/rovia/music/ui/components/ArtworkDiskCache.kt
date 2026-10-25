@@ -204,7 +204,7 @@ internal object ArtworkDiskCache {
                 trimCacheLocked()
             }
         } catch (_: Exception) {
-            Unit
+            return
         } finally {
             temporaryFile?.let {
                 if (it.exists()) {

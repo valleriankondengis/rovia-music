@@ -9,6 +9,8 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
+import java.io.File
+import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -22,7 +24,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import java.io.File
 
 object ArtworkBitmapLoader {
 
@@ -425,17 +426,19 @@ object ArtworkBitmapLoader {
     private fun openInputStream(
         context: Context,
         uri: Uri
-    ) = if (uri.scheme.equals(FILE_SCHEME, ignoreCase = true)) {
-        val path = uri.path ?: return null
-        val file = File(path)
+    ): InputStream? {
+        return if (uri.scheme.equals(FILE_SCHEME, ignoreCase = true)) {
+            val path = uri.path ?: return null
+            val file = File(path)
 
-        if (file.isFile && file.canRead()) {
-            file.inputStream()
+            if (file.isFile && file.canRead()) {
+                file.inputStream()
+            } else {
+                null
+            }
         } else {
-            null
+            context.contentResolver.openInputStream(uri)
         }
-    } else {
-        context.contentResolver.openInputStream(uri)
     }
 
     private fun calculateInSampleSize(
