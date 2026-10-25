@@ -64,4 +64,12 @@
     <string name="folder_filter_remove">Remove folder from filter</string>
     <string name="folder_filter_save_error">Unable to save folder filter. Please try again.</string>
     <string name="about_version_unknown">Unknown</string>
+    <string name="audio_output_button_content_description">Audio output</string>
+    <string name="audio_output_sheet_title">Audio output</string>
+    <string name="audio_output_local_device">This device</string>
+    <string name="audio_output_bluetooth_audio">Bluetooth audio</string>
+    <string name="audio_output_media_volume">Media volume</string>
+    <string name="audio_output_volume_slider_description">Media volume</string>
+    <string name="audio_output_volume_fixed">Media volume cannot be changed on this device.</string>
+    <string name="audio_output_volume_percent">%1$d%%</string>
 </resources>
