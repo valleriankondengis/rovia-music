@@ -73,5 +73,10 @@
     <string name="audio_output_volume_slider_description">Volume media</string>
     <string name="audio_output_volume_fixed">Volume media tidak dapat diubah pada perangkat ini.</string>
     <string name="audio_output_volume_percent">%1$d%%</string>
+    <string name="player_queue">Antrean</string>
+    <string name="queue_sheet_title">Antrean pemutaran</string>
+    <string name="queue_track_count">%1$d lagu dalam antrean</string>
+    <string name="queue_empty">Tidak ada lagu dalam antrean.</string>
+    <string name="queue_current_track">Sedang diputar</string>
     <string name="player_lyrics_unavailable">Lirik untuk lagu ini belum tersedia.</string>
 </resources>

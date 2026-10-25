@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +42,7 @@ fun TrackList(
     currentTrackId: String? = null,
     itemsEnabled: Boolean = true,
     userScrollEnabled: Boolean = true,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val layoutDirection = LocalLayoutDirection.current
 
@@ -72,13 +75,13 @@ fun TrackList(
 
     LazyColumn(
         modifier = modifier,
+        state = listState,
         contentPadding = listContentPadding,
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
         userScrollEnabled = userScrollEnabled,
     ) {
         itemsIndexed(
             items = tracks,
-            // URI is a safer key than a bare row ID when volumes are merged.
             key = { _, track -> track.uri.toString() },
         ) { index, track ->
             val title = track.title.orEmpty()

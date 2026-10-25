@@ -73,5 +73,10 @@
     <string name="audio_output_volume_slider_description">Media volume</string>
     <string name="audio_output_volume_fixed">Media volume cannot be changed on this device.</string>
     <string name="audio_output_volume_percent">%1$d%%</string>
+    <string name="player_queue">Queue</string>
+    <string name="queue_sheet_title">Queue</string>
+    <string name="queue_track_count">%1$d tracks in queue</string>
+    <string name="queue_empty">There are no tracks in the queue.</string>
+    <string name="queue_current_track">Currently playing</string>
     <string name="player_lyrics_unavailable">Lyrics aren\'t available for this track yet.</string>
 </resources>
