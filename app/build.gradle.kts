@@ -88,6 +88,8 @@ dependencies {
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.inspector)
+    implementation(libs.androidx.media3.extractor)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

@@ -64,6 +64,7 @@
     <string name="folder_filter_remove">Hapus folder dari filter</string>
     <string name="folder_filter_save_error">Filter folder tidak dapat disimpan. Silakan coba lagi.</string>
     <string name="about_version_unknown">Tidak diketahui</string>
+    <string name="player_lyrics">Lirik</string>
     <string name="audio_output_button_content_description">Output audio</string>
     <string name="audio_output_sheet_title">Output audio</string>
     <string name="audio_output_local_device">Perangkat ini</string>
@@ -72,4 +73,5 @@
     <string name="audio_output_volume_slider_description">Volume media</string>
     <string name="audio_output_volume_fixed">Volume media tidak dapat diubah pada perangkat ini.</string>
     <string name="audio_output_volume_percent">%1$d%%</string>
+    <string name="player_lyrics_unavailable">Lirik untuk lagu ini belum tersedia.</string>
 </resources>
