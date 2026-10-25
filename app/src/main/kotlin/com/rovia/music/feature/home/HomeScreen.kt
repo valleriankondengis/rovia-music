@@ -92,10 +92,17 @@ fun HomeScreen(
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
 
-    val catalog by audioRepository.catalogState.collectAsStateWithLifecycle()
-    val recentlyAddedTracks = catalog.recentlyAddedTracks
-    val isLoading = hasAudioPermission && !catalog.isLoaded && !catalog.loadFailed
-    val loadFailed = catalog.loadFailed
+    var recentlyAddedTracks by remember {
+        mutableStateOf<List<LocalAudioTrack>>(emptyList())
+    }
+
+    var isLoading by remember {
+        mutableStateOf(true)
+    }
+
+    var loadFailed by remember {
+        mutableStateOf(false)
+    }
 
     var reloadRequest by remember {
         mutableIntStateOf(0)
@@ -157,14 +164,26 @@ fun HomeScreen(
     }
 
     LaunchedEffect(hasAudioPermission, reloadRequest) {
-        if (!hasAudioPermission) return@LaunchedEffect
+        if (!hasAudioPermission) {
+            recentlyAddedTracks = emptyList()
+            isLoading = false
+            loadFailed = false
+            return@LaunchedEffect
+        }
+
+        isLoading = true
+        loadFailed = false
 
         try {
-            audioRepository.refresh(forceRefresh = reloadRequest > 0)
+            recentlyAddedTracks =
+                audioRepository.loadRecentlyAddedTracks()
         } catch (exception: CancellationException) {
             throw exception
-        } catch (_: Exception) {
-            // CatalogState retains a usable cache if a background refresh fails.
+        } catch (exception: Exception) {
+            recentlyAddedTracks = emptyList()
+            loadFailed = true
+        } finally {
+            isLoading = false
         }
     }
 
