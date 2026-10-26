@@ -28,15 +28,14 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -45,8 +44,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberDecoratedNavEntries
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.rovia.music.feature.album.AlbumPage
+import com.rovia.music.feature.artist.ArtistPage
+import com.rovia.music.feature.genre.GenrePage
+import com.rovia.music.feature.single.SinglePage
 import com.rovia.music.feature.home.HomeRecentlyAddedScreen
 import com.rovia.music.feature.home.HomeScreen
 import com.rovia.music.feature.library.LibraryScreen
@@ -57,20 +66,53 @@ import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
 import kotlin.math.roundToInt
+import kotlinx.serialization.Serializable
 
-private data object HomeDestination
+@Serializable
+private data object HomeDestination : NavKey
 
-private data object HomeRecentlyAddedDestination
+@Serializable
+private data object HomeRecentlyAddedDestination : NavKey
 
-private data object SearchDestination
+@Serializable
+private data object SearchDestination : NavKey
 
-private data object LibraryDestination
+@Serializable
+private data object LibraryDestination : NavKey
 
-private data object SettingsDestination
+@Serializable
+private data class ArtistDestination(val artistName: String) : NavKey
 
-private data object FolderFilterDestination
+@Serializable
+private data class SingleDestination(val releaseKey: String) : NavKey
 
-private data object AboutDestination
+@Serializable
+private data class AlbumDestination(val releaseKey: String) : NavKey
+
+@Serializable
+private data class GenreDestination(val genreKey: String) : NavKey
+
+@Serializable
+private data class ArtistGenreDestination(
+    val artistName: String,
+    val genreKey: String,
+) : NavKey
+
+@Serializable
+private enum class TopLevelSection {
+    HOME,
+    SEARCH,
+    LIBRARY,
+}
+
+@Serializable
+private data class SettingsDestination(val owner: TopLevelSection) : NavKey
+
+@Serializable
+private data class FolderFilterDestination(val owner: TopLevelSection) : NavKey
+
+@Serializable
+private data class AboutDestination(val owner: TopLevelSection) : NavKey
 
 private val NavigationBarOverlayHeight = 80.dp
 
@@ -80,11 +122,7 @@ private val NavigationBarOverlayHeight = 80.dp
 )
 @Composable
 fun Navigation(appContainer: AppContainer) {
-    val backStack = rememberSaveable(
-        saver = NavigationBackStackSaver,
-    ) {
-        mutableStateListOf<Any>(HomeDestination)
-    }
+    val navigationState = rememberRoviaNavigationState()
 
     val motionScheme = MaterialTheme.motionScheme
     val density = LocalDensity.current
@@ -157,13 +195,282 @@ fun Navigation(appContainer: AppContainer) {
             )
         }
 
+    val routeEntryProvider = entryProvider<NavKey> {
+        entry<HomeDestination>(
+            metadata = NavDisplay.transitionSpec {
+                topLevelTabTransition(topLevelSlideDirection)
+            },
+        ) {
+            NavigationDestinationSurface {
+                HomeScreen(
+                    audioRepository =
+                        appContainer.mediaStoreAudioRepository,
+                    playbackController =
+                        appContainer.playbackController,
+                    onOpenRecentlyAdded = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.HOME,
+                            destination = HomeRecentlyAddedDestination,
+                        )
+                    },
+                    onOpenSettings = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.HOME,
+                            destination = SettingsDestination(TopLevelSection.HOME),
+                        )
+                    },
+                )
+            }
+        }
+
+        entry<HomeRecentlyAddedDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) {
+            NavigationDestinationSurface {
+                HomeRecentlyAddedScreen(
+                    audioRepository =
+                        appContainer.mediaStoreAudioRepository,
+                    playbackController =
+                        appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.HOME)
+                    },
+                )
+            }
+        }
+
+        entry<SearchDestination>(
+            metadata = NavDisplay.transitionSpec {
+                topLevelTabTransition(topLevelSlideDirection)
+            },
+        ) {
+            NavigationDestinationSurface {
+                SearchScreen(
+                    audioRepository =
+                        appContainer.mediaStoreAudioRepository,
+                    playbackController =
+                        appContainer.playbackController,
+                    onOpenSettings = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.SEARCH,
+                            destination = SettingsDestination(TopLevelSection.SEARCH),
+                        )
+                    },
+                )
+            }
+        }
+
+        entry<LibraryDestination>(
+            metadata = NavDisplay.transitionSpec {
+                topLevelTabTransition(topLevelSlideDirection)
+            },
+        ) {
+            NavigationDestinationSurface {
+                LibraryScreen(
+                    audioRepository =
+                        appContainer.mediaStoreAudioRepository,
+                    playbackController =
+                        appContainer.playbackController,
+                    onOpenArtist = { artistName ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = ArtistDestination(artistName),
+                        )
+                    },
+                    onOpenAlbum = { releaseKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = AlbumDestination(releaseKey),
+                        )
+                    },
+                    onOpenGenre = { genreKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = GenreDestination(genreKey),
+                        )
+                    },
+                    onOpenSettings = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = SettingsDestination(TopLevelSection.LIBRARY),
+                        )
+                    },
+                )
+            }
+        }
+
+        entry<ArtistDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            val catalog by appContainer.mediaStoreAudioRepository.catalogState
+                .collectAsStateWithLifecycle()
+
+            NavigationDestinationSurface {
+                ArtistPage(
+                    artistName = destination.artistName,
+                    tracks = catalog.tracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.LIBRARY)
+                    },
+                    onOpenSingle = { releaseKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = SingleDestination(releaseKey),
+                        )
+                    },
+                    onOpenAlbum = { releaseKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = AlbumDestination(releaseKey),
+                        )
+                    },
+                    onOpenGenre = { genreKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = ArtistGenreDestination(
+                                artistName = destination.artistName,
+                                genreKey = genreKey,
+                            ),
+                        )
+                    },
+                    songsAndEpsTitleRes = R.string.artist_songs_and_eps,
+                )
+            }
+        }
+
+        entry<SingleDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            val catalog by appContainer.mediaStoreAudioRepository.catalogState
+                .collectAsStateWithLifecycle()
+
+            NavigationDestinationSurface {
+                SinglePage(
+                    releaseKey = destination.releaseKey,
+                    catalogTracks = catalog.tracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.LIBRARY)
+                    },
+                )
+            }
+        }
+
+        entry<AlbumDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            val catalog by appContainer.mediaStoreAudioRepository.catalogState
+                .collectAsStateWithLifecycle()
+
+            NavigationDestinationSurface {
+                AlbumPage(
+                    releaseKey = destination.releaseKey,
+                    catalogTracks = catalog.tracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.LIBRARY)
+                    },
+                )
+            }
+        }
+
+        entry<GenreDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            val catalog by appContainer.mediaStoreAudioRepository.catalogState
+                .collectAsStateWithLifecycle()
+
+            NavigationDestinationSurface {
+                GenrePage(
+                    genreKey = destination.genreKey,
+                    catalogTracks = catalog.tracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.LIBRARY)
+                    },
+                )
+            }
+        }
+
+        entry<ArtistGenreDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            val catalog by appContainer.mediaStoreAudioRepository.catalogState
+                .collectAsStateWithLifecycle()
+
+            NavigationDestinationSurface {
+                GenrePage(
+                    genreKey = destination.genreKey,
+                    artistName = destination.artistName,
+                    catalogTracks = catalog.tracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.LIBRARY)
+                    },
+                )
+            }
+        }
+
+        entry<SettingsDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            NavigationDestinationSurface {
+                SettingsScreen(
+                    onBack = {
+                        navigationState.goBack(destination.owner)
+                    },
+                    onFolderFilterClick = {
+                        navigationState.navigateWithin(
+                            owner = destination.owner,
+                            destination = FolderFilterDestination(destination.owner),
+                        )
+                    },
+                    onAboutClick = {
+                        navigationState.navigateWithin(
+                            owner = destination.owner,
+                            destination = AboutDestination(destination.owner),
+                        )
+                    },
+                )
+            }
+        }
+
+        entry<FolderFilterDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            NavigationDestinationSurface {
+                FolderFilterScreen(
+                    folderFilterRepository =
+                        appContainer.folderFilterRepository,
+                    folderScannerRepository =
+                        appContainer.mediaStoreFolderRepository,
+                    onBack = {
+                        navigationState.goBack(destination.owner)
+                    },
+                )
+            }
+        }
+
+        entry<AboutDestination>(
+            metadata = horizontalSlideTransitionMetadata,
+        ) { destination ->
+            NavigationDestinationSurface {
+                AboutScreen(
+                    onBack = {
+                        navigationState.goBack(destination.owner)
+                    },
+                )
+            }
+        }
+    }
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
         NavDisplay(
-            backStack = backStack,
+            entries = navigationState.toDecoratedEntries(routeEntryProvider),
             onBack = {
-                popBackStackSafely(backStack)
+                navigationState.goBack()
             },
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
@@ -193,158 +500,6 @@ fun Navigation(appContainer: AppContainer) {
                         )
                     )
             },
-            entryProvider = entryProvider {
-                entry<HomeDestination>(
-                    metadata = NavDisplay.transitionSpec {
-                        topLevelTabTransition(topLevelSlideDirection)
-                    },
-                ) {
-                    NavigationDestinationSurface {
-                        HomeScreen(
-                            audioRepository =
-                                appContainer.mediaStoreAudioRepository,
-                            playbackController =
-                                appContainer.playbackController,
-                            onOpenRecentlyAdded = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    HomeRecentlyAddedDestination
-                                ) {
-                                    backStack.add(
-                                        HomeRecentlyAddedDestination,
-                                    )
-                                }
-                            },
-                            onOpenSettings = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    SettingsDestination
-                                ) {
-                                    backStack.add(SettingsDestination)
-                                }
-                            },
-                        )
-                    }
-                }
-
-                entry<HomeRecentlyAddedDestination>(
-                    metadata = horizontalSlideTransitionMetadata,
-                ) {
-                    NavigationDestinationSurface {
-                        HomeRecentlyAddedScreen(
-                            audioRepository =
-                                appContainer.mediaStoreAudioRepository,
-                            playbackController =
-                                appContainer.playbackController,
-                            onBack = {
-                                popBackStackSafely(backStack)
-                            },
-                        )
-                    }
-                }
-
-                entry<SearchDestination>(
-                    metadata = NavDisplay.transitionSpec {
-                        topLevelTabTransition(topLevelSlideDirection)
-                    },
-                ) {
-                    NavigationDestinationSurface {
-                        SearchScreen(
-                            audioRepository =
-                                appContainer.mediaStoreAudioRepository,
-                            playbackController =
-                                appContainer.playbackController,
-                            onOpenSettings = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    SettingsDestination
-                                ) {
-                                    backStack.add(SettingsDestination)
-                                }
-                            },
-                        )
-                    }
-                }
-
-                entry<LibraryDestination>(
-                    metadata = NavDisplay.transitionSpec {
-                        topLevelTabTransition(topLevelSlideDirection)
-                    },
-                ) {
-                    NavigationDestinationSurface {
-                        LibraryScreen(
-                            audioRepository =
-                                appContainer.mediaStoreAudioRepository,
-                            playbackController =
-                                appContainer.playbackController,
-                            onOpenSettings = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    SettingsDestination
-                                ) {
-                                    backStack.add(SettingsDestination)
-                                }
-                            },
-                        )
-                    }
-                }
-
-                entry<SettingsDestination>(
-                    metadata = horizontalSlideTransitionMetadata,
-                ) {
-                    NavigationDestinationSurface {
-                        SettingsScreen(
-                            onBack = {
-                                popBackStackSafely(backStack)
-                            },
-                            onFolderFilterClick = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    FolderFilterDestination
-                                ) {
-                                    backStack.add(FolderFilterDestination)
-                                }
-                            },
-                            onAboutClick = {
-                                if (
-                                    backStack.lastOrNull() !=
-                                    AboutDestination
-                                ) {
-                                    backStack.add(AboutDestination)
-                                }
-                            },
-                        )
-                    }
-                }
-
-                entry<FolderFilterDestination>(
-                    metadata = horizontalSlideTransitionMetadata,
-                ) {
-                    NavigationDestinationSurface {
-                        FolderFilterScreen(
-                            folderFilterRepository =
-                                appContainer.folderFilterRepository,
-                            folderScannerRepository =
-                                appContainer.mediaStoreFolderRepository,
-                            onBack = {
-                                popBackStackSafely(backStack)
-                            },
-                        )
-                    }
-                }
-
-                entry<AboutDestination>(
-                    metadata = horizontalSlideTransitionMetadata,
-                ) {
-                    NavigationDestinationSurface {
-                        AboutScreen(
-                            onBack = {
-                                popBackStackSafely(backStack)
-                            },
-                        )
-                    }
-                }
-            },
         )
 
         NavigationBar(
@@ -357,18 +512,15 @@ fun Navigation(appContainer: AppContainer) {
             windowInsets = NavigationBarDefaults.windowInsets,
         ) {
             NavigationBarItem(
-                selected = backStack.firstOrNull() == HomeDestination,
+                selected = navigationState.topLevelSection == TopLevelSection.HOME,
                 onClick = {
                     topLevelSlideDirection =
                         calculateTopLevelSlideDirection(
-                            currentDestination = backStack.firstOrNull(),
+                            currentDestination = navigationState.topLevelRoute,
                             targetDestination = HomeDestination,
                         )
 
-                    navigateToTopLevel(
-                        backStack = backStack,
-                        destination = HomeDestination,
-                    )
+                    navigationState.selectTopLevel(TopLevelSection.HOME)
                 },
                 icon = {
                     Icon(
@@ -395,18 +547,15 @@ fun Navigation(appContainer: AppContainer) {
             )
 
             NavigationBarItem(
-                selected = backStack.firstOrNull() == SearchDestination,
+                selected = navigationState.topLevelSection == TopLevelSection.SEARCH,
                 onClick = {
                     topLevelSlideDirection =
                         calculateTopLevelSlideDirection(
-                            currentDestination = backStack.firstOrNull(),
+                            currentDestination = navigationState.topLevelRoute,
                             targetDestination = SearchDestination,
                         )
 
-                    navigateToTopLevel(
-                        backStack = backStack,
-                        destination = SearchDestination,
-                    )
+                    navigationState.selectTopLevel(TopLevelSection.SEARCH)
                 },
                 icon = {
                     Icon(
@@ -433,18 +582,15 @@ fun Navigation(appContainer: AppContainer) {
             )
 
             NavigationBarItem(
-                selected = backStack.firstOrNull() == LibraryDestination,
+                selected = navigationState.topLevelSection == TopLevelSection.LIBRARY,
                 onClick = {
                     topLevelSlideDirection =
                         calculateTopLevelSlideDirection(
-                            currentDestination = backStack.firstOrNull(),
+                            currentDestination = navigationState.topLevelRoute,
                             targetDestination = LibraryDestination,
                         )
 
-                    navigateToTopLevel(
-                        backStack = backStack,
-                        destination = LibraryDestination,
-                    )
+                    navigationState.selectTopLevel(TopLevelSection.LIBRARY)
                 },
                 icon = {
                     Icon(
@@ -501,6 +647,20 @@ fun Navigation(appContainer: AppContainer) {
             ) {
                 PlayerScreen(
                     playbackController = appContainer.playbackController,
+                    onOpenArtist = { artistName ->
+                        // Navigate through the existing Library stack so ArtistPage's Back
+                        // behavior and the saved Library state remain consistent.
+                        topLevelSlideDirection = calculateTopLevelSlideDirection(
+                            currentDestination = navigationState.topLevelRoute,
+                            targetDestination = LibraryDestination,
+                        )
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = ArtistDestination(artistName),
+                        )
+                        navigationState.selectTopLevel(TopLevelSection.LIBRARY)
+                        showPlayerSheet = false
+                    },
                 )
             }
         }
@@ -519,50 +679,6 @@ private fun NavigationDestinationSurface(
         content()
     }
 }
-
-private val NavigationBackStackSaver =
-    listSaver<SnapshotStateList<Any>, String>(
-        save = { backStack ->
-            backStack.map(::savedDestinationKey)
-        },
-        restore = { savedKeys ->
-            mutableStateListOf<Any>().apply {
-                savedKeys
-                    .mapNotNull(::destinationFromSavedKey)
-                    .forEach { destination ->
-                        add(destination)
-                    }
-
-                if (isEmpty()) {
-                    add(HomeDestination)
-                }
-            }
-        },
-    )
-
-private fun savedDestinationKey(destination: Any): String =
-    when (destination) {
-        HomeDestination -> "home"
-        HomeRecentlyAddedDestination -> "home_recently_added"
-        SearchDestination -> "search"
-        LibraryDestination -> "library"
-        SettingsDestination -> "settings"
-        FolderFilterDestination -> "folder_filter"
-        AboutDestination -> "about"
-        else -> "home"
-    }
-
-private fun destinationFromSavedKey(key: String): Any? =
-    when (key) {
-        "home" -> HomeDestination
-        "home_recently_added" -> HomeRecentlyAddedDestination
-        "search" -> SearchDestination
-        "library" -> LibraryDestination
-        "settings" -> SettingsDestination
-        "folder_filter" -> FolderFilterDestination
-        "about" -> AboutDestination
-        else -> null
-    }
 
 private fun calculateTopLevelSlideDirection(
     currentDestination: Any?,
@@ -587,25 +703,102 @@ private fun calculateTopLevelSlideDirection(
     }
 }
 
-private fun popBackStackSafely(
-    backStack: SnapshotStateList<Any>,
-) {
-    if (backStack.size > 1) {
-        backStack.removeLastOrNull()
+@Composable
+private fun rememberRoviaNavigationState(): RoviaNavigationState {
+    val homeBackStack: NavBackStack<NavKey> = rememberNavBackStack(HomeDestination)
+    val searchBackStack: NavBackStack<NavKey> = rememberNavBackStack(SearchDestination)
+    val libraryBackStack: NavBackStack<NavKey> = rememberNavBackStack(LibraryDestination)
+    val topLevelSectionState = rememberSaveable {
+        mutableStateOf(TopLevelSection.HOME)
+    }
+
+    val backStacks = remember(homeBackStack, searchBackStack, libraryBackStack) {
+        linkedMapOf<NavKey, NavBackStack<NavKey>>(
+            HomeDestination to homeBackStack,
+            SearchDestination to searchBackStack,
+            LibraryDestination to libraryBackStack,
+        )
+    }
+
+    return remember(backStacks, topLevelSectionState) {
+        RoviaNavigationState(
+            backStacks = backStacks,
+            topLevelSectionState = topLevelSectionState,
+        )
     }
 }
 
-private fun navigateToTopLevel(
-    backStack: SnapshotStateList<Any>,
-    destination: Any,
+/**
+ * Keeps one small key stack per top-level tab. Only saveable UI state is retained for
+ * off-screen entries; their compositions and non-saveable objects (such as artwork bitmaps)
+ * are disposed when the corresponding entries are not displayed.
+ */
+private class RoviaNavigationState(
+    val backStacks: Map<NavKey, NavBackStack<NavKey>>,
+    private val topLevelSectionState: MutableState<TopLevelSection>,
 ) {
-    if (
-        backStack.size == 1 &&
-        backStack.firstOrNull() == destination
-    ) {
-        return
+    val topLevelSection: TopLevelSection
+        get() = topLevelSectionState.value
+
+    val topLevelRoute: NavKey
+        get() = topLevelSection.asDestination()
+
+    fun selectTopLevel(section: TopLevelSection) {
+        topLevelSectionState.value = section
     }
 
-    backStack.clear()
-    backStack.add(destination)
+    fun navigateWithin(
+        owner: TopLevelSection,
+        destination: NavKey,
+    ) {
+        val stack = backStacks[owner.asDestination()] ?: return
+        if (stack.lastOrNull() != destination) {
+            stack.add(destination)
+        }
+    }
+
+    fun goBack(owner: TopLevelSection = topLevelSection) {
+        val stack = backStacks[owner.asDestination()] ?: return
+        if (stack.size > 1) {
+            stack.removeLastOrNull()
+        } else if (topLevelSection == owner && owner != TopLevelSection.HOME) {
+            // Keep the previous state of each tab, but follow the standard exit-through-home pattern.
+            topLevelSectionState.value = TopLevelSection.HOME
+        }
+    }
+
+    @Composable
+    fun toDecoratedEntries(
+        entryProvider: (NavKey) -> NavEntry<NavKey>,
+    ): List<NavEntry<NavKey>> {
+        // Each tab gets its own native Navigation 3 saveable-state holder. This prevents
+        // duplicate entry keys from sharing UI state when the same settings page exists in
+        // more than one top-level stack.
+        val decoratedEntries = backStacks.mapValues { (_, stack) ->
+            rememberDecoratedNavEntries(
+                backStack = stack,
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
+                ),
+                entryProvider = entryProvider,
+            )
+        }
+
+        val activeRoute = topLevelRoute
+        val routesInUse = if (activeRoute == HomeDestination) {
+            listOf(HomeDestination)
+        } else {
+            listOf(HomeDestination, activeRoute)
+        }
+
+        return routesInUse.flatMap { route ->
+            decoratedEntries[route].orEmpty()
+        }
+    }
+}
+
+private fun TopLevelSection.asDestination(): NavKey = when (this) {
+    TopLevelSection.HOME -> HomeDestination
+    TopLevelSection.SEARCH -> SearchDestination
+    TopLevelSection.LIBRARY -> LibraryDestination
 }

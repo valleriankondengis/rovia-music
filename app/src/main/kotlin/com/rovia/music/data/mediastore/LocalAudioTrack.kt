@@ -10,8 +10,14 @@ data class LocalAudioTrack(
     val album: String?,
     val durationMs: Long,
     val dateAddedSeconds: Long = 0L,
-    /** Relative MediaStore path, retained so folder filters can be applied to the in-memory cache. */
     val relativePath: String? = null,
-    /** MediaStore modification timestamp used to detect edits when refreshing the cache. */
     val dateModifiedSeconds: Long = 0L,
-)
+    val albumId: Long? = null,
+    val albumArtist: String? = null,
+    /** Release/recording year read from MediaStore metadata, when present. */
+    val releaseYear: Int? = null,
+    val genres: List<String> = emptyList(),
+) {
+    val artistNames: List<String>
+        get() = ArtistCreditParser.parse(artist)
+}

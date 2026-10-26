@@ -25,6 +25,31 @@
     <string name="library_load_error">Unable to load audio files.</string>
     <string name="library_retry">Try again</string>
 
+    <string name="library_category_all_songs">All Songs</string>
+    <string name="library_category_artists">Artists</string>
+    <string name="library_category_albums">Albums</string>
+    <string name="library_category_genres">Genres</string>
+    <string name="library_category_folders">Folders</string>
+    <string name="artist_songs_and_eps">Single &amp; EP</string>
+    <string name="artist_release_type_single">Single</string>
+    <string name="artist_release_type_ep">EP</string>
+    <string name="artist_release_type_album">Album</string>
+    <string name="artist_release_type_unknown">Release</string>
+    <string name="artist_release_type_year">%1$s • %2$d</string>
+
+    <string name="library_artists_empty">No artists were found in this music library.</string>
+    <string name="library_albums_empty">No albums were found in this music library.</string>
+    <string name="library_genres_empty">No genres were found in this music library.</string>
+    <string name="library_folders_empty">No music folders were found on this device.</string>
+    <string name="library_folders_back">All folders</string>
+    <string name="library_album_supporting">%1$s • %2$s</string>
+    <string name="library_folder_supporting">%1$s • %2$s</string>
+
+    <plurals name="library_track_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+
     <string name="player_title">Now playing</string>
     <string name="player_back">Back</string>
     <string name="player_play">Play</string>

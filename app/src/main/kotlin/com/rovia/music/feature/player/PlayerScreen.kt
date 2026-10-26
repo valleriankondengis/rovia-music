@@ -61,7 +61,12 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.ResolvedTextDirection
@@ -73,6 +78,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
+import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.LyricLine
@@ -85,6 +91,7 @@ import kotlin.math.floor
 @Composable
 fun PlayerScreen(
     playbackController: PlaybackController,
+    onOpenArtist: (String) -> Unit,
 ) {
     val controller by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -109,6 +116,34 @@ fun PlayerScreen(
 
     var currentArtist by remember(controller) {
         mutableStateOf(controller?.mediaMetadata?.artist?.toString())
+    }
+
+    // Use the same parser as LocalAudioTrack.artistNames and ArtistPage so artist credits
+    // are split consistently and protected names such as "Earth, Wind & Fire" stay intact.
+    val artistNames = remember(currentArtist) {
+        ArtistCreditParser.parse(currentArtist)
+    }
+    val latestOnOpenArtist = rememberUpdatedState(onOpenArtist)
+    val clickableArtistCredit = remember(artistNames) {
+        buildAnnotatedString {
+            artistNames.forEachIndexed { index, artistName ->
+                if (index > 0) append(", ")
+
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = artistName,
+                        styles = TextLinkStyles(
+                            style = SpanStyle(color = Color.White.copy(alpha = 0.7f)),
+                        ),
+                        linkInteractionListener = {
+                            latestOnOpenArtist.value(artistName)
+                        },
+                    ),
+                ) {
+                    append(artistName)
+                }
+            }
+        }
     }
 
     var currentArtworkUri by remember(controller) {
@@ -427,9 +462,13 @@ fun PlayerScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
 
                                 Text(
-                                    text = currentArtist
-                                        ?.takeIf(String::isNotBlank)
-                                        ?: stringResource(R.string.player_unknown_artist),
+                                    text = if (artistNames.isNotEmpty()) {
+                                        clickableArtistCredit
+                                    } else {
+                                        buildAnnotatedString {
+                                            append(stringResource(R.string.player_unknown_artist))
+                                        }
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .basicMarquee(),

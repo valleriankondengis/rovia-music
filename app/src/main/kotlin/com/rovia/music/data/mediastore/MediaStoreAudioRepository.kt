@@ -25,29 +25,24 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Comparator
+import java.util.Locale
 
-/**
- * In-memory MediaStore catalog shared by Home, Library and Search.
- *
- * The cache is deliberately process-local (no database). A ContentObserver marks it stale when
- * MediaStore changes, then refreshes it after a short debounce so bulk file operations do not
- * trigger a query for every individual notification.
- */
 class MediaStoreAudioRepository(
     private val contentResolver: ContentResolver,
     private val folderFilterRepository: FolderFilterRepository,
 ) {
     data class CatalogState(
-        /** Alphabetical, folder-filtered track list. */
         val tracks: List<LocalAudioTrack> = emptyList(),
-        /** Same catalog sorted newest-first, used by Home and Recently Added. */
         val recentlyAddedTracks: List<LocalAudioTrack> = emptyList(),
         val isLoaded: Boolean = false,
         val isRefreshing: Boolean = false,
-        /** True only when there is no usable cached catalog because loading failed. */
         val loadFailed: Boolean = false,
-        /** Increased when the visible catalog contents change. */
         val revision: Long = 0L,
+    )
+
+    private data class GenreRecord(
+        val id: Long,
+        val name: String,
     )
 
     private val collectionUri: Uri = MediaStore.Audio.Media.getContentUri(
@@ -61,14 +56,12 @@ class MediaStoreAudioRepository(
     private val mutableCatalogState = MutableStateFlow(CatalogState())
     val catalogState: StateFlow<CatalogState> = mutableCatalogState.asStateFlow()
 
-    /** Raw MediaStore results, including folder paths, so filter changes do not require a rescan. */
     private var cachedRawTracks: List<LocalAudioTrack>? = null
     private var lastAppliedExcludedFolders: Set<String>? = null
 
     @Volatile
     private var cacheInvalidated = true
 
-    /** Sequence number prevents a MediaStore change during a query from being lost. */
     private var mediaChangeSequence = 0L
 
     private var observerRegistered = false
@@ -85,11 +78,11 @@ class MediaStoreAudioRepository(
     }
 
     init {
-        // Folder filtering changes can be reflected immediately from the cached raw catalog.
         repositoryScope.launch {
             folderFilterRepository.excludedFolders.collect { excludedFolders ->
                 refreshMutex.withLock {
                     val rawTracks = cachedRawTracks ?: return@withLock
+
                     if (lastAppliedExcludedFolders == excludedFolders) {
                         return@withLock
                     }
@@ -104,13 +97,6 @@ class MediaStoreAudioRepository(
         }
     }
 
-    /**
-     * Load the catalog if it has not been loaded yet or MediaStore has invalidated the cache.
-     * A cached catalog is returned immediately on subsequent calls.
-     *
-     * Pass [forceRefresh] for an explicit user retry/refresh. MediaStore notifications trigger
-     * this automatically; callers normally do not need to force a refresh.
-     */
     suspend fun refresh(forceRefresh: Boolean = false) {
         ensureContentObserverRegistered()
 
@@ -136,9 +122,8 @@ class MediaStoreAudioRepository(
                 val previousExcludedFolders = lastAppliedExcludedFolders
 
                 cachedRawTracks = freshRawTracks
+
                 synchronized(observerLock) {
-                    // If MediaStore notified us during this query, keep the cache invalidated so
-                    // the debounced job performs one more pass after the provider settles.
                     cacheInvalidated = mediaChangeSequence != queryStartSequence
                 }
 
@@ -178,7 +163,6 @@ class MediaStoreAudioRepository(
         }
     }
 
-    /** Compatibility helpers for existing callers that want a one-shot list. */
     suspend fun loadTracks(forceRefresh: Boolean = false): List<LocalAudioTrack> {
         refresh(forceRefresh)
         return mutableCatalogState.value.tracks
@@ -205,8 +189,6 @@ class MediaStoreAudioRepository(
                 )
                 observerRegistered = true
             } catch (exception: Exception) {
-                // The query still works. A later refresh will retry registration, and screens
-                // refresh on re-entry, so a transient registration failure is not fatal.
                 Log.w(TAG, "Unable to register MediaStore observer", exception)
             }
         }
@@ -217,8 +199,10 @@ class MediaStoreAudioRepository(
             mediaChangeSequence += 1L
             cacheInvalidated = true
             pendingRefreshJob?.cancel()
+
             pendingRefreshJob = repositoryScope.launch {
                 delay(CONTENT_CHANGE_DEBOUNCE_MS)
+
                 try {
                     refresh(forceRefresh = false)
                 } catch (exception: CancellationException) {
@@ -236,6 +220,9 @@ class MediaStoreAudioRepository(
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.ALBUM_ARTIST,
+            MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.MediaColumns.DATE_MODIFIED,
@@ -254,33 +241,198 @@ class MediaStoreAudioRepository(
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC",
         ) ?: return@withContext emptyList()
 
-        cursor.use { result ->
+        val rawTracks = cursor.use { result ->
             val idColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val durationColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val dateAddedColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-            val dateModifiedColumn = result.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            val relativePathColumn = result.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+            val dateModifiedColumn =
+                result.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            val relativePathColumn =
+                result.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+
+            val albumIdColumn = result.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+            val albumArtistColumn = result.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
+            val releaseYearColumn = result.getColumnIndex(MediaStore.Audio.Media.YEAR)
 
             buildList {
                 while (result.moveToNext()) {
                     val id = result.getLong(idColumn)
 
+                    val albumId = if (
+                        albumIdColumn >= 0 && !result.isNull(albumIdColumn)
+                    ) {
+                        result.getLong(albumIdColumn).takeIf { it > 0L }
+                    } else {
+                        null
+                    }
+
+                    val albumArtist = if (albumArtistColumn >= 0) {
+                        result.getString(albumArtistColumn)?.takeIf(String::isNotBlank)
+                    } else {
+                        null
+                    }
+
+                    val releaseYear = if (
+                        releaseYearColumn >= 0 && !result.isNull(releaseYearColumn)
+                    ) {
+                        result.getInt(releaseYearColumn).takeIf { it in 1000..9999 }
+                    } else {
+                        null
+                    }
+
                     add(
                         LocalAudioTrack(
                             id = id,
                             uri = ContentUris.withAppendedId(collectionUri, id),
-                            title = result.getString(titleColumn)?.takeIf(String::isNotBlank),
-                            artist = result.getString(artistColumn)?.takeIf(String::isNotBlank),
-                            album = result.getString(albumColumn)?.takeIf(String::isNotBlank),
+                            title = result.getString(titleColumn)
+                                ?.takeIf(String::isNotBlank),
+                            artist = result.getString(artistColumn)
+                                ?.takeIf(String::isNotBlank),
+                            album = result.getString(albumColumn)
+                                ?.takeIf(String::isNotBlank),
                             durationMs = result.getLong(durationColumn).coerceAtLeast(0L),
-                            dateAddedSeconds = result.getLong(dateAddedColumn).coerceAtLeast(0L),
+                            dateAddedSeconds = result.getLong(dateAddedColumn)
+                                .coerceAtLeast(0L),
                             relativePath = result.getString(relativePathColumn),
-                            dateModifiedSeconds = result.getLong(dateModifiedColumn).coerceAtLeast(0L),
+                            dateModifiedSeconds = result.getLong(dateModifiedColumn)
+                                .coerceAtLeast(0L),
+                            albumId = albumId,
+                            albumArtist = albumArtist,
+                            releaseYear = releaseYear,
                         ),
                     )
+                }
+            }
+        }
+
+        val audioIds = rawTracks.mapTo(mutableSetOf()) { it.id }
+        val genresByAudioId = queryGenresByAudioId(audioIds)
+
+        rawTracks.map { track ->
+            track.copy(
+                genres = genresByAudioId[track.id].orEmpty(),
+            )
+        }
+    }
+
+    private fun queryGenresByAudioId(
+        audioIds: Set<Long>,
+    ): Map<Long, List<String>> {
+        if (audioIds.isEmpty()) {
+            return emptyMap()
+        }
+
+        val genreRecords = try {
+            queryGenreRecords()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to query MediaStore genres", exception)
+            return emptyMap()
+        }
+
+        if (genreRecords.isEmpty()) {
+            return emptyMap()
+        }
+
+        val genresByAudioId = mutableMapOf<Long, LinkedHashMap<String, String>>()
+
+        genreRecords.forEach { genre ->
+            try {
+                val membersUri = MediaStore.Audio.Genres.Members.getContentUri(
+                    MediaStore.VOLUME_EXTERNAL,
+                    genre.id,
+                )
+
+                val cursor = contentResolver.query(
+                    membersUri,
+                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+                    null,
+                    null,
+                    null,
+                ) ?: return@forEach
+
+                cursor.use { result ->
+                    val audioIdColumn = result.getColumnIndex(
+                        MediaStore.Audio.Genres.Members.AUDIO_ID,
+                    )
+
+                    if (audioIdColumn < 0) {
+                        return@use
+                    }
+
+                    while (result.moveToNext()) {
+                        val audioId = result.getLong(audioIdColumn)
+
+                        if (audioId !in audioIds) {
+                            continue
+                        }
+
+                        val normalizedGenreName = genre.name.lowercase(Locale.ROOT)
+
+                        genresByAudioId
+                            .getOrPut(audioId) { linkedMapOf() }
+                            .putIfAbsent(normalizedGenreName, genre.name)
+                    }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Log.w(
+                    TAG,
+                    "Unable to query members for genre ${genre.name}",
+                    exception,
+                )
+            }
+        }
+
+        return genresByAudioId.mapValues { (_, genreNames) ->
+            genreNames.values.toList()
+        }
+    }
+
+    private fun queryGenreRecords(): List<GenreRecord> {
+        val genresUri = MediaStore.Audio.Genres.getContentUri(
+            MediaStore.VOLUME_EXTERNAL,
+        )
+
+        val cursor = contentResolver.query(
+            genresUri,
+            arrayOf(
+                MediaStore.Audio.Genres._ID,
+                MediaStore.Audio.Genres.NAME,
+            ),
+            null,
+            null,
+            "${MediaStore.Audio.Genres.NAME} COLLATE NOCASE ASC",
+        ) ?: return emptyList()
+
+        return cursor.use { result ->
+            val idColumn = result.getColumnIndex(MediaStore.Audio.Genres._ID)
+            val nameColumn = result.getColumnIndex(MediaStore.Audio.Genres.NAME)
+
+            if (idColumn < 0 || nameColumn < 0) {
+                return@use emptyList()
+            }
+
+            buildList {
+                while (result.moveToNext()) {
+                    val genreId = result.getLong(idColumn)
+                    val genreName = result.getString(nameColumn)
+                        ?.trim()
+                        ?.takeIf(String::isNotEmpty)
+
+                    if (genreId > 0L && genreName != null) {
+                        add(
+                            GenreRecord(
+                                id = genreId,
+                                name = genreName,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -298,10 +450,10 @@ class MediaStoreAudioRepository(
             )
         }
 
-        // queryRawTracks already sorts alphabetically, and filtering preserves that order.
         val recentlyAddedTracks = visibleTracks.sortedWith(
             Comparator { left, right ->
                 val dateOrder = right.dateAddedSeconds.compareTo(left.dateAddedSeconds)
+
                 if (dateOrder != 0) {
                     dateOrder
                 } else {
@@ -320,6 +472,7 @@ class MediaStoreAudioRepository(
                 previous.recentlyAddedTracks != recentlyAddedTracks
 
         lastAppliedExcludedFolders = excludedFolders
+
         mutableCatalogState.value = CatalogState(
             tracks = visibleTracks,
             recentlyAddedTracks = recentlyAddedTracks,

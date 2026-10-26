@@ -25,6 +25,31 @@
     <string name="library_load_error">File audio tidak dapat dimuat.</string>
     <string name="library_retry">Coba lagi</string>
 
+    <string name="library_category_all_songs">Semua Lagu</string>
+    <string name="library_category_artists">Artis</string>
+    <string name="library_category_albums">Album</string>
+    <string name="library_category_genres">Genre</string>
+    <string name="library_category_folders">Folder</string>
+
+    <string name="artist_songs_and_eps">Single &amp; EP</string>
+    <string name="artist_release_type_single">Single</string>
+    <string name="artist_release_type_ep">EP</string>
+    <string name="artist_release_type_album">Album</string>
+    <string name="artist_release_type_unknown">Rilisan</string>
+    <string name="artist_release_type_year">%1$s • %2$d</string>
+    <string name="library_artists_empty">Tidak ada artis yang ditemukan di pustaka musik ini.</string>
+    <string name="library_albums_empty">Tidak ada album yang ditemukan di pustaka musik ini.</string>
+    <string name="library_genres_empty">Tidak ada genre yang ditemukan di pustaka musik ini.</string>
+    <string name="library_folders_empty">Tidak ditemukan folder musik di perangkat ini.</string>
+    <string name="library_folders_back">Semua folder</string>
+    <string name="library_album_supporting">%1$s • %2$s</string>
+    <string name="library_folder_supporting">%1$s • %2$s</string>
+
+    <plurals name="library_track_count">
+        <item quantity="one">%1$d lagu</item>
+        <item quantity="other">%1$d lagu</item>
+    </plurals>
+
     <string name="player_title">Sedang diputar</string>
     <string name="player_back">Kembali</string>
     <string name="player_play">Putar</string>
