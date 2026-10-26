@@ -1,10 +1,6 @@
 package com.rovia.music.feature.library
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -58,7 +54,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -70,6 +65,7 @@ import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 import java.text.Normalizer
 import java.util.Locale
@@ -138,20 +134,7 @@ fun LibraryScreen(
 ) {
     val context = LocalContext.current
 
-    var hasAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-    }
+    val hasAudioPermission = rememberAudioPermissionGranted()
 
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -320,23 +303,13 @@ fun LibraryScreen(
         when {
             !hasAudioPermission -> {
                 LibraryMessage(
-                    message = stringResource(
-                        R.string.library_permission_message
-                    ),
+                    message = stringResource(R.string.library_no_tracks),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(
                             top = contentTopPadding + LibraryCategorySelectorHeight,
                             bottom = contentBottomPadding
-                        ),
-                    actionLabel = stringResource(
-                        R.string.library_grant_permission
-                    ),
-                    onAction = {
-                        permissionLauncher.launch(
-                            Manifest.permission.READ_MEDIA_AUDIO
                         )
-                    }
                 )
             }
 

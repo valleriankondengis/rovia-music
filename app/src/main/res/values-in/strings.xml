@@ -17,9 +17,6 @@
     <string name="search_no_results">Tidak ada hasil</string>
 
     <string name="library_title">Pustaka</string>
-    <string name="library_permission_title">Izin audio diperlukan</string>
-    <string name="library_permission_message">Izinkan Rovia mengakses file audio di perangkat agar kamu dapat memutar musik.</string>
-    <string name="library_grant_permission">Berikan izin</string>
     <string name="library_loading">Memuat musik…</string>
     <string name="library_no_tracks">Tidak ada musik yang ditemukan di perangkat ini.</string>
     <string name="library_load_error">File audio tidak dapat dimuat.</string>

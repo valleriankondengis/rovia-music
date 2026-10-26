@@ -1,9 +1,5 @@
 package com.rovia.music.feature.search
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,7 +38,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -50,7 +45,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -60,6 +54,7 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import java.text.Normalizer
 import java.util.Locale
 import java.util.WeakHashMap
@@ -121,7 +116,6 @@ fun SearchScreen(
     playbackController: PlaybackController,
     onOpenSettings: () -> Unit
 ) {
-    val context = LocalContext.current
     val textFieldState = rememberTextFieldState()
     val searchBarState = rememberSearchBarState()
 
@@ -129,20 +123,7 @@ fun SearchScreen(
     val hasQuery = query.isNotBlank()
     val clearSearchDescription = stringResource(R.string.search_clear)
 
-    var hasAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-    }
+    val hasAudioPermission = rememberAudioPermissionGranted()
 
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -386,11 +367,6 @@ fun SearchScreen(
             ),
             messageTopPadding = contentTopPadding,
             messageBottomPadding = contentBottomPadding,
-            onGrantPermission = {
-                permissionLauncher.launch(
-                    Manifest.permission.READ_MEDIA_AUDIO
-                )
-            },
             onRetry = {
                 reloadRequest += 1
             },
@@ -527,26 +503,19 @@ private fun SearchResultsContent(
     contentInsetPadding: PaddingValues,
     messageTopPadding: Dp,
     messageBottomPadding: Dp,
-    onGrantPermission: () -> Unit,
     onRetry: () -> Unit,
     onTrackClick: (LocalAudioTrack, Int) -> Unit
 ) {
     when {
         !hasAudioPermission -> {
             SearchMessage(
-                message = stringResource(
-                    R.string.library_permission_message
-                ),
+                message = stringResource(R.string.library_no_tracks),
                 modifier = modifier
                     .fillMaxSize()
                     .padding(
                         top = messageTopPadding,
                         bottom = messageBottomPadding
-                    ),
-                actionLabel = stringResource(
-                    R.string.library_grant_permission
-                ),
-                onAction = onGrantPermission
+                    )
             )
         }
 

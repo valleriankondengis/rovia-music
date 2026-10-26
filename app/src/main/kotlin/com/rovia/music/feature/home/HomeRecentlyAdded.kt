@@ -1,9 +1,5 @@
 package com.rovia.music.feature.home
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,11 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -50,6 +44,7 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 
 private val RecentlyAddedNavigationBarHeight = 80.dp
@@ -62,23 +57,8 @@ fun HomeRecentlyAddedScreen(
     playbackController: PlaybackController,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
     val backContentDescription = stringResource(R.string.player_back)
-
-    var hasAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-    }
+    val hasAudioPermission = rememberAudioPermissionGranted()
 
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -165,23 +145,13 @@ fun HomeRecentlyAddedScreen(
         when {
             !hasAudioPermission -> {
                 RecentlyAddedMessage(
-                    message = stringResource(
-                        R.string.library_permission_message
-                    ),
+                    message = stringResource(R.string.home_recently_added_empty),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
-                        ),
-                    actionLabel = stringResource(
-                        R.string.library_grant_permission
-                    ),
-                    onAction = {
-                        permissionLauncher.launch(
-                            Manifest.permission.READ_MEDIA_AUDIO
                         )
-                    }
                 )
             }
 

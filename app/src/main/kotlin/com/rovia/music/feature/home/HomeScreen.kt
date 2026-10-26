@@ -1,9 +1,5 @@
 package com.rovia.music.feature.home
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,11 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -56,6 +50,7 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 
 private val HomeNavigationBarHeight = 80.dp
@@ -72,22 +67,7 @@ fun HomeScreen(
     onOpenRecentlyAdded: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    val context = LocalContext.current
-
-    var hasAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-    }
+    val hasAudioPermission = rememberAudioPermissionGranted()
 
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -203,14 +183,8 @@ fun HomeScreen(
                     tracks = recentlyAddedTracks,
                     currentMediaId = currentMediaId,
                     itemsEnabled = mediaController != null,
-                    hasAudioPermission = hasAudioPermission,
                     isLoading = isLoading,
                     loadFailed = loadFailed,
-                    onGrantPermission = {
-                        permissionLauncher.launch(
-                            Manifest.permission.READ_MEDIA_AUDIO
-                        )
-                    },
                     onRetry = {
                         reloadRequest += 1
                     },
@@ -296,10 +270,8 @@ private fun RecentlyAddedCard(
     tracks: List<LocalAudioTrack>,
     currentMediaId: String?,
     itemsEnabled: Boolean,
-    hasAudioPermission: Boolean,
     isLoading: Boolean,
     loadFailed: Boolean,
-    onGrantPermission: () -> Unit,
     onRetry: () -> Unit,
     onTrackClick: (LocalAudioTrack, Int) -> Unit,
     onOpenRecentlyAdded: () -> Unit,
@@ -329,18 +301,6 @@ private fun RecentlyAddedCard(
             )
 
             when {
-                !hasAudioPermission -> {
-                    CardMessage(
-                        message = stringResource(
-                            R.string.library_permission_message
-                        ),
-                        actionLabel = stringResource(
-                            R.string.library_grant_permission
-                        ),
-                        onAction = onGrantPermission
-                    )
-                }
-
                 isLoading -> {
                     Box(
                         modifier = Modifier

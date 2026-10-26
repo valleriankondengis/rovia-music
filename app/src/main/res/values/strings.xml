@@ -17,9 +17,6 @@
     <string name="search_no_results">No results found</string>
 
     <string name="library_title">Library</string>
-    <string name="library_permission_title">Audio permission required</string>
-    <string name="library_permission_message">Allow Rovia to access audio files on your device so you can play your music.</string>
-    <string name="library_grant_permission">Grant permission</string>
     <string name="library_loading">Loading music…</string>
     <string name="library_no_tracks">No music was found on this device.</string>
     <string name="library_load_error">Unable to load audio files.</string>

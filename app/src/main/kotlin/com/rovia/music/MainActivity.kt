@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import com.rovia.music.ui.permissions.RequestAudioPermissionOnFirstLaunch
 import com.rovia.music.ui.theme.RoviaTheme
 
 class MainActivity : ComponentActivity() {
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RoviaTheme {
+                RequestAudioPermissionOnFirstLaunch()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
