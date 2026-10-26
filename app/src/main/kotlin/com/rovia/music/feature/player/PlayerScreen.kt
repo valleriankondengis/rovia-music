@@ -87,6 +87,8 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlin.math.floor
 
+private val PlayerHorizontalContentInset = 18.dp
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlayerScreen(
@@ -270,7 +272,7 @@ fun PlayerScreen(
         .asPaddingValues()
         .calculateTopPadding()
 
-    val controlsVerticalOffset = 84.dp
+    val controlsVerticalOffset = 50.dp
     val lyricsVerticalCompensation = 60.dp
 
     BackHandler(enabled = showLyrics) {
@@ -394,7 +396,7 @@ fun PlayerScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                 ) {
-                    val contentWidth = (maxWidth - 60.dp)
+                    val contentWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
                         .coerceAtLeast(1.dp)
                         .coerceAtMost(560.dp)
 
@@ -433,7 +435,7 @@ fun PlayerScreen(
                         Column(
                             modifier = Modifier
                                 .offset(
-                                    y = groupTop + artworkSize + titleGap - 24.dp,
+                                    y = groupTop + artworkSize + titleGap - 33.dp,
                                 )
                                 .fillMaxWidth(),
                         ) {
@@ -490,7 +492,7 @@ fun PlayerScreen(
                 BoxWithConstraints(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val controlsWidth = (maxWidth - 60.dp)
+                    val controlsWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
                         .coerceAtLeast(1.dp)
                         .coerceAtMost(560.dp)
 
@@ -504,17 +506,16 @@ fun PlayerScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp),
+                                    .height(56.dp),
                             ) {
                                 PlayerLyricPreview(
                                     target = currentLyricTarget,
                                     positionMs = currentPosition,
                                     isPlaying = isPlaying,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .offset(y = 6.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
 
                         val sliderMaximum = durationMs
@@ -577,9 +578,9 @@ fun PlayerScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val playbackButtonGroupWidth = (
-                            controlsWidth * (2f / 3f) + 64.dp
-                        ).coerceAtMost(controlsWidth).coerceAtMost(440.dp)
+                        // Keep the transport row aligned with the slider and the secondary
+                        // controls row. The content column itself owns the 18.dp side inset.
+                        val playbackButtonGroupWidth = controlsWidth
                         val playbackColorScheme = MaterialTheme.colorScheme
                         val idlePlaybackContainerColor =
                             playbackColorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
@@ -823,7 +824,7 @@ private fun PlayerLyricPreview(
                     },
             )
         },
-        modifier = modifier.height(44.dp),
+        modifier = modifier.height(56.dp),
         contentAlignment = Alignment.CenterStart,
         label = "player-current-lyric-preview",
     ) { preview ->
@@ -908,7 +909,7 @@ private fun PlayerLyricPreview(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp),
+                .height(56.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             Text(
