@@ -29,8 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -53,23 +51,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,10 +75,10 @@ import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.LyricLine
+import com.rovia.music.ui.components.LyricLinePreview
 import com.rovia.music.ui.components.SyncedLyrics
 import java.util.Locale
 import kotlinx.coroutines.delay
-import kotlin.math.floor
 
 private val PlayerHorizontalContentInset = 18.dp
 
@@ -174,6 +167,10 @@ fun PlayerScreen(
         }
     }
 
+    val lyricSingerOrder = remember(lyricLines) {
+        lyricLines.mapNotNull(LyricLine::singerId).distinct()
+    }
+
     val lyricPreviewStartTimes = remember(lyricLines) {
         val lineStartTimes = lyricLines.map { it.startTimeMs }
         val hasLineTimestampProgression = lineStartTimes
@@ -199,7 +196,12 @@ fun PlayerScreen(
             }
         }
 
-        hasLineTimestampProgression || hasWordTimestampProgression
+        val hasExplicitLineTiming = lyricLines.any { line ->
+            line.endTimeMs?.let { it > line.startTimeMs } == true ||
+                line.backgroundVocals.isNotEmpty()
+        }
+
+        hasLineTimestampProgression || hasWordTimestampProgression || hasExplicitLineTiming
     }
 
     val currentLyricIndex = remember(
@@ -209,8 +211,7 @@ fun PlayerScreen(
         hasTimedLyricProgression,
     ) {
         when {
-            lyricLines.isEmpty() -> -1
-            !hasTimedLyricProgression -> 0
+            lyricLines.isEmpty() || !hasTimedLyricProgression -> -1
             else -> lyricPreviewStartTimes.indexOfLast { it <= currentPosition }
         }
     }
@@ -226,6 +227,7 @@ fun PlayerScreen(
                 ).joinToString("|"),
                 lineIndex = currentLyricIndex,
                 line = line,
+                singerOrder = lyricSingerOrder,
             )
         }
     }
@@ -798,6 +800,7 @@ private data class CurrentLyricPreviewTarget(
     val trackKey: String,
     val lineIndex: Int,
     val line: LyricLine,
+    val singerOrder: List<String>,
 )
 
 @Composable
@@ -828,278 +831,16 @@ private fun PlayerLyricPreview(
         contentAlignment = Alignment.CenterStart,
         label = "player-current-lyric-preview",
     ) { preview ->
-        val previewPosition = remember(preview.trackKey) {
-            mutableLongStateOf(positionMs.coerceAtLeast(0L))
-        }
-        var clockAnchorPositionMs by remember(preview.trackKey) {
-            mutableLongStateOf(positionMs.coerceAtLeast(0L))
-        }
-        var clockAnchorFrameTimeNanos by remember(preview.trackKey) {
-            mutableLongStateOf(0L)
-        }
-        var hasClockAnchor by remember(preview.trackKey) {
-            mutableStateOf(false)
-        }
-
-        LaunchedEffect(preview.trackKey, positionMs, isPlaying) {
-            val frameTimeNanos = withFrameNanos { it }
-            clockAnchorPositionMs = positionMs.coerceAtLeast(0L)
-            clockAnchorFrameTimeNanos = frameTimeNanos
-            hasClockAnchor = true
-
-            if (!isPlaying) {
-                previewPosition.longValue = positionMs.coerceAtLeast(0L)
-            }
-        }
-
-        LaunchedEffect(preview.trackKey, isPlaying) {
-            if (!isPlaying) {
-                previewPosition.longValue = positionMs.coerceAtLeast(0L)
-                return@LaunchedEffect
-            }
-
-            while (true) {
-                withFrameNanos { frameTimeNanos ->
-                    if (!hasClockAnchor) {
-                        previewPosition.longValue = positionMs.coerceAtLeast(0L)
-                    } else {
-                        val elapsedMs = (
-                            frameTimeNanos - clockAnchorFrameTimeNanos
-                            ).coerceAtLeast(0L) / 1_000_000L
-                        previewPosition.longValue = (
-                            clockAnchorPositionMs + elapsedMs
-                            ).coerceAtLeast(0L)
-                    }
-                }
-            }
-        }
-
-        val line = preview.line
-        val lineText = remember(line) {
-            line.words.joinToString(separator = " ") { it.text }
-        }
-        val hasWordTiming = remember(line) {
-            isWordSyncedPreviewLine(line)
-        }
-        val revealedCharacters = remember(
-            line,
-            lineText,
-            previewPosition.longValue,
-            hasWordTiming,
-        ) {
-            if (hasWordTiming) {
-                calculatePlayerPreviewRevealedCharacters(
-                    line = line,
-                    positionMs = previewPosition.longValue,
-                )
-            } else {
-                lineText.length.toFloat()
-            }
-        }
-        val inactiveColor = Color.White.copy(alpha = 0.58f)
-        val previewStyle = MaterialTheme.typography.bodyLarge.copy(
-            fontSize = 15.sp,
-            lineHeight = 19.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        var textLayoutResult by remember(line, lineText) {
-            mutableStateOf<TextLayoutResult?>(null)
-        }
-
-        Box(
+        LyricLinePreview(
+            line = preview.line,
+            singerOrder = preview.singerOrder,
+            positionMs = positionMs,
+            isPlaying = isPlaying,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Text(
-                text = lineText,
-                modifier = Modifier.fillMaxWidth(),
-                color = if (hasWordTiming) inactiveColor else Color.White,
-                style = previewStyle,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                onTextLayout = { result ->
-                    val previous = textLayoutResult
-                    if (
-                        previous == null ||
-                        previous.layoutInput != result.layoutInput ||
-                        previous.size != result.size ||
-                        previous.lineCount != result.lineCount
-                    ) {
-                        textLayoutResult = result
-                    }
-                },
-            )
-
-            if (hasWordTiming) {
-                Text(
-                    text = lineText,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .drawWithContent {
-                            val layout = textLayoutResult
-                            if (layout == null || revealedCharacters <= 0f) {
-                                return@drawWithContent
-                            }
-
-                            val revealPath = buildPlayerLyricRevealPath(
-                                layout = layout,
-                                revealedCharacters = revealedCharacters,
-                            )
-                            clipPath(revealPath) {
-                                this@drawWithContent.drawContent()
-                            }
-                        },
-                    color = Color.White,
-                    style = previewStyle,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-private fun isWordSyncedPreviewLine(line: LyricLine): Boolean {
-    if (line.words.size < 2) return false
-
-    return line.words.zipWithNext().any { (current, next) ->
-        next.startTimeMs > current.startTimeMs
-    }
-}
-
-private fun calculatePlayerPreviewRevealedCharacters(
-    line: LyricLine,
-    positionMs: Long,
-): Float {
-    if (line.words.isEmpty()) return 0f
-
-    val wordOffsets = ArrayList<Int>(line.words.size)
-    var offset = 0
-    line.words.forEachIndexed { index, word ->
-        wordOffsets += offset
-        offset += word.text.length
-        if (index < line.words.lastIndex) {
-            offset += 1
-        }
-    }
-
-    val lastWordIndex = line.words.lastIndex
-    val totalCharacters = wordOffsets[lastWordIndex] + line.words[lastWordIndex].text.length
-
-    for (index in line.words.indices) {
-        val word = line.words[index]
-        val wordOffset = wordOffsets[index]
-
-        if (positionMs < word.startTimeMs) {
-            return wordOffset.toFloat()
-        }
-
-        val nextWord = line.words.getOrNull(index + 1)
-        if (nextWord != null) {
-            val wordDuration = nextWord.startTimeMs - word.startTimeMs
-            if (wordDuration > 0L) {
-                if (positionMs < nextWord.startTimeMs) {
-                    val progress = (
-                        (positionMs - word.startTimeMs).toFloat() / wordDuration.toFloat()
-                        ).coerceIn(0f, 1f)
-                    return wordOffset + word.text.length * progress
-                }
-                continue
-            }
-            continue
-        }
-
-        val finalWordDuration = estimatePlayerPreviewWordDurationMs(
-            line = line,
-            wordIndex = index,
         )
-        val progress = (
-            (positionMs - word.startTimeMs).toFloat() / finalWordDuration.toFloat()
-            ).coerceIn(0f, 1f)
-        return wordOffset + word.text.length * progress
     }
-
-    return totalCharacters.toFloat()
-}
-
-private fun estimatePlayerPreviewWordDurationMs(
-    line: LyricLine,
-    wordIndex: Int,
-): Long {
-    val word = line.words.getOrNull(wordIndex) ?: return 500L
-    val previousWord = line.words.getOrNull(wordIndex - 1) ?: return 500L
-    val interval = word.startTimeMs - previousWord.startTimeMs
-    return if (interval > 0L) interval.coerceIn(250L, 900L) else 500L
-}
-
-private fun buildPlayerLyricRevealPath(
-    layout: TextLayoutResult,
-    revealedCharacters: Float,
-): Path {
-    val path = Path()
-    val textLength = layout.layoutInput.text.length
-    val safeReveal = revealedCharacters.coerceIn(0f, textLength.toFloat())
-    if (safeReveal <= 0f) return path
-
-    for (lineIndex in 0 until layout.lineCount) {
-        val lineStart = layout.getLineStart(lineIndex)
-        val lineEnd = layout.getLineEnd(lineIndex, visibleEnd = true)
-        if (lineEnd <= lineStart || safeReveal <= lineStart.toFloat()) continue
-
-        val lineTop = layout.getLineTop(lineIndex)
-        val lineBottom = layout.getLineBottom(lineIndex)
-        val lineLeft = minOf(
-            layout.getLineLeft(lineIndex),
-            layout.getLineRight(lineIndex),
-        )
-        val lineRight = maxOf(
-            layout.getLineLeft(lineIndex),
-            layout.getLineRight(lineIndex),
-        )
-        val directionIndex = lineStart.coerceIn(
-            0,
-            (textLength - 1).coerceAtLeast(0),
-        )
-        val isRtl = layout.getParagraphDirection(directionIndex) == ResolvedTextDirection.Rtl
-
-        if (safeReveal >= lineEnd.toFloat()) {
-            path.addRect(Rect(lineLeft, lineTop, lineRight, lineBottom))
-            continue
-        }
-
-        val clampedReveal = safeReveal.coerceIn(lineStart.toFloat(), lineEnd.toFloat())
-        val lowerOffset = floor(clampedReveal).toInt().coerceIn(lineStart, lineEnd)
-        val fraction = (clampedReveal - lowerOffset).coerceIn(0f, 1f)
-        val lowerCursor = layout.getCursorRect(lowerOffset)
-        val upperCursor = layout.getCursorRect((lowerOffset + 1).coerceAtMost(lineEnd))
-        val lowerBoundary = if (isRtl) lowerCursor.right else lowerCursor.left
-        val upperBoundary = if (isRtl) upperCursor.right else upperCursor.left
-        val boundary = lowerBoundary + (upperBoundary - lowerBoundary) * fraction
-
-        if (isRtl) {
-            path.addRect(
-                Rect(
-                    boundary.coerceIn(lineLeft, lineRight),
-                    lineTop,
-                    lineRight,
-                    lineBottom,
-                ),
-            )
-        } else {
-            path.addRect(
-                Rect(
-                    lineLeft,
-                    lineTop,
-                    boundary.coerceIn(lineLeft, lineRight),
-                    lineBottom,
-                ),
-            )
-        }
-    }
-
-    return path
 }
 
 private fun formatTime(timeMs: Long): String {

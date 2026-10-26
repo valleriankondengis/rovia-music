@@ -175,9 +175,13 @@ object EmbeddedLyricsReader {
                     .map(String::trim)
                     .filter(String::isNotBlank)
                     .forEach { line ->
-                        val cleanedLine = stripSingerPrefix(line)
+                        val (singerId, cleanedLine) = parseSingerPrefix(line)
                         if (cleanedLine.isNotBlank()) {
-                            timedTexts += TimedText(cleanedLine, timestampMs)
+                            timedTexts += TimedText(
+                                text = cleanedLine,
+                                timestampMs = timestampMs,
+                                singerId = singerId,
+                            )
                         }
                     }
             }
@@ -195,6 +199,7 @@ object EmbeddedLyricsReader {
         val lines = mutableListOf<LyricLine>()
         var words = mutableListOf<LyricWord>()
         var lineStartMs = 0L
+        var lineSingerId: String? = null
         var previousTimestampMs: Long? = null
 
         fun flushLine() {
@@ -202,6 +207,7 @@ object EmbeddedLyricsReader {
                 lines += LyricLine(
                     startTimeMs = lineStartMs,
                     words = words.toList(),
+                    singerId = lineSingerId,
                 )
                 words = mutableListOf()
             }
@@ -212,12 +218,17 @@ object EmbeddedLyricsReader {
                 timedText.timestampMs - it
             }
 
-            if (words.isNotEmpty() && gap != null && gap > SYLT_LINE_GAP_MS) {
+            if (
+                words.isNotEmpty() &&
+                (timedText.singerId != lineSingerId ||
+                    (gap != null && gap > SYLT_LINE_GAP_MS))
+            ) {
                 flushLine()
             }
 
             if (words.isEmpty()) {
                 lineStartMs = timedText.timestampMs
+                lineSingerId = timedText.singerId
             }
 
             words += LyricWord(
@@ -258,40 +269,126 @@ object EmbeddedLyricsReader {
         text: String,
     ): SyncedLyrics? {
         val lines = mutableListOf<LyricLine>()
+        val backgroundLines = mutableListOf<LyricLine>()
 
         text.lineSequence().forEach { sourceLine ->
+            val backgroundPrefix = BACKGROUND_LINE_PREFIX_REGEX.find(sourceLine)
+            if (backgroundPrefix != null) {
+                val payload = sourceLine
+                    .substring(backgroundPrefix.range.last + 1)
+                    .substringBeforeLast("]")
+                    .trim()
+                val wordTimestamps = WORD_TIMESTAMP_REGEX.findAll(payload).toList()
+                if (wordTimestamps.isEmpty()) return@forEach
+
+                val startTimeMs = parseTimestamp(wordTimestamps.first())
+                val words = parseEnhancedWords(
+                    text = payload,
+                    fallbackTimestampMs = startTimeMs,
+                )
+                if (words.isEmpty()) return@forEach
+
+                val lastTimestamp = wordTimestamps.last()
+                val hasExplicitCueEnd = payload
+                    .substring(lastTimestamp.range.last + 1)
+                    .isBlank()
+                val explicitEndTimeMs = if (hasExplicitCueEnd) {
+                    parseTimestamp(lastTimestamp).takeIf { it > startTimeMs }
+                } else {
+                    null
+                }
+                val inferredEndTimeMs = inferCueEndTimeMs(
+                    words = words,
+                    startTimeMs = startTimeMs,
+                )
+
+                backgroundLines += LyricLine(
+                    startTimeMs = startTimeMs,
+                    words = words,
+                    isBackground = true,
+                    endTimeMs = explicitEndTimeMs ?: inferredEndTimeMs,
+                )
+                return@forEach
+            }
+
             val timestampMatches = LINE_TIMESTAMP_REGEX.findAll(sourceLine).toList()
             if (timestampMatches.isEmpty()) return@forEach
 
-            val lyricText = stripSingerPrefix(
-                LINE_TIMESTAMP_REGEX.replace(sourceLine, "").trim(),
-            )
+            val textAfterLineTimestamps =
+                LINE_TIMESTAMP_REGEX.replace(sourceLine, "").trim()
+            val (singerId, lyricText) = parseSingerPrefix(textAfterLineTimestamps)
             if (lyricText.isBlank()) return@forEach
 
             val words = parseEnhancedWords(
                 text = lyricText,
                 fallbackTimestampMs = parseTimestamp(timestampMatches.first()),
             )
+            val innerWordTimestamps = WORD_TIMESTAMP_REGEX.findAll(lyricText).toList()
+            val lastWordTimestamp = innerWordTimestamps.lastOrNull()
+            val hasExplicitWordEnd = lastWordTimestamp != null && lyricText
+                .substring(lastWordTimestamp.range.last + 1)
+                .isBlank()
+            val explicitWordEndMs = if (hasExplicitWordEnd) {
+                lastWordTimestamp.let(::parseTimestamp)
+            } else {
+                null
+            }
 
             timestampMatches.forEach { timestampMatch ->
                 val timestampMs = parseTimestamp(timestampMatch)
+                val adjustedWords = words.map { word ->
+                    if (WORD_TIMESTAMP_REGEX.containsMatchIn(lyricText)) {
+                        word
+                    } else {
+                        word.copy(startTimeMs = timestampMs)
+                    }
+                }
                 lines += LyricLine(
                     startTimeMs = timestampMs,
-                    words = words.map { word ->
-                        if (WORD_TIMESTAMP_REGEX.containsMatchIn(lyricText)) {
-                            word
-                        } else {
-                            word.copy(startTimeMs = timestampMs)
-                        }
-                    },
+                    words = adjustedWords,
+                    singerId = singerId,
+                    endTimeMs = explicitWordEndMs?.takeIf { it > timestampMs },
                 )
             }
         }
 
-        return lines
-            .takeIf { it.isNotEmpty() }
-            ?.sortedBy(LyricLine::startTimeMs)
-            ?.let(::SyncedLyrics)
+        val orderedLines = lines.sortedBy(LyricLine::startTimeMs)
+        if (orderedLines.isEmpty()) return null
+
+        val backgroundsByLineIndex = mutableMapOf<Int, MutableList<LyricLine>>()
+        backgroundLines.sortedBy(LyricLine::startTimeMs).forEach { background ->
+            // Keep a BG cue tied to the latest main lyric already underway at its start.
+            // This allows the next main line to begin while the previous BG is still active.
+            val parentIndex = orderedLines.indexOfLast { it.startTimeMs <= background.startTimeMs }
+                .let { index -> if (index >= 0) index else 0 }
+            backgroundsByLineIndex
+                .getOrPut(parentIndex) { mutableListOf() }
+                .add(background)
+        }
+
+        return SyncedLyrics(
+            lines = orderedLines.mapIndexed { index, line ->
+                line.copy(
+                    backgroundVocals = backgroundsByLineIndex[index]
+                        .orEmpty()
+                        .sortedBy(LyricLine::startTimeMs),
+                )
+            },
+        )
+    }
+
+    private fun inferCueEndTimeMs(
+        words: List<LyricWord>,
+        startTimeMs: Long,
+    ): Long {
+        val lastWord = words.lastOrNull() ?: return startTimeMs + 500L
+        val previousWord = words.getOrNull(words.lastIndex - 1)
+        val estimatedDuration = previousWord
+            ?.let { lastWord.startTimeMs - it.startTimeMs }
+            ?.takeIf { it > 0L }
+            ?.coerceIn(250L, 900L)
+            ?: 500L
+        return maxOf(startTimeMs + 1L, lastWord.startTimeMs + estimatedDuration)
     }
 
     private fun parseEnhancedWords(
@@ -345,8 +442,12 @@ object EmbeddedLyricsReader {
         }
     }
 
-    private fun stripSingerPrefix(text: String): String =
-        SINGER_PREFIX_REGEX.replaceFirst(text, "").trimStart()
+    private fun parseSingerPrefix(text: String): Pair<String?, String> {
+        val match = SINGER_PREFIX_REGEX.find(text) ?: return null to text.trimStart()
+        val rawId = match.groupValues[1].lowercase(Locale.ROOT)
+        val singerId = if (rawId.all(Char::isDigit)) "v$rawId" else rawId
+        return singerId to text.removeRange(match.range).trimStart()
+    }
 
     private fun parseTimestamp(
         match: MatchResult,
@@ -369,9 +470,9 @@ object EmbeddedLyricsReader {
     ): SyncedLyrics? {
         val lines = text.lineSequence()
             .map(String::trim)
-            .map(::stripSingerPrefix)
             .filter(String::isNotBlank)
-            .map { line ->
+            .map { sourceLine ->
+                val (singerId, line) = parseSingerPrefix(sourceLine)
                 LyricLine(
                     startTimeMs = 0L,
                     words = listOf(
@@ -380,6 +481,7 @@ object EmbeddedLyricsReader {
                             startTimeMs = 0L,
                         ),
                     ),
+                    singerId = singerId,
                 )
             }
             .toList()
@@ -473,13 +575,18 @@ object EmbeddedLyricsReader {
     private data class TimedText(
         val text: String,
         val timestampMs: Long,
+        val singerId: String? = null,
     )
 
     private val LINE_TIMESTAMP_REGEX = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?]""")
     private val WORD_TIMESTAMP_REGEX = Regex("""<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>""")
     private val WORD_TOKEN_REGEX = Regex("\\S+")
+    private val BACKGROUND_LINE_PREFIX_REGEX = Regex(
+        """^\s*\[\s*bg\s*:\s*""",
+        RegexOption.IGNORE_CASE,
+    )
     private val SINGER_PREFIX_REGEX = Regex(
-        """^\s*(?:v\d+|\d+|bg)\s*:\s*""",
+        """^\s*(v\d+|\d+)\s*:\s*""",
         RegexOption.IGNORE_CASE,
     )
     private val LYRICS_COMMENT_KEYS = setOf(
