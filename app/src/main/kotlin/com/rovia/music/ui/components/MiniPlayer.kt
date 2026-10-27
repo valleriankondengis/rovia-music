@@ -150,7 +150,7 @@ fun MiniPlayer(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = 12.dp,
+                    horizontal = 18.dp,
                     vertical = 4.dp,
                 )
                 .pointerInput(density) {
@@ -204,7 +204,7 @@ fun MiniPlayer(
                 ) {
                     Text(
                         text = displayTitle,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

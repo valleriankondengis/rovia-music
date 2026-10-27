@@ -48,7 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -247,10 +246,8 @@ fun AlbumPage(
                             Text(
                                 text = pageTitle,
                                 modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.headlineSmall.copy(
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 maxLines = 2,
@@ -260,9 +257,7 @@ fun AlbumPage(
                             Text(
                                 text = releaseArtist,
                                 modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 20.sp
-                                ),
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 maxLines = 2,
@@ -424,8 +419,8 @@ fun AlbumPage(
             TopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 10.dp),
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 title = {},
                 navigationIcon = {
                     FilledIconButton(
@@ -446,7 +441,8 @@ fun AlbumPage(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
-                )
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp),
             )
         }
     }

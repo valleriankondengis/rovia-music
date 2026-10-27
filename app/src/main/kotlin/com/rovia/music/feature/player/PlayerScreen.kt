@@ -52,20 +52,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -452,10 +451,8 @@ fun PlayerScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .basicMarquee(),
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
                                 softWrap = false,
@@ -476,10 +473,7 @@ fun PlayerScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .basicMarquee(),
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Medium,
-                                    ),
+                                    style = MaterialTheme.typography.bodyLarge,
                                     color = Color.White.copy(alpha = 0.7f),
                                     maxLines = 1,
                                     softWrap = false,
@@ -556,9 +550,7 @@ fun PlayerScreen(
                         )
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

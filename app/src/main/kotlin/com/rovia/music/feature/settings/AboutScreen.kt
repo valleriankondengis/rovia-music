@@ -72,7 +72,7 @@ fun AboutScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                modifier = Modifier.padding(horizontal = 10.dp),
+                modifier = Modifier.fillMaxWidth(),
                 title = {
                     Text(
                         text = stringResource(R.string.about_title),
@@ -94,6 +94,7 @@ fun AboutScreen(
                         )
                     }
                 },
+                contentPadding = PaddingValues(horizontal = 10.dp),
             )
         },
     ) { contentPadding ->

@@ -44,7 +44,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
@@ -67,7 +66,7 @@ import kotlin.coroutines.coroutineContext
 
 private val SearchNavigationBarHeight = 80.dp
 private val SearchMiniPlayerHeight = 80.dp
-private val SearchBarHorizontalPadding = 10.dp
+private val SearchBarHorizontalPadding = 18.dp
 private val SearchBarTopPadding = 8.dp
 private val SearchResultsSpacing = 12.dp
 private const val SearchDebounceMillis = 150L
@@ -460,8 +459,7 @@ fun SearchScreen(
                             ) {
                                 Text(
                                     text = "×",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontSize = 24.sp
+                                    style = MaterialTheme.typography.titleLarge
                                 )
                             }
                         }

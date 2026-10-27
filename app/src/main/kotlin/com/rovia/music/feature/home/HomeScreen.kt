@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -56,8 +57,7 @@ import kotlinx.coroutines.CancellationException
 private val HomeNavigationBarHeight = 80.dp
 private val HomeMiniPlayerHeight = 80.dp
 private val HomePreviewTrackHeight = 74.dp
-private val HomeCardHorizontalMargin = 16.dp
-private val HomeTopBarHorizontalPadding = 10.dp
+private val HomeCardHorizontalMargin = 18.dp
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -252,15 +252,14 @@ fun HomeScreen(
             },
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(
-                    horizontal = HomeTopBarHorizontalPadding
-                ),
+                .fillMaxWidth()
+                .statusBarsPadding(),
             windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent
-            )
+            ),
+            contentPadding = PaddingValues(horizontal = 10.dp),
         )
     }
 }
@@ -297,7 +296,8 @@ private fun RecentlyAddedCard(
                     horizontal = 20.dp,
                     vertical = 18.dp
                 ),
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
             )
 
             when {

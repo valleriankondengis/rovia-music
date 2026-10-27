@@ -10,10 +10,10 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -54,6 +56,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -155,7 +158,7 @@ internal fun AudioOutputIndicator(
     if (!enabled) return
 
     Box(modifier = modifier) {
-        Surface(
+        FilledTonalButton(
             onClick = { isBottomSheetVisible = true },
             modifier = Modifier
                 .width(AUDIO_OUTPUT_BUTTON_WIDTH)
@@ -164,45 +167,39 @@ internal fun AudioOutputIndicator(
                     contentDescription = buttonDescription
                 },
             enabled = enabled,
-            shape = RoundedCornerShape(18.dp),
-            color = buttonContainerColor,
-            contentColor = buttonContentColor,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
+            shape = CircleShape,
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = buttonContainerColor,
+                contentColor = buttonContentColor,
+            ),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        painter = if (outputState.isBluetoothConnected) buttonBluetoothIcon else buttonLocalDeviceIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = buttonContentColor,
-                    )
-                    Text(
-                        text = outputLabel,
-                        modifier = Modifier
-                            .width(92.dp)
-                            .basicMarquee(
-                                iterations = Int.MAX_VALUE,
-                                initialDelayMillis = 900,
-                                repeatDelayMillis = 900,
-                                velocity = 35.dp,
-                            ),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colorScheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                Icon(
+                    painter = if (outputState.isBluetoothConnected) buttonBluetoothIcon else buttonLocalDeviceIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = outputLabel,
+                    modifier = Modifier
+                        .weight(1f)
+                        .basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            initialDelayMillis = 900,
+                            repeatDelayMillis = 900,
+                            velocity = 35.dp,
+                        ),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
@@ -222,12 +219,12 @@ internal fun AudioOutputIndicator(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Text(
                     text = sheetTitle,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = colorScheme.onSurface,
                 )
 
@@ -277,7 +274,7 @@ internal fun AudioOutputIndicator(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = mediaVolumeLabel,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = colorScheme.onSurface,
                     )
 

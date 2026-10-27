@@ -256,8 +256,8 @@ fun ArtistPage(
             TopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 10.dp),
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 title = {},
                 navigationIcon = {
                     FilledIconButton(
@@ -278,7 +278,8 @@ fun ArtistPage(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
-                )
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp),
             )
         }
     }
@@ -354,7 +355,7 @@ private fun ArtistHeroHeader(
         ) {
             Text(
                 text = artistName,
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 2,
@@ -366,7 +367,7 @@ private fun ArtistHeroHeader(
                     trackCount,
                     trackCount
                 ),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.82f)
             )
             Button(
@@ -394,8 +395,8 @@ private fun ArtistCarouselSection(
         Text(
             text = title,
             modifier = Modifier.padding(horizontal = 18.dp),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         content()

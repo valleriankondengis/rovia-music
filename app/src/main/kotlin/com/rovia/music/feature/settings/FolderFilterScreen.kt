@@ -160,7 +160,7 @@ fun FolderFilterScreen(
         modifier = modifier.fillMaxSize(),
     ) {
         TopAppBar(
-            modifier = Modifier.padding(horizontal = 10.dp),
+            modifier = Modifier.fillMaxWidth(),
             title = {
                 Text(
                     text = stringResource(R.string.folder_filter_title),
@@ -207,6 +207,7 @@ fun FolderFilterScreen(
                     )
                 }
             },
+            contentPadding = PaddingValues(horizontal = 10.dp),
         )
 
         Text(
@@ -220,9 +221,9 @@ fun FolderFilterScreen(
             ),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(
-                start = 20.dp,
+                start = 18.dp,
                 top = 8.dp,
-                end = 20.dp,
+                end = 18.dp,
             ),
         )
 

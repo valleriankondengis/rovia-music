@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
 import com.rovia.music.playback.controller.PlaybackQueueState
@@ -77,7 +78,7 @@ internal fun QueueSheet(
             Text(
                 text = stringResource(R.string.queue_sheet_title),
                 modifier = Modifier.padding(horizontal = 18.dp),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
 

@@ -115,8 +115,6 @@ private const val LINE_STAGGER_FRACTION = 0.06f
 
 private const val LYRIC_FONT_SIZE_SP = 34
 private const val LYRIC_LINE_HEIGHT_SP = 41
-private const val PLAYER_PREVIEW_FONT_SIZE_SP = 15
-private const val PLAYER_PREVIEW_LINE_HEIGHT_SP = 19
 private const val STATIC_LYRIC_FONT_SIZE_SP = 30
 private const val STATIC_LYRIC_LINE_HEIGHT_SP = 38
 private const val LYRIC_TOP_PADDING_DP = 32
@@ -1004,29 +1002,34 @@ private fun LyricLineContent(
         label = "lyric-line-color",
     )
 
+    val lyricTextAlign =
+        if (alignment == AbsoluteAlignment.Right) TextAlign.Right
+        else TextAlign.Left
+
     val style =
-        MaterialTheme.typography.titleLarge.copy(
-            fontSize = when {
-                compactPreview -> PLAYER_PREVIEW_FONT_SIZE_SP.sp
-                isBackground -> BACKGROUND_VOCAL_FONT_SIZE_SP.sp
-                else -> LYRIC_FONT_SIZE_SP.sp
-            },
-            lineHeight = when {
-                compactPreview -> PLAYER_PREVIEW_LINE_HEIGHT_SP.sp
-                isBackground -> BACKGROUND_VOCAL_LINE_HEIGHT_SP.sp
-                else -> LYRIC_LINE_HEIGHT_SP.sp
-            },
-            fontWeight = when {
-                compactPreview -> FontWeight.Medium
-                isBackground -> FontWeight.SemiBold
-                else -> FontWeight.Black
-            },
-            // Align the paragraph itself as well as its outer container. This
-            // is essential when a long lyric wraps onto multiple visual lines.
-            textAlign =
-                if (alignment == AbsoluteAlignment.Right) TextAlign.Right
-                else TextAlign.Left,
-        )
+        if (compactPreview) {
+            MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Medium,
+                textAlign = lyricTextAlign,
+            )
+        } else {
+            MaterialTheme.typography.titleLarge.copy(
+                fontSize = if (isBackground) {
+                    BACKGROUND_VOCAL_FONT_SIZE_SP.sp
+                } else {
+                    LYRIC_FONT_SIZE_SP.sp
+                },
+                lineHeight = if (isBackground) {
+                    BACKGROUND_VOCAL_LINE_HEIGHT_SP.sp
+                } else {
+                    LYRIC_LINE_HEIGHT_SP.sp
+                },
+                fontWeight = if (isBackground) FontWeight.SemiBold else FontWeight.Black,
+                // Align the paragraph and its outer container together so wrapped lyrics
+                // remain aligned with the selected singer lane.
+                textAlign = lyricTextAlign,
+            )
+        }
 
     val wordOffsets =
         remember(line) {

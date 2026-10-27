@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,7 +43,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
@@ -159,9 +159,8 @@ fun PlayerLyricScreen(
                                 text = title
                                     ?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.player_unknown_track),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -171,10 +170,8 @@ fun PlayerLyricScreen(
                                 text = artist
                                     ?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.player_unknown_artist),
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 13.sp,
-                                ),
-                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -197,13 +194,14 @@ fun PlayerLyricScreen(
                     }
                 },
                 modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(horizontal = 10.dp),
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent,
                 ),
+                contentPadding = PaddingValues(horizontal = 10.dp),
             )
 
             when {
@@ -252,7 +250,7 @@ fun PlayerLyricScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .padding(horizontal = 24.dp),
+                                .padding(horizontal = 18.dp),
                             isPlaying = isPlaying,
                         )
                     }

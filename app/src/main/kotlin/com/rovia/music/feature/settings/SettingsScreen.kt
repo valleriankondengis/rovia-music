@@ -67,7 +67,7 @@ fun SettingsScreen(
         modifier = modifier.fillMaxSize(),
     ) {
         TopAppBar(
-            modifier = Modifier.padding(horizontal = 10.dp),
+            modifier = Modifier.fillMaxWidth(),
             title = {
                 Text(
                     text = stringResource(R.string.settings_title),
@@ -92,6 +92,7 @@ fun SettingsScreen(
                     )
                 }
             },
+            contentPadding = PaddingValues(horizontal = 10.dp),
         )
 
         LazyColumn(
