@@ -15,6 +15,9 @@
     <string name="search_hint">Cari</string>
     <string name="search_clear">Hapus pencarian</string>
     <string name="search_no_results">Tidak ada hasil</string>
+    <string name="search_section_songs">Lagu</string>
+    <string name="search_section_artists">Artis</string>
+    <string name="search_section_albums">Album</string>
 
     <string name="library_title">Pustaka</string>
     <string name="library_loading">Memuat musik…</string>

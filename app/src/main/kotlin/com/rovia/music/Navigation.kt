@@ -81,21 +81,34 @@ private data object SearchDestination : NavKey
 private data object LibraryDestination : NavKey
 
 @Serializable
-private data class ArtistDestination(val artistName: String) : NavKey
+private data class ArtistDestination(
+    val artistName: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
 
 @Serializable
-private data class SingleDestination(val releaseKey: String) : NavKey
+private data class SingleDestination(
+    val releaseKey: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
 
 @Serializable
-private data class AlbumDestination(val releaseKey: String) : NavKey
+private data class AlbumDestination(
+    val releaseKey: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
 
 @Serializable
-private data class GenreDestination(val genreKey: String) : NavKey
+private data class GenreDestination(
+    val genreKey: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
 
 @Serializable
 private data class ArtistGenreDestination(
     val artistName: String,
     val genreKey: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
 ) : NavKey
 
 @Serializable
@@ -256,6 +269,24 @@ fun Navigation(appContainer: AppContainer) {
                             destination = SettingsDestination(TopLevelSection.SEARCH),
                         )
                     },
+                    onOpenArtist = { artistName ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.SEARCH,
+                            destination = ArtistDestination(
+                                artistName = artistName,
+                                owner = TopLevelSection.SEARCH,
+                            ),
+                        )
+                    },
+                    onOpenAlbum = { releaseKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.SEARCH,
+                            destination = AlbumDestination(
+                                releaseKey = releaseKey,
+                                owner = TopLevelSection.SEARCH,
+                            ),
+                        )
+                    },
                 )
             }
         }
@@ -311,26 +342,33 @@ fun Navigation(appContainer: AppContainer) {
                     tracks = catalog.tracks,
                     playbackController = appContainer.playbackController,
                     onBack = {
-                        navigationState.goBack(TopLevelSection.LIBRARY)
+                        navigationState.goBack(destination.owner)
                     },
                     onOpenSingle = { releaseKey ->
                         navigationState.navigateWithin(
-                            owner = TopLevelSection.LIBRARY,
-                            destination = SingleDestination(releaseKey),
+                            owner = destination.owner,
+                            destination = SingleDestination(
+                                releaseKey = releaseKey,
+                                owner = destination.owner,
+                            ),
                         )
                     },
                     onOpenAlbum = { releaseKey ->
                         navigationState.navigateWithin(
-                            owner = TopLevelSection.LIBRARY,
-                            destination = AlbumDestination(releaseKey),
+                            owner = destination.owner,
+                            destination = AlbumDestination(
+                                releaseKey = releaseKey,
+                                owner = destination.owner,
+                            ),
                         )
                     },
                     onOpenGenre = { genreKey ->
                         navigationState.navigateWithin(
-                            owner = TopLevelSection.LIBRARY,
+                            owner = destination.owner,
                             destination = ArtistGenreDestination(
                                 artistName = destination.artistName,
                                 genreKey = genreKey,
+                                owner = destination.owner,
                             ),
                         )
                     },
@@ -351,7 +389,7 @@ fun Navigation(appContainer: AppContainer) {
                     catalogTracks = catalog.tracks,
                     playbackController = appContainer.playbackController,
                     onBack = {
-                        navigationState.goBack(TopLevelSection.LIBRARY)
+                        navigationState.goBack(destination.owner)
                     },
                 )
             }
@@ -369,7 +407,7 @@ fun Navigation(appContainer: AppContainer) {
                     catalogTracks = catalog.tracks,
                     playbackController = appContainer.playbackController,
                     onBack = {
-                        navigationState.goBack(TopLevelSection.LIBRARY)
+                        navigationState.goBack(destination.owner)
                     },
                 )
             }
@@ -387,7 +425,7 @@ fun Navigation(appContainer: AppContainer) {
                     catalogTracks = catalog.tracks,
                     playbackController = appContainer.playbackController,
                     onBack = {
-                        navigationState.goBack(TopLevelSection.LIBRARY)
+                        navigationState.goBack(destination.owner)
                     },
                 )
             }
@@ -406,7 +444,7 @@ fun Navigation(appContainer: AppContainer) {
                     catalogTracks = catalog.tracks,
                     playbackController = appContainer.playbackController,
                     onBack = {
-                        navigationState.goBack(TopLevelSection.LIBRARY)
+                        navigationState.goBack(destination.owner)
                     },
                 )
             }
