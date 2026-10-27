@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.database.ContentObserver
 import android.net.Uri
+import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -24,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Comparator
 import java.util.Locale
 
@@ -43,6 +46,32 @@ class MediaStoreAudioRepository(
     private data class GenreRecord(
         val id: Long,
         val name: String,
+    )
+
+    private data class EmbeddedTrackMetadata(
+        val releaseDate: String? = null,
+        val metadataDateEpochMillis: Long? = null,
+        val inferredDateEpochMillis: Long? = null,
+        val releaseYear: Int? = null,
+        val albumArtist: String? = null,
+        val cdTrackNumber: String? = null,
+        val trackNumber: Int? = null,
+        val discNumber: Int? = null,
+        val compilation: String? = null,
+        val genre: String? = null,
+        val composer: String? = null,
+        val author: String? = null,
+        val writer: String? = null,
+        val mimeType: String? = null,
+        val sampleRateHz: Int? = null,
+        val bitsPerSample: Int? = null,
+        val bitrateBps: Int? = null,
+    )
+
+    private data class ParsedMetadataDate(
+        val year: Int,
+        val metadataDateEpochMillis: Long?,
+        val inferredDateEpochMillis: Long?,
     )
 
     private val collectionUri: Uri = MediaStore.Audio.Media.getContentUri(
@@ -177,6 +206,14 @@ class MediaStoreAudioRepository(
         return if (limit == null || limit < 0) tracks else tracks.take(limit)
     }
 
+    suspend fun loadTrackMetadata(track: LocalAudioTrack): LocalAudioTrack =
+        withContext(Dispatchers.IO) {
+            applyEmbeddedMetadata(
+                track = track,
+                metadata = readEmbeddedMetadata(track.uri),
+            )
+        }
+
     private fun ensureContentObserverRegistered() {
         synchronized(observerLock) {
             if (observerRegistered) return
@@ -225,6 +262,26 @@ class MediaStoreAudioRepository(
             MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.AudioColumns.COMPOSER,
+            MediaStore.Audio.AudioColumns.TRACK,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.VOLUME_NAME,
+        )
+
+        val fallbackProjection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.ALBUM_ARTIST,
+            MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.RELATIVE_PATH,
         )
@@ -232,13 +289,27 @@ class MediaStoreAudioRepository(
         val selection =
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND " +
                 "${MediaStore.Audio.Media.DURATION} > 0"
+        val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
-        val cursor = contentResolver.query(
+        val extendedCursor = try {
+            contentResolver.query(
+                collectionUri,
+                projection,
+                selection,
+                null,
+                sortOrder,
+            )
+        } catch (exception: Exception) {
+            Log.w(TAG, "Extended MediaStore projection failed; using basic columns", exception)
+            null
+        }
+
+        val cursor = extendedCursor ?: contentResolver.query(
             collectionUri,
-            projection,
+            fallbackProjection,
             selection,
             null,
-            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC",
+            sortOrder,
         ) ?: return@withContext emptyList()
 
         val rawTracks = cursor.use { result ->
@@ -256,11 +327,16 @@ class MediaStoreAudioRepository(
             val albumIdColumn = result.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
             val albumArtistColumn = result.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
             val releaseYearColumn = result.getColumnIndex(MediaStore.Audio.Media.YEAR)
+            val composerColumn = result.getColumnIndex(MediaStore.Audio.AudioColumns.COMPOSER)
+            val trackNumberColumn = result.getColumnIndex(MediaStore.Audio.AudioColumns.TRACK)
+            val displayNameColumn = result.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+            val fileSizeColumn = result.getColumnIndex(MediaStore.MediaColumns.SIZE)
+            val mimeTypeColumn = result.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+            val volumeNameColumn = result.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
 
             buildList {
                 while (result.moveToNext()) {
                     val id = result.getLong(idColumn)
-
                     val albumId = if (
                         albumIdColumn >= 0 && !result.isNull(albumIdColumn)
                     ) {
@@ -268,13 +344,7 @@ class MediaStoreAudioRepository(
                     } else {
                         null
                     }
-
-                    val albumArtist = if (albumArtistColumn >= 0) {
-                        result.getString(albumArtistColumn)?.takeIf(String::isNotBlank)
-                    } else {
-                        null
-                    }
-
+                    val albumArtist = result.getStringOrNull(albumArtistColumn)
                     val releaseYear = if (
                         releaseYearColumn >= 0 && !result.isNull(releaseYearColumn)
                     ) {
@@ -282,11 +352,22 @@ class MediaStoreAudioRepository(
                     } else {
                         null
                     }
+                    val mediaStoreTrackNumber = result.getLongOrNull(trackNumberColumn)
+                        ?.takeIf { it > 0L && it <= Int.MAX_VALUE }
+                        ?.toInt()
+                    val trackNumber = mediaStoreTrackNumber
+                        ?.let { if (it >= 1000) it % 1000 else it }
+                        ?.takeIf { it > 0 }
+                    val discNumber = mediaStoreTrackNumber
+                        ?.takeIf { it >= 1000 }
+                        ?.div(1000)
+                        ?.takeIf { it > 0 }
+                    val uri = ContentUris.withAppendedId(collectionUri, id)
 
                     add(
                         LocalAudioTrack(
                             id = id,
-                            uri = ContentUris.withAppendedId(collectionUri, id),
+                            uri = uri,
                             title = result.getString(titleColumn)
                                 ?.takeIf(String::isNotBlank),
                             artist = result.getString(artistColumn)
@@ -302,6 +383,16 @@ class MediaStoreAudioRepository(
                             albumId = albumId,
                             albumArtist = albumArtist,
                             releaseYear = releaseYear,
+                            inferredDateEpochMillis = yearStartEpochMillis(releaseYear),
+                            trackNumber = trackNumber,
+                            discNumber = discNumber,
+                            cdTrackNumber = mediaStoreTrackNumber?.toString(),
+                            composer = result.getStringOrNull(composerColumn),
+                            mimeType = result.getStringOrNull(mimeTypeColumn),
+                            displayName = result.getStringOrNull(displayNameColumn),
+                            fileSizeBytes = result.getLongOrNull(fileSizeColumn)
+                                ?.takeIf { it > 0L },
+                            volumeName = result.getStringOrNull(volumeNameColumn),
                         ),
                     )
                 }
@@ -315,6 +406,157 @@ class MediaStoreAudioRepository(
             track.copy(
                 genres = genresByAudioId[track.id].orEmpty(),
             )
+        }
+    }
+
+    private fun applyEmbeddedMetadata(
+        track: LocalAudioTrack,
+        metadata: EmbeddedTrackMetadata,
+    ): LocalAudioTrack {
+        val releaseYear = track.releaseYear ?: metadata.releaseYear
+        val metadataGenres = metadata.genre
+            ?.split(',', ';')
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.distinctBy { it.lowercase(Locale.ROOT) }
+            .orEmpty()
+
+        return track.copy(
+            albumArtist = track.albumArtist ?: metadata.albumArtist,
+            releaseYear = releaseYear,
+            releaseDate = metadata.releaseDate ?: track.releaseDate,
+            metadataDateEpochMillis = metadata.metadataDateEpochMillis
+                ?: track.metadataDateEpochMillis,
+            inferredDateEpochMillis = metadata.inferredDateEpochMillis
+                ?: track.inferredDateEpochMillis
+                ?: yearStartEpochMillis(releaseYear),
+            genres = track.genres.ifEmpty { metadataGenres },
+            trackNumber = metadata.trackNumber ?: track.trackNumber,
+            discNumber = metadata.discNumber ?: track.discNumber,
+            cdTrackNumber = metadata.cdTrackNumber ?: track.cdTrackNumber,
+            compilation = metadata.compilation ?: track.compilation,
+            composer = track.composer ?: metadata.composer,
+            author = metadata.author ?: track.author,
+            writer = metadata.writer ?: track.writer,
+            mimeType = track.mimeType ?: metadata.mimeType,
+            sampleRateHz = metadata.sampleRateHz ?: track.sampleRateHz,
+            bitsPerSample = metadata.bitsPerSample ?: track.bitsPerSample,
+            bitrateBps = metadata.bitrateBps ?: track.bitrateBps,
+        )
+    }
+
+    private fun readEmbeddedMetadata(uri: Uri): EmbeddedTrackMetadata {
+        val retriever = MediaMetadataRetriever()
+
+        return try {
+            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                retriever.setDataSource(descriptor.fileDescriptor)
+
+                fun value(key: Int): String? = retriever.extractMetadata(key)
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+
+                val releaseDate = value(MediaMetadataRetriever.METADATA_KEY_DATE)
+                val parsedDate = parseMetadataDate(releaseDate)
+                val metadataYear = value(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                    ?.toIntOrNull()
+                    ?.takeIf { it in 1000..9999 }
+                val releaseYear = parsedDate?.year ?: metadataYear
+                val cdTrackNumber = value(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                val mediaTrackNumber = parsePositiveTrackNumber(cdTrackNumber)
+                val discNumber = value(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+                    ?.substringBefore('/')
+                    ?.toIntOrNull()
+                    ?.takeIf { it > 0 }
+
+                EmbeddedTrackMetadata(
+                    releaseDate = releaseDate,
+                    metadataDateEpochMillis = parsedDate?.metadataDateEpochMillis,
+                    inferredDateEpochMillis = parsedDate?.inferredDateEpochMillis
+                        ?: if (parsedDate == null) yearStartEpochMillis(releaseYear) else null,
+                    releaseYear = releaseYear,
+                    albumArtist = value(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST),
+                    cdTrackNumber = cdTrackNumber,
+                    trackNumber = mediaTrackNumber,
+                    discNumber = discNumber,
+                    compilation = value(MediaMetadataRetriever.METADATA_KEY_COMPILATION),
+                    genre = value(MediaMetadataRetriever.METADATA_KEY_GENRE),
+                    composer = value(MediaMetadataRetriever.METADATA_KEY_COMPOSER),
+                    author = value(MediaMetadataRetriever.METADATA_KEY_AUTHOR),
+                    writer = value(MediaMetadataRetriever.METADATA_KEY_WRITER),
+                    mimeType = value(MediaMetadataRetriever.METADATA_KEY_MIMETYPE),
+                    sampleRateHz = value(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                        ?.toIntOrNull()
+                        ?.takeIf { it > 0 },
+                    bitsPerSample = value(MediaMetadataRetriever.METADATA_KEY_BITS_PER_SAMPLE)
+                        ?.toIntOrNull()
+                        ?.takeIf { it > 0 },
+                    bitrateBps = value(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                        ?.toIntOrNull()
+                        ?.takeIf { it > 0 },
+                )
+            } ?: EmbeddedTrackMetadata()
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to read embedded metadata for $uri", exception)
+            EmbeddedTrackMetadata()
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun parseMetadataDate(value: String?): ParsedMetadataDate? {
+        val text = value?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val match = Regex("""^(\d{4})(?:[-/.](\d{1,2}))?(?:[-/.](\d{1,2}))?.*$""")
+            .matchEntire(text) ?: return null
+        val year = match.groupValues[1].toIntOrNull()
+            ?.takeIf { it in 1000..9999 } ?: return null
+        val month = match.groupValues[2].takeIf(String::isNotEmpty)?.toIntOrNull()
+        val day = match.groupValues[3].takeIf(String::isNotEmpty)?.toIntOrNull()
+
+        return try {
+            val normalizedDate = when {
+                month == null -> LocalDate.of(year, 1, 1)
+                day == null -> LocalDate.of(year, month, 1)
+                else -> LocalDate.of(year, month, day)
+            }
+            val timestamp = normalizedDate
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+            val yearStart = LocalDate.of(year, 1, 1)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+
+            ParsedMetadataDate(
+                year = year,
+                metadataDateEpochMillis = timestamp.takeIf { month != null },
+                inferredDateEpochMillis = yearStart.takeIf { month == null },
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parsePositiveTrackNumber(value: String?): Int? = value
+        ?.substringBefore('/')
+        ?.trim()
+        ?.toIntOrNull()
+        ?.takeIf { it > 0 }
+
+    private fun yearStartEpochMillis(year: Int?): Long? {
+        if (year == null || year !in 1000..9999) return null
+
+        return try {
+            LocalDate.of(year, 1, 1)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -487,4 +729,13 @@ class MediaStoreAudioRepository(
         const val TAG = "MediaStoreAudioRepo"
         const val CONTENT_CHANGE_DEBOUNCE_MS = 350L
     }
+}
+private fun android.database.Cursor.getStringOrNull(columnIndex: Int): String? {
+    if (columnIndex < 0 || isNull(columnIndex)) return null
+    return getString(columnIndex)?.takeIf(String::isNotBlank)
+}
+
+private fun android.database.Cursor.getLongOrNull(columnIndex: Int): Long? {
+    if (columnIndex < 0 || isNull(columnIndex)) return null
+    return getLong(columnIndex)
 }

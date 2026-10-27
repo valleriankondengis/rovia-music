@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,10 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -51,6 +54,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -77,7 +81,7 @@ private data class ArtistGenreCollection(
     val tracks: List<LocalAudioTrack>
 ) {
     val artworkUri: String?
-        get() = tracks.firstOrNull()?.uri?.toString()
+        get() = latestArtworkTrack(tracks)?.uri?.toString()
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -111,13 +115,17 @@ fun ArtistPage(
         }
     }
     val singlesAndEps = remember(artistReleases) {
-        artistReleases.filter { release ->
-            release.type == AlbumReleaseType.SINGLE ||
-                release.type == AlbumReleaseType.EP
-        }
+        artistReleases
+            .filter { release ->
+                release.type == AlbumReleaseType.SINGLE ||
+                    release.type == AlbumReleaseType.EP
+            }
+            .sortedWith(Comparator(::compareReleaseRecency))
     }
     val albums = remember(artistReleases) {
-        artistReleases.filter { it.type == AlbumReleaseType.ALBUM }
+        artistReleases
+            .filter { it.type == AlbumReleaseType.ALBUM }
+            .sortedWith(Comparator(::compareReleaseRecency))
     }
     val genres = remember(artistTracks) {
         buildArtistGenres(artistTracks)
@@ -127,11 +135,12 @@ fun ArtistPage(
         .collectAsStateWithLifecycle()
     val currentTrackId = mediaController?.currentMediaItem?.mediaId
 
-    val heroArtworkUri = remember(artistTracks) {
-        (
-            artistTracks.firstOrNull { !it.album.isNullOrBlank() }
-                ?: artistTracks.firstOrNull()
-        )?.uri?.toString()
+    val heroArtworkUri = remember(artistTracks, artistReleases) {
+        val artistReleaseTracks = artistReleases.flatMap { it.tracks }
+        val artworkCandidates = (artistReleaseTracks + artistTracks)
+            .distinctBy { it.uri }
+
+        latestArtworkTrack(artworkCandidates)?.uri?.toString()
     }
 
     val navigationBarBottomInset = WindowInsets.navigationBars
@@ -144,6 +153,9 @@ fun ArtistPage(
         val heroHeight = (maxHeight * 0.72f)
             .coerceAtLeast(380.dp)
             .coerceAtMost(maxHeight)
+        val playButtonWidth = (maxWidth * 0.66f)
+            .coerceAtMost(360.dp)
+            .coerceAtLeast(220.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
             // Fixed back layer: only the blurred artwork remains when the sharp hero scrolls away.
@@ -163,6 +175,7 @@ fun ArtistPage(
                         artistName = artistName,
                         artworkUri = heroArtworkUri,
                         heroHeight = heroHeight,
+                        playButtonWidth = playButtonWidth,
                         trackCount = artistTracks.size,
                         onPlay = {
                             if (artistTracks.isNotEmpty()) {
@@ -290,6 +303,7 @@ private fun ArtistHeroHeader(
     artistName: String,
     artworkUri: String?,
     heroHeight: Dp,
+    playButtonWidth: Dp,
     trackCount: Int,
     onPlay: () -> Unit
 ) {
@@ -348,16 +362,19 @@ private fun ArtistHeroHeader(
 
         Column(
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = artistName,
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
+                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -367,15 +384,35 @@ private fun ArtistHeroHeader(
                     trackCount,
                     trackCount
                 ),
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.82f)
+                color = Color.White.copy(alpha = 0.82f),
+                textAlign = TextAlign.Center
             )
             Button(
                 onClick = onPlay,
                 enabled = trackCount > 0,
-                contentPadding = PaddingValues(horizontal = 30.dp, vertical = 12.dp)
+                modifier = Modifier
+                    .width(playButtonWidth)
+                    .height(64.dp),
+                shape = RoundedCornerShape(percent = 50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                contentPadding = PaddingValues(horizontal = 28.dp)
             ) {
-                Text(stringResource(R.string.player_play))
+                Icon(
+                    painter = painterResource(R.drawable.ic_play),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.player_play),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -435,10 +472,14 @@ private fun ArtistReleaseCarouselItem(
         releaseTypeLabel
     }
 
+    val artworkUri = remember(release) {
+        latestArtworkTrack(release.tracks)?.uri?.toString() ?: release.artworkUri
+    }
+
     ArtistCarouselItem(
         title = release.title,
         supportingText = supportingText,
-        artworkUri = release.artworkUri,
+        artworkUri = artworkUri,
         fallbackText = release.title,
         contentDescription = release.title,
         isCurrent = isCurrent,
@@ -516,6 +557,68 @@ private fun ArtistCarouselItem(
             softWrap = false,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+private fun latestArtworkTrack(
+    tracks: List<LocalAudioTrack>
+): LocalAudioTrack? {
+    if (tracks.isEmpty()) return null
+
+    val tracksWithReleaseMetadata = tracks.filter {
+        it.releaseSortTimestamp() != null
+    }
+    val candidates = tracksWithReleaseMetadata.ifEmpty { tracks }
+
+    return candidates.maxWithOrNull(
+        compareBy<LocalAudioTrack> { it.releaseSortTimestamp() ?: Long.MIN_VALUE }
+            .thenBy { it.dateAddedSeconds }
+            .thenBy { it.dateModifiedSeconds }
+            .thenBy { it.id }
+    )
+}
+
+private fun compareReleaseRecency(
+    left: AlbumRelease,
+    right: AlbumRelease,
+): Int {
+    val leftTrack = latestArtworkTrack(left.tracks)
+    val rightTrack = latestArtworkTrack(right.tracks)
+    val leftTimestamp = leftTrack?.releaseSortTimestamp()
+    val rightTimestamp = rightTrack?.releaseSortTimestamp()
+
+    if (leftTimestamp != null && rightTimestamp != null && leftTimestamp != rightTimestamp) {
+        return rightTimestamp.compareTo(leftTimestamp)
+    }
+    if (leftTimestamp != null && rightTimestamp == null) return -1
+    if (leftTimestamp == null && rightTimestamp != null) return 1
+
+    val addedOrder = (rightTrack?.dateAddedSeconds ?: 0L)
+        .compareTo(leftTrack?.dateAddedSeconds ?: 0L)
+    if (addedOrder != 0) return addedOrder
+
+    val modifiedOrder = (rightTrack?.dateModifiedSeconds ?: 0L)
+        .compareTo(leftTrack?.dateModifiedSeconds ?: 0L)
+    if (modifiedOrder != 0) return modifiedOrder
+
+    return String.CASE_INSENSITIVE_ORDER.compare(left.title, right.title)
+}
+
+private fun LocalAudioTrack.releaseSortTimestamp(): Long? =
+    metadataDateEpochMillis
+        ?: inferredDateEpochMillis
+        ?: releaseYear?.let(::yearStartEpochMillis)
+
+private fun yearStartEpochMillis(year: Int): Long? {
+    if (year !in 1000..9999) return null
+
+    return try {
+        java.time.LocalDate.of(year, 1, 1)
+            .atStartOfDay(java.time.ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
+    } catch (_: Exception) {
+        null
     }
 }
 
