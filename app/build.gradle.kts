@@ -8,7 +8,7 @@ android {
     namespace = "com.rovia.music"
 
     compileSdk = 37
-    compileSdkMinor = 0
+    compileSdkMinor = 1
 
     sourceSets {
         named("main") {

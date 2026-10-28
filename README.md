@@ -5,7 +5,7 @@ Rovia Music is a lightweight, native Kotlin and Jetpack Compose Android music pl
 ## Requirements
 
 - [Eclipse Temurin JDK 25 LTS](https://adoptium.net/temurin/releases/?version=25)
-- Android SDK Platform 37
+- Android SDK Platform 37.1
 - Git
 
 Rovia uses Gradle Wrapper to manage its Gradle version. A separate Gradle installation is not required.
@@ -29,7 +29,7 @@ javac -version
 
 Configure the Android SDK and its environment variables by following the [official Android command-line tools documentation](https://developer.android.com/tools).
 
-Install Android SDK Platform 37 and the SDK tools required by the project.
+Install Android SDK Platform 37.1 and the SDK tools required by the project. Compose UI `1.13.0-beta02` requires compiling against Android API 37.1 or later. The project uses API 37.1 for compilation while retaining target SDK 37.
 
 ### 3. Verify the Build Toolchain
 
@@ -78,7 +78,7 @@ app/build/outputs/apk/debug/app-debug.apk
 | Android Gradle Plugin | 9.4.0 |
 | Gradle | 9.8.2 |
 | JDK | 25 LTS |
-| Compile SDK | 37 |
+| Compile SDK | 37.1 (`compileSdk = 37`, `compileSdkMinor = 1`) |
 | Minimum SDK | 33 |
 | Target SDK | 37 |
 | Application ID | `com.rovia.music` |
