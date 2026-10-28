@@ -68,6 +68,9 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.ArtworkBitmapLoader
+import com.rovia.music.ui.components.FadeScrim
+import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import java.text.Normalizer
 import java.util.Locale
 
@@ -166,7 +169,9 @@ fun ArtistPage(
             )
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .fadeScrimProgressiveBlur(withMiniPlayer = currentTrackId != null),
                 contentPadding = PaddingValues(bottom = reservedBottomSpace),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
@@ -264,6 +269,17 @@ fun ArtistPage(
                     }
                 }
             }
+
+            FadeScrim(
+                edge = FadeScrimEdge.Top,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+
+            FadeScrim(
+                edge = FadeScrimEdge.Bottom,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                withMiniPlayer = currentTrackId != null,
+            )
 
             // Match HomeRecentlyAddedScreen's TopAppBar/FilledIconButton sizing and colors.
             TopAppBar(

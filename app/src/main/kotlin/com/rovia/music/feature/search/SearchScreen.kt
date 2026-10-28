@@ -64,6 +64,7 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import java.util.Locale
 import java.util.WeakHashMap
@@ -292,7 +293,9 @@ fun SearchScreen(
             loadFailed = loadFailed,
             currentMediaId = currentMediaId,
             itemsEnabled = mediaController != null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
             contentInsetPadding = PaddingValues(
                 top = contentTopPadding,
                 bottom = contentBottomPadding
