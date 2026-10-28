@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,9 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -57,6 +53,8 @@ import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import java.text.Normalizer
 import java.util.Locale
 
@@ -153,6 +151,7 @@ fun GenrePage(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(top = contentTopPadding, bottom = contentBottomPadding)
                         .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
@@ -165,179 +164,125 @@ fun GenrePage(
                     )
                 }
             } else {
-                val trackColors = ListItemDefaults.segmentedColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    leadingContentColor = MaterialTheme.colorScheme.onSurface,
-                    trailingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedContentColor = MaterialTheme.colorScheme.onSurface,
-                    selectedLeadingContentColor = MaterialTheme.colorScheme.onSurface,
-                    selectedTrailingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedSupportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                TrackList(
+                    tracks = pageTracks,
+                    onTrackClick = { track, index ->
+                        val controller = mediaController
+                        if (controller != null) {
+                            if (currentMediaId == track.id.toString()) {
+                                if (controller.isPlaying) {
+                                    controller.pause()
+                                } else {
+                                    if (controller.playbackState == Player.STATE_ENDED) {
+                                        controller.seekToDefaultPosition()
+                                    }
+                                    controller.play()
+                                }
+                            } else {
+                                playbackController.playQueue(
+                                    tracks = pageTracks,
+                                    startIndex = index
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                    outerPadding = PaddingValues(
+                        top = contentTopPadding,
+                        bottom = contentBottomPadding
+                    ),
+                    horizontalPadding = 18.dp,
+                    verticalSpacing = 1.dp,
+                    currentTrackId = currentMediaId,
+                    itemsEnabled = mediaController != null,
+                    headerContent = {
+                        item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                AlbumArtwork(
+                                    artworkUri = artworkUri,
+                                    fallbackText = pageTitle,
+                                    contentDescription = pageTitle,
+                                    modifier = Modifier.size(artworkSize),
+                                    size = artworkSize,
+                                    shape = MaterialTheme.shapes.large
+                                )
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = contentTopPadding, bottom = contentBottomPadding),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
-                ) {
-                    item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            AlbumArtwork(
-                                artworkUri = artworkUri,
-                                fallbackText = pageTitle,
-                                contentDescription = pageTitle,
-                                modifier = Modifier.size(artworkSize),
-                                size = artworkSize,
-                                shape = MaterialTheme.shapes.large
-                            )
+                                Spacer(modifier = Modifier.height(18.dp))
 
-                            Spacer(modifier = Modifier.height(18.dp))
-
-                            Text(
-                                text = pageTitle,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            if (subtitleArtist != null) {
                                 Text(
-                                    text = subtitleArtist,
+                                    text = pageTitle,
                                     modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Spacer(modifier = Modifier.height(3.dp))
-                            }
 
-                            Text(
-                                text = trackCountLabel,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                                if (subtitleArtist != null) {
+                                    Text(
+                                        text = subtitleArtist,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                }
 
-                            Spacer(modifier = Modifier.height(22.dp))
-
-                            Button(
-                                onClick = {
-                                    if (mediaController != null) {
-                                        playbackController.playQueue(tracks = pageTracks, startIndex = 0)
-                                    }
-                                },
-                                enabled = mediaController != null && pageTracks.isNotEmpty(),
-                                modifier = Modifier.width(playButtonWidth).height(64.dp),
-                                shape = RoundedCornerShape(percent = 50),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                contentPadding = PaddingValues(horizontal = 28.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_play),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = stringResource(R.string.player_play),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = trackCountLabel,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                            }
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                                Spacer(modifier = Modifier.height(22.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (mediaController != null) {
+                                            playbackController.playQueue(tracks = pageTracks, startIndex = 0)
+                                        }
+                                    },
+                                    enabled = mediaController != null && pageTracks.isNotEmpty(),
+                                    modifier = Modifier.width(playButtonWidth).height(64.dp),
+                                    shape = RoundedCornerShape(percent = 50),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 28.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_play),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = stringResource(R.string.player_play),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(24.dp))
+                            }
                         }
                     }
-
-                    itemsIndexed(items = pageTracks, key = { _, track -> track.uri.toString() }) { index, track ->
-                        val title = track.title.orEmpty().trim()
-                            .ifBlank { stringResource(R.string.player_unknown_track) }
-                        val supportingText = track.artist.orEmpty().trim()
-                            .ifBlank { track.album.orEmpty().trim() }
-                            .ifBlank { stringResource(R.string.player_unknown_artist) }
-                        val artworkFallback = title.firstOrNull()?.uppercaseChar()?.toString() ?: "♪"
-
-                        SegmentedListItem(
-                            selected = currentMediaId == track.id.toString(),
-                            onClick = {
-                                val controller = mediaController
-                                if (controller != null) {
-                                    if (currentMediaId == track.id.toString()) {
-                                        if (controller.isPlaying) {
-                                            controller.pause()
-                                        } else {
-                                            if (controller.playbackState == Player.STATE_ENDED) {
-                                                controller.seekToDefaultPosition()
-                                            }
-                                            controller.play()
-                                        }
-                                    } else {
-                                        playbackController.playQueue(tracks = pageTracks, startIndex = index)
-                                    }
-                                }
-                            },
-                            enabled = mediaController != null,
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            shapes = ListItemDefaults.segmentedShapes(index = index, count = pageTracks.size),
-                            colors = trackColors,
-                            verticalAlignment = Alignment.CenterVertically,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            leadingContent = {
-                                AlbumArtwork(
-                                    artworkUri = track.uri.toString(),
-                                    fallbackText = artworkFallback,
-                                    contentDescription = title,
-                                    modifier = Modifier.size(56.dp),
-                                    size = 56.dp,
-                                    shape = MaterialTheme.shapes.medium
-                                )
-                            },
-                            content = {
-                                Text(
-                                    text = title,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            supportingContent = {
-                                Text(
-                                    text = supportingText,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            trailingContent = {
-                                Text(
-                                    text = formatGenreTrackDuration(track.durationMs),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        )
-                    }
-                }
+                )
             }
 
             FadeScrim(edge = FadeScrimEdge.Top, modifier = Modifier.align(Alignment.TopCenter))
@@ -378,8 +323,3 @@ fun GenrePage(
 
 private fun normalizeGenreKey(value: String): String =
     Normalizer.normalize(value.trim(), Normalizer.Form.NFC).lowercase(Locale.ROOT)
-
-private fun formatGenreTrackDuration(durationMs: Long): String {
-    val totalSeconds = durationMs.coerceAtLeast(0L) / 1000L
-    return String.format(Locale.getDefault(), "%d:%02d", totalSeconds / 60L, totalSeconds % 60L)
-}

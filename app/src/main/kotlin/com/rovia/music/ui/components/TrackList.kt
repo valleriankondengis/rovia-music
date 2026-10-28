@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,6 +44,7 @@ fun TrackList(
     itemsEnabled: Boolean = true,
     userScrollEnabled: Boolean = true,
     listState: LazyListState = rememberLazyListState(),
+    headerContent: (LazyListScope.() -> Unit)? = null,
 ) {
     val layoutDirection = LocalLayoutDirection.current
 
@@ -80,6 +82,7 @@ fun TrackList(
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
         userScrollEnabled = userScrollEnabled,
     ) {
+        headerContent?.invoke(this)
         itemsIndexed(
             items = tracks,
             key = { _, track -> track.uri.toString() },
