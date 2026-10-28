@@ -24,10 +24,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
@@ -47,7 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -65,6 +65,7 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import com.rovia.music.ui.components.TrackList
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
@@ -75,6 +76,10 @@ private val LibraryNavigationBarHeight = 80.dp
 private val MiniPlayerReservedHeight = 80.dp
 private val LibraryCategorySelectorHeight = 56.dp
 private val LibraryFolderHeaderHeight = 48.dp
+private val LibraryHeaderControlsTopSpacing = 4.dp
+private val LibraryCategoryContentSpacing = 12.dp
+private val LibraryCategoryBreadcrumbSpacing = 4.dp
+private val LibraryBreadcrumbContentSpacing = 12.dp
 
 private enum class LibraryCategory(
     @StringRes val labelResource: Int
@@ -172,7 +177,22 @@ fun LibraryScreen(
     val contentTopPadding =
         statusBarTopInset +
             TopAppBarDefaults.TopAppBarExpandedHeight +
-            12.dp
+            LibraryHeaderControlsTopSpacing
+
+    val categoryContentTopPadding =
+        contentTopPadding +
+            LibraryCategorySelectorHeight +
+            LibraryCategoryContentSpacing
+
+    val folderBreadcrumbTopPadding =
+        contentTopPadding +
+            LibraryCategorySelectorHeight +
+            LibraryCategoryBreadcrumbSpacing
+
+    val folderContentTopPadding =
+        folderBreadcrumbTopPadding +
+            LibraryFolderHeaderHeight +
+            LibraryBreadcrumbContentSpacing
 
     val miniPlayerBottomPadding = if (currentMediaId != null) {
         MiniPlayerReservedHeight
@@ -300,6 +320,12 @@ fun LibraryScreen(
         }
     }
 
+    val allSongsCategoryLabel = stringResource(LibraryCategory.ALL_SONGS.labelResource)
+    val artistsCategoryLabel = stringResource(LibraryCategory.ARTISTS.labelResource)
+    val albumsCategoryLabel = stringResource(LibraryCategory.ALBUMS.labelResource)
+    val genresCategoryLabel = stringResource(LibraryCategory.GENRES.labelResource)
+    val foldersCategoryLabel = stringResource(LibraryCategory.FOLDERS.labelResource)
+
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             !hasAudioPermission -> {
@@ -307,8 +333,9 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_no_tracks),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
-                            top = contentTopPadding + LibraryCategorySelectorHeight,
+                            top = categoryContentTopPadding,
                             bottom = contentBottomPadding
                         )
                 )
@@ -318,8 +345,9 @@ fun LibraryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
-                            top = contentTopPadding + LibraryCategorySelectorHeight,
+                            top = categoryContentTopPadding,
                             bottom = contentBottomPadding
                         ),
                     contentAlignment = Alignment.Center
@@ -333,8 +361,9 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_load_error),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
-                            top = contentTopPadding + LibraryCategorySelectorHeight,
+                            top = categoryContentTopPadding,
                             bottom = contentBottomPadding
                         ),
                     actionLabel = stringResource(R.string.library_retry),
@@ -349,8 +378,9 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_no_tracks),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
-                            top = contentTopPadding + LibraryCategorySelectorHeight,
+                            top = categoryContentTopPadding,
                             bottom = contentBottomPadding
                         )
                 )
@@ -366,13 +396,15 @@ fun LibraryScreen(
                             index = index
                         )
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
                     outerPadding = PaddingValues(
                         horizontal = 0.dp,
                         vertical = 1.dp
                     ),
                     contentInsetPadding = PaddingValues(
-                        top = contentTopPadding + LibraryCategorySelectorHeight,
+                        top = categoryContentTopPadding,
                         bottom = contentBottomPadding
                     ),
                     horizontalPadding = 18.dp,
@@ -388,16 +420,19 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_artists_empty),
                         modifier = Modifier
                             .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
-                                top = contentTopPadding + LibraryCategorySelectorHeight,
+                                top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
                             )
                     )
                 } else {
                     LibraryEntityList(
                         items = artistItems,
-                        modifier = Modifier.fillMaxSize(),
-                        contentTopPadding = contentTopPadding + LibraryCategorySelectorHeight,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenArtist
                     )
@@ -410,16 +445,19 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_albums_empty),
                         modifier = Modifier
                             .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
-                                top = contentTopPadding + LibraryCategorySelectorHeight,
+                                top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
                             )
                     )
                 } else {
                     LibraryEntityList(
                         items = albumItems,
-                        modifier = Modifier.fillMaxSize(),
-                        contentTopPadding = contentTopPadding + LibraryCategorySelectorHeight,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenAlbum
                     )
@@ -432,16 +470,19 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_genres_empty),
                         modifier = Modifier
                             .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
-                                top = contentTopPadding + LibraryCategorySelectorHeight,
+                                top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
                             )
                     )
                 } else {
                     LibraryEntityList(
                         items = genreItems,
-                        modifier = Modifier.fillMaxSize(),
-                        contentTopPadding = contentTopPadding + LibraryCategorySelectorHeight,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenGenre
                     )
@@ -454,8 +495,9 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_folders_empty),
                         modifier = Modifier
                             .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
-                                top = contentTopPadding + LibraryCategorySelectorHeight + LibraryFolderHeaderHeight,
+                                top = folderContentTopPadding,
                                 bottom = contentBottomPadding
                             )
                     )
@@ -463,8 +505,10 @@ fun LibraryScreen(
                     LibraryFolderContentList(
                         folderItems = folderItems,
                         tracks = selectedFolderTracks,
-                        modifier = Modifier.fillMaxSize(),
-                        contentTopPadding = contentTopPadding + LibraryCategorySelectorHeight + LibraryFolderHeaderHeight,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        contentTopPadding = folderContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         currentTrackId = currentMediaId,
                         itemsEnabled = mediaController != null,
@@ -502,19 +546,41 @@ fun LibraryScreen(
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            LibraryCategory.values().forEach { category ->
-                FilterChip(
-                    selected = selectedCategory == category,
-                    onClick = {
-                        selectedCategory = category
-                        selectedFolderPath = ""
+            val buttonGroupColorScheme = MaterialTheme.colorScheme.copy(
+                surfaceContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
+            )
+
+            MaterialTheme(colorScheme = buttonGroupColorScheme) {
+                ButtonGroup(
+                    overflowIndicator = { menuState ->
+                        ButtonGroupDefaults.OverflowIndicator(
+                            menuState = menuState,
+                        )
                     },
-                    label = {
-                        Text(stringResource(category.labelResource))
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    LibraryCategory.values().forEach { category ->
+                        val categoryLabel = when (category) {
+                            LibraryCategory.ALL_SONGS -> allSongsCategoryLabel
+                            LibraryCategory.ARTISTS -> artistsCategoryLabel
+                            LibraryCategory.ALBUMS -> albumsCategoryLabel
+                            LibraryCategory.GENRES -> genresCategoryLabel
+                            LibraryCategory.FOLDERS -> foldersCategoryLabel
+                        }
+
+                        toggleableItem(
+                            checked = selectedCategory == category,
+                            label = categoryLabel,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    selectedCategory = category
+                                    selectedFolderPath = ""
+                                }
+                            },
+                        )
                     }
-                )
+                }
             }
         }
 
@@ -534,49 +600,17 @@ fun LibraryScreen(
                 selectedCategory == LibraryCategory.FOLDERS
 
             if (showCollectionHeader && headerTitle != null) {
-                Row(
+                FolderBreadcrumb(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = contentTopPadding + LibraryCategorySelectorHeight)
+                        .padding(top = folderBreadcrumbTopPadding)
                         .fillMaxWidth()
-                        .height(LibraryFolderHeaderHeight)
-                        .padding(horizontal = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val canGoBack = selectedFolderPath.isNotBlank()
-
-                    if (canGoBack) {
-                        FilledIconButton(
-                            onClick = {
-                                selectedFolderPath = selectedFolderPath.substringBeforeLast(
-                                    '/',
-                                    missingDelimiterValue = ""
-                                )
-                            },
-                            modifier = Modifier.size(40.dp),
-                            shapes = IconButtonDefaults.shapes(),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_back),
-                                contentDescription = stringResource(R.string.player_back)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = headerTitle,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                        .height(LibraryFolderHeaderHeight),
+                    selectedFolderPath = selectedFolderPath,
+                    onNavigateToFolder = { path ->
+                        selectedFolderPath = path
+                    },
+                )
             }
         }
 
@@ -610,6 +644,73 @@ fun LibraryScreen(
             ),
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
+    }
+}
+
+@Composable
+private fun FolderBreadcrumb(
+    modifier: Modifier = Modifier,
+    selectedFolderPath: String,
+    onNavigateToFolder: (String) -> Unit,
+) {
+    val foldersLabel = stringResource(LibraryCategory.FOLDERS.labelResource)
+    val segments = selectedFolderPath
+        .trim('/')
+        .split('/')
+        .filter(String::isNotBlank)
+
+    val breadcrumbColorScheme = MaterialTheme.colorScheme.copy(
+        surfaceContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
+    )
+    val breadcrumbScrollState = rememberScrollState()
+
+    LaunchedEffect(selectedFolderPath, breadcrumbScrollState.maxValue) {
+        breadcrumbScrollState.animateScrollTo(breadcrumbScrollState.maxValue)
+    }
+
+    Row(
+        modifier = modifier
+            .horizontalScroll(breadcrumbScrollState)
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MaterialTheme(colorScheme = breadcrumbColorScheme) {
+            ButtonGroup(
+                overflowIndicator = { menuState ->
+                    ButtonGroupDefaults.OverflowIndicator(
+                        menuState = menuState,
+                    )
+                },
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                toggleableItem(
+                    checked = selectedFolderPath.isBlank(),
+                    label = foldersLabel,
+                    onCheckedChange = { checked ->
+                        if (checked && selectedFolderPath.isNotBlank()) {
+                            onNavigateToFolder("")
+                        }
+                    },
+                )
+
+                segments.forEachIndexed { index, segment ->
+                    val folderPath = segments
+                        .take(index + 1)
+                        .joinToString("/")
+                    val isCurrentFolder = index == segments.lastIndex
+
+                    toggleableItem(
+                        checked = isCurrentFolder,
+                        label = segment,
+                        onCheckedChange = { checked ->
+                            if (checked && !isCurrentFolder) {
+                                onNavigateToFolder(folderPath)
+                            }
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -757,7 +858,19 @@ private fun LibraryFolderContentList(
                 colors = trackColors,
                 verticalAlignment = Alignment.CenterVertically,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                leadingContent = { LibraryEntityLeading(item) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier.size(52.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_folder),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                },
                 content = {
                     Text(
                         text = item.title,
@@ -772,13 +885,6 @@ private fun LibraryFolderContentList(
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
-                    )
-                },
-                trailingContent = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_folder),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             )
@@ -1034,7 +1140,6 @@ private fun buildFolderItems(
                 path
             ),
             value = path,
-            artworkUri = descendantTracks.firstOrNull()?.uri?.toString()
         )
     }.sortedBy { it.title.lowercase(Locale.ROOT) }
 }
