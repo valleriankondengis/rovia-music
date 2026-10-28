@@ -1,36 +1,46 @@
 package com.rovia.music
 
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,8 +50,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavBackStack
@@ -52,6 +67,7 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.navigationevent.NavigationEvent
 import com.rovia.music.feature.album.AlbumPage
 import com.rovia.music.feature.artist.ArtistPage
 import com.rovia.music.feature.genre.GenrePage
@@ -127,7 +143,7 @@ private data class FolderFilterDestination(val owner: TopLevelSection) : NavKey
 @Serializable
 private data class AboutDestination(val owner: TopLevelSection) : NavKey
 
-private val NavigationBarOverlayHeight = 80.dp
+private val FloatingToolbarOverlayHeight = 80.dp
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -140,10 +156,6 @@ fun Navigation(appContainer: AppContainer) {
     val motionScheme = MaterialTheme.motionScheme
     val density = LocalDensity.current
     val eightDpInPixels = with(density) { 8.dp.toPx() }
-
-    var topLevelSlideDirection by remember {
-        mutableIntStateOf(0)
-    }
 
     var showPlayerSheet by rememberSaveable {
         mutableStateOf(false)
@@ -161,59 +173,40 @@ fun Navigation(appContainer: AppContainer) {
         .asPaddingValues()
         .calculateBottomPadding()
 
-    val topLevelTabTransition: (Int) -> ContentTransform = { direction ->
-        when {
-            direction > 0 -> {
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = motionScheme.defaultSpatialSpec(),
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = motionScheme.defaultSpatialSpec(),
-                )
-            }
-
-            direction < 0 -> {
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = motionScheme.defaultSpatialSpec(),
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = motionScheme.defaultSpatialSpec(),
-                )
-            }
-
-            else -> {
-                EnterTransition.None togetherWith ExitTransition.None
-            }
+    val predictiveBackTransition: (Int) -> ContentTransform = { swipeEdge ->
+        val isRightEdge = swipeEdge == NavigationEvent.EDGE_RIGHT
+        val transformOrigin = if (isRightEdge) {
+            TransformOrigin(0f, 0.5f)
+        } else {
+            TransformOrigin(1f, 0.5f)
         }
+
+        EnterTransition.None togetherWith (
+            scaleOut(
+                targetScale = 0.9f,
+                transformOrigin = transformOrigin,
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = LinearEasing,
+                ),
+            ) +
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth ->
+                        val offset = ((fullWidth * 0.05f) - eightDpInPixels)
+                            .coerceAtLeast(0f)
+                            .roundToInt()
+                        if (isRightEdge) -offset else offset
+                    },
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = LinearEasing,
+                    ),
+                )
+        )
     }
 
-    val horizontalSlideTransitionMetadata =
-        NavDisplay.transitionSpec {
-            slideInHorizontally(
-                initialOffsetX = { fullWidth -> fullWidth },
-                animationSpec = motionScheme.defaultSpatialSpec(),
-            ) togetherWith slideOutHorizontally(
-                targetOffsetX = { fullWidth -> -fullWidth },
-                animationSpec = motionScheme.defaultSpatialSpec(),
-            )
-        } + NavDisplay.popTransitionSpec {
-            slideInHorizontally(
-                initialOffsetX = { fullWidth -> -fullWidth },
-                animationSpec = motionScheme.defaultSpatialSpec(),
-            ) togetherWith slideOutHorizontally(
-                targetOffsetX = { fullWidth -> fullWidth },
-                animationSpec = motionScheme.defaultSpatialSpec(),
-            )
-        }
-
     val routeEntryProvider = entryProvider<NavKey> {
-        entry<HomeDestination>(
-            metadata = NavDisplay.transitionSpec {
-                topLevelTabTransition(topLevelSlideDirection)
-            },
-        ) {
+        entry<HomeDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             NavigationDestinationSurface {
                 HomeScreen(
                     audioRepository =
@@ -236,9 +229,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<HomeRecentlyAddedDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) {
+        entry<HomeRecentlyAddedDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             NavigationDestinationSurface {
                 HomeRecentlyAddedScreen(
                     audioRepository =
@@ -252,11 +243,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<SearchDestination>(
-            metadata = NavDisplay.transitionSpec {
-                topLevelTabTransition(topLevelSlideDirection)
-            },
-        ) {
+        entry<SearchDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             NavigationDestinationSurface {
                 SearchScreen(
                     audioRepository =
@@ -291,11 +278,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<LibraryDestination>(
-            metadata = NavDisplay.transitionSpec {
-                topLevelTabTransition(topLevelSlideDirection)
-            },
-        ) {
+        entry<LibraryDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             NavigationDestinationSurface {
                 LibraryScreen(
                     audioRepository =
@@ -330,9 +313,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<ArtistDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<ArtistDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             val catalog by appContainer.mediaStoreAudioRepository.catalogState
                 .collectAsStateWithLifecycle()
 
@@ -377,9 +358,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<SingleDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<SingleDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             val catalog by appContainer.mediaStoreAudioRepository.catalogState
                 .collectAsStateWithLifecycle()
 
@@ -395,9 +374,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<AlbumDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<AlbumDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             val catalog by appContainer.mediaStoreAudioRepository.catalogState
                 .collectAsStateWithLifecycle()
 
@@ -413,9 +390,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<GenreDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<GenreDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             val catalog by appContainer.mediaStoreAudioRepository.catalogState
                 .collectAsStateWithLifecycle()
 
@@ -431,9 +406,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<ArtistGenreDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<ArtistGenreDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             val catalog by appContainer.mediaStoreAudioRepository.catalogState
                 .collectAsStateWithLifecycle()
 
@@ -450,9 +423,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<SettingsDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<SettingsDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             NavigationDestinationSurface {
                 SettingsScreen(
                     onBack = {
@@ -474,9 +445,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<FolderFilterDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<FolderFilterDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             NavigationDestinationSurface {
                 FolderFilterScreen(
                     folderFilterRepository =
@@ -490,9 +459,7 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
-        entry<AboutDestination>(
-            metadata = horizontalSlideTransitionMetadata,
-        ) { destination ->
+        entry<AboutDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
             NavigationDestinationSurface {
                 AboutScreen(
                     onBack = {
@@ -512,150 +479,77 @@ fun Navigation(appContainer: AppContainer) {
             },
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                EnterTransition.None togetherWith ExitTransition.None
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                ) togetherWith slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> -fullWidth },
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                )
             },
             popTransitionSpec = {
-                EnterTransition.None togetherWith ExitTransition.None
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> -fullWidth },
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                ) togetherWith slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                )
             },
-            predictivePopTransitionSpec = {
-                EnterTransition.None togetherWith (
-                    scaleOut(
-                        targetScale = 0.9f,
-                        transformOrigin = TransformOrigin.Center,
-                        animationSpec = motionScheme.defaultSpatialSpec(),
-                    ) +
-                        slideOutHorizontally(
-                            targetOffsetX = { fullWidth ->
-                                ((fullWidth * 0.05f) - eightDpInPixels)
-                                    .coerceAtLeast(0f)
-                                    .roundToInt()
-                            },
-                            animationSpec = motionScheme.defaultSpatialSpec(),
-                        ) +
-                        fadeOut(
-                            targetAlpha = 0f,
-                            animationSpec = motionScheme.defaultSpatialSpec(),
-                        )
-                    )
+            predictivePopTransitionSpec = { swipeEdge ->
+                predictiveBackTransition(swipeEdge)
             },
         )
 
-        NavigationBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(
-                alpha = 0.78f,
+        HorizontalFloatingToolbar(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 16.dp),
+            expanded = true,
+            colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
+                toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 0.dp,
-            windowInsets = NavigationBarDefaults.windowInsets,
-        ) {
-            NavigationBarItem(
-                selected = navigationState.topLevelSection == TopLevelSection.HOME,
-                onClick = {
-                    topLevelSlideDirection =
-                        calculateTopLevelSlideDirection(
-                            currentDestination = navigationState.topLevelRoute,
-                            targetDestination = HomeDestination,
-                        )
+            content = {
+                val shouldHideLabels = LocalDensity.current.fontScale > 1.25f
 
-                    navigationState.selectTopLevel(TopLevelSection.HOME)
-                },
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_home),
-                        contentDescription = null,
-                    )
-                },
-                label = {
-                    Text(
-                        text = stringResource(R.string.navigation_home),
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor =
-                        MaterialTheme.colorScheme.onSecondaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor =
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    unselectedIconColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+                FloatingNavigationItem(
+                    selected = navigationState.isTopLevelSectionSelected(TopLevelSection.HOME),
+                    iconRes = R.drawable.ic_home,
+                    labelRes = R.string.navigation_home,
+                    shouldHideLabel = shouldHideLabels,
+                    onClick = {
+                        navigationState.selectTopLevel(TopLevelSection.HOME)
+                    },
+                )
 
-            NavigationBarItem(
-                selected = navigationState.topLevelSection == TopLevelSection.SEARCH,
-                onClick = {
-                    topLevelSlideDirection =
-                        calculateTopLevelSlideDirection(
-                            currentDestination = navigationState.topLevelRoute,
-                            targetDestination = SearchDestination,
-                        )
+                Spacer(Modifier.width(8.dp))
 
-                    navigationState.selectTopLevel(TopLevelSection.SEARCH)
-                },
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_search),
-                        contentDescription = null,
-                    )
-                },
-                label = {
-                    Text(
-                        text = stringResource(R.string.navigation_search),
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor =
-                        MaterialTheme.colorScheme.onSecondaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor =
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    unselectedIconColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+                FloatingNavigationItem(
+                    selected = navigationState.isTopLevelSectionSelected(TopLevelSection.SEARCH),
+                    iconRes = R.drawable.ic_search,
+                    labelRes = R.string.navigation_search,
+                    shouldHideLabel = shouldHideLabels,
+                    onClick = {
+                        navigationState.selectTopLevel(TopLevelSection.SEARCH)
+                    },
+                )
 
-            NavigationBarItem(
-                selected = navigationState.topLevelSection == TopLevelSection.LIBRARY,
-                onClick = {
-                    topLevelSlideDirection =
-                        calculateTopLevelSlideDirection(
-                            currentDestination = navigationState.topLevelRoute,
-                            targetDestination = LibraryDestination,
-                        )
+                Spacer(Modifier.width(8.dp))
 
-                    navigationState.selectTopLevel(TopLevelSection.LIBRARY)
-                },
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_library),
-                        contentDescription = null,
-                    )
-                },
-                label = {
-                    Text(
-                        text = stringResource(R.string.navigation_library),
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor =
-                        MaterialTheme.colorScheme.onSecondaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor =
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    unselectedIconColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
-        }
+                FloatingNavigationItem(
+                    selected = navigationState.isTopLevelSectionSelected(TopLevelSection.LIBRARY),
+                    iconRes = R.drawable.ic_library,
+                    labelRes = R.string.navigation_library,
+                    shouldHideLabel = shouldHideLabels,
+                    onClick = {
+                        navigationState.selectTopLevel(TopLevelSection.LIBRARY)
+                    },
+                )
+            },
+        )
 
-        if (!showPlayerSheet) {
+        if (!showPlayerSheet && !navigationState.isSettingsFlowActive) {
             MiniPlayer(
                 playbackController = appContainer.playbackController,
                 onOpenPlayer = {
@@ -664,7 +558,7 @@ fun Navigation(appContainer: AppContainer) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(
-                        bottom = NavigationBarOverlayHeight +
+                        bottom = FloatingToolbarOverlayHeight +
                             navigationBarBottomInset,
                     ),
             )
@@ -686,12 +580,6 @@ fun Navigation(appContainer: AppContainer) {
                 PlayerScreen(
                     playbackController = appContainer.playbackController,
                     onOpenArtist = { artistName ->
-                        // Navigate through the existing Library stack so ArtistPage's Back
-                        // behavior and the saved Library state remain consistent.
-                        topLevelSlideDirection = calculateTopLevelSlideDirection(
-                            currentDestination = navigationState.topLevelRoute,
-                            targetDestination = LibraryDestination,
-                        )
                         navigationState.navigateWithin(
                             owner = TopLevelSection.LIBRARY,
                             destination = ArtistDestination(artistName),
@@ -699,6 +587,72 @@ fun Navigation(appContainer: AppContainer) {
                         navigationState.selectTopLevel(TopLevelSection.LIBRARY)
                         showPlayerSheet = false
                     },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun FloatingNavigationItem(
+    selected: Boolean,
+    iconRes: Int,
+    labelRes: Int,
+    shouldHideLabel: Boolean,
+    onClick: () -> Unit,
+) {
+    val labelWidth by animateDpAsState(
+        targetValue = if (selected && !shouldHideLabel) 80.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "floatingNavigationLabelWidth",
+    )
+    val hapticFeedback = LocalHapticFeedback.current
+    val colorScheme = MaterialTheme.colorScheme
+
+    IconButton(
+        onClick = {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.VirtualKey)
+            onClick()
+        },
+        modifier = Modifier
+            .width(48.dp + labelWidth)
+            .height(48.dp)
+            .semantics { this.selected = selected },
+        colors = if (selected) {
+            IconButtonDefaults.filledIconButtonColors(
+                contentColor = colorScheme.onPrimaryContainer,
+                containerColor = colorScheme.primaryContainer,
+            )
+        } else {
+            IconButtonDefaults.iconButtonColors(
+                contentColor = colorScheme.onSurfaceVariant,
+            )
+        },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = stringResource(labelRes),
+                modifier = Modifier.size(24.dp),
+            )
+
+            if (selected && !shouldHideLabel) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(labelRes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 80.dp),
                 )
             }
         }
@@ -718,28 +672,54 @@ private fun NavigationDestinationSurface(
     }
 }
 
-private fun calculateTopLevelSlideDirection(
-    currentDestination: Any?,
-    targetDestination: Any,
-): Int {
-    fun destinationIndex(destination: Any?): Int? =
-        when (destination) {
-            HomeDestination -> 0
-            SearchDestination -> 1
-            LibraryDestination -> 2
-            else -> null
-        }
+private fun navigationContentKey(key: NavKey): String =
+    when (key) {
+        HomeDestination -> "home"
+        HomeRecentlyAddedDestination -> "home:recently-added"
+        SearchDestination -> "search"
+        LibraryDestination -> "library"
+        is ArtistDestination -> "${key.owner.contentKeyPrefix()}:artist:${key.artistName}"
+        is SingleDestination -> "${key.owner.contentKeyPrefix()}:single:${key.releaseKey}"
+        is AlbumDestination -> "${key.owner.contentKeyPrefix()}:album:${key.releaseKey}"
+        is GenreDestination -> "${key.owner.contentKeyPrefix()}:genre:${key.genreKey}"
+        is ArtistGenreDestination ->
+            "${key.owner.contentKeyPrefix()}:artist-genre:${key.artistName}:${key.genreKey}"
+        is SettingsDestination -> "${key.owner.contentKeyPrefix()}:settings"
+        is FolderFilterDestination -> "${key.owner.contentKeyPrefix()}:folder-filter"
+        is AboutDestination -> "${key.owner.contentKeyPrefix()}:about"
+        else -> "unknown:${key::class.qualifiedName}:${key}"
+    }
 
-    val currentIndex = destinationIndex(currentDestination)
-    val targetIndex = destinationIndex(targetDestination)
+private fun TopLevelSection.contentKeyPrefix(): String =
+    when (this) {
+        TopLevelSection.HOME -> "home"
+        TopLevelSection.SEARCH -> "search"
+        TopLevelSection.LIBRARY -> "library"
+    }
+
+private fun NavKey?.isSettingsFlowDestination(): Boolean =
+    when (this) {
+        is SettingsDestination,
+        is FolderFilterDestination,
+        is AboutDestination -> true
+        else -> false
+    }
+
+private fun destinationSection(destinationContentKey: Any?): TopLevelSection? {
+    val contentKey = destinationContentKey as? String ?: return null
 
     return when {
-        currentIndex == null || targetIndex == null -> 0
-        targetIndex > currentIndex -> 1
-        targetIndex < currentIndex -> -1
-        else -> 0
+        contentKey == "home" || contentKey.startsWith("home:") -> TopLevelSection.HOME
+        contentKey == "search" || contentKey.startsWith("search:") -> TopLevelSection.SEARCH
+        contentKey == "library" || contentKey.startsWith("library:") -> TopLevelSection.LIBRARY
+        else -> null
     }
 }
+
+private fun isTopLevelDestination(destinationContentKey: Any?): Boolean =
+    destinationContentKey == "home" ||
+        destinationContentKey == "search" ||
+        destinationContentKey == "library"
 
 @Composable
 private fun rememberRoviaNavigationState(): RoviaNavigationState {
@@ -766,11 +746,6 @@ private fun rememberRoviaNavigationState(): RoviaNavigationState {
     }
 }
 
-/**
- * Keeps one small key stack per top-level tab. Only saveable UI state is retained for
- * off-screen entries; their compositions and non-saveable objects (such as artwork bitmaps)
- * are disposed when the corresponding entries are not displayed.
- */
 private class RoviaNavigationState(
     val backStacks: Map<NavKey, NavBackStack<NavKey>>,
     private val topLevelSectionState: MutableState<TopLevelSection>,
@@ -781,8 +756,26 @@ private class RoviaNavigationState(
     val topLevelRoute: NavKey
         get() = topLevelSection.asDestination()
 
+    private val activeBackStack: NavBackStack<NavKey>?
+        get() = backStacks[topLevelRoute]
+
+    val isSettingsFlowActive: Boolean
+        get() = activeBackStack?.lastOrNull().isSettingsFlowDestination() == true
+
+    fun isTopLevelSectionSelected(section: TopLevelSection): Boolean =
+        topLevelSection == section && !isSettingsFlowActive
+
     fun selectTopLevel(section: TopLevelSection) {
+        clearSettingsFlowFromStack(topLevelSection)
         topLevelSectionState.value = section
+    }
+
+    private fun clearSettingsFlowFromStack(section: TopLevelSection) {
+        val stack = backStacks[section.asDestination()] ?: return
+
+        while (stack.size > 1 && stack.lastOrNull().isSettingsFlowDestination()) {
+            stack.removeLastOrNull()
+        }
     }
 
     fun navigateWithin(
@@ -800,7 +793,6 @@ private class RoviaNavigationState(
         if (stack.size > 1) {
             stack.removeLastOrNull()
         } else if (topLevelSection == owner && owner != TopLevelSection.HOME) {
-            // Keep the previous state of each tab, but follow the standard exit-through-home pattern.
             topLevelSectionState.value = TopLevelSection.HOME
         }
     }
@@ -809,9 +801,6 @@ private class RoviaNavigationState(
     fun toDecoratedEntries(
         entryProvider: (NavKey) -> NavEntry<NavKey>,
     ): List<NavEntry<NavKey>> {
-        // Each tab gets its own native Navigation 3 saveable-state holder. This prevents
-        // duplicate entry keys from sharing UI state when the same settings page exists in
-        // more than one top-level stack.
         val decoratedEntries = backStacks.mapValues { (_, stack) ->
             rememberDecoratedNavEntries(
                 backStack = stack,
