@@ -44,6 +44,7 @@ import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import com.rovia.music.ui.components.TrackList
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
@@ -149,6 +150,7 @@ fun HomeRecentlyAddedScreen(
                     message = stringResource(R.string.home_recently_added_empty),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -160,6 +162,7 @@ fun HomeRecentlyAddedScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -177,6 +180,7 @@ fun HomeRecentlyAddedScreen(
                     ),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -197,6 +201,7 @@ fun HomeRecentlyAddedScreen(
                     ),
                     modifier = Modifier
                         .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -232,7 +237,9 @@ fun HomeRecentlyAddedScreen(
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
                     outerPadding = PaddingValues(
                         horizontal = 0.dp,
                         vertical = 1.dp
