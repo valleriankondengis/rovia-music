@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -25,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.blur.BlurRadiusSpec
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -61,14 +65,14 @@ fun ArtworkBackdrop(
         )
     }
 
-    val blurredArtworkBitmap by produceState<Bitmap?>(
+    val backdropArtworkBitmap by produceState<Bitmap?>(
         initialValue = null,
         key1 = artworkBitmap,
     ) {
         val source = artworkBitmap?.takeUnless(Bitmap::isRecycled)
         value = source?.let { bitmap ->
             withContext(Dispatchers.Default) {
-                createBlurredArtwork(bitmap)
+                createBackdropArtwork(bitmap)
             }
         }
     }
@@ -102,23 +106,37 @@ fun ArtworkBackdrop(
             .coerceAtLeast(0.dp)
             .coerceAtMost(maxHeight)
 
-        Crossfade(
-            targetState = blurredArtworkBitmap?.takeUnless(Bitmap::isRecycled),
-            animationSpec = tween(durationMillis = 460),
-            label = "artwork-backdrop-blur-crossfade",
-        ) { bitmap ->
-            if (bitmap != null && !bitmap.isRecycled) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = 0.94f
-                        },
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.Center,
-                )
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(1f / BACKDROP_RENDER_SCALE)
+                .fillMaxHeight(1f / BACKDROP_RENDER_SCALE)
+                .graphicsLayer {
+                    scaleX = BACKDROP_RENDER_SCALE
+                    scaleY = BACKDROP_RENDER_SCALE
+                }
+                .blur(
+                    blurRadiusSpec = BlurRadiusSpec.verticalGradient(
+                        startRadius = 20.dp,
+                        endRadius = 30.dp,
+                    ),
+                    edgeTreatment = BlurredEdgeTreatment.Rectangle,
+                ),
+        ) {
+            Crossfade(
+                targetState = backdropArtworkBitmap?.takeUnless(Bitmap::isRecycled),
+                animationSpec = tween(durationMillis = 460),
+                label = "artwork-backdrop-blur-crossfade",
+            ) { bitmap ->
+                if (bitmap != null && !bitmap.isRecycled) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center,
+                    )
+                }
             }
         }
 
@@ -204,7 +222,7 @@ fun ArtworkBackdrop(
     }
 }
 
-private fun createBlurredArtwork(source: Bitmap): Bitmap? {
+private fun createBackdropArtwork(source: Bitmap): Bitmap? {
     if (
         source.width <= 0 ||
         source.height <= 0 ||
@@ -213,168 +231,24 @@ private fun createBlurredArtwork(source: Bitmap): Bitmap? {
         return null
     }
 
-    val softwareCopy = runCatching {
-        source.copy(Bitmap.Config.ARGB_8888, true)
-    }.getOrNull() ?: return null
+    val largestDimension = maxOf(source.width, source.height)
 
-    val scale = (
-        BLUR_SOURCE_MAX_DIMENSION.toFloat() /
-            maxOf(softwareCopy.width, softwareCopy.height)
-        ).coerceAtMost(1f)
+    if (largestDimension <= BACKDROP_SOURCE_MAX_DIMENSION) {
+        return source
+    }
 
-    val width = (softwareCopy.width * scale)
-        .roundToInt()
-        .coerceAtLeast(1)
+    val scale = BACKDROP_SOURCE_MAX_DIMENSION.toFloat() / largestDimension
+    val width = (source.width * scale).roundToInt().coerceAtLeast(1)
+    val height = (source.height * scale).roundToInt().coerceAtLeast(1)
 
-    val height = (softwareCopy.height * scale)
-        .roundToInt()
-        .coerceAtLeast(1)
-
-    val scaledBitmap = runCatching {
+    return runCatching {
         Bitmap.createScaledBitmap(
-            softwareCopy,
+            source,
             width,
             height,
             true,
         )
     }.getOrNull()
-
-    if (scaledBitmap == null) {
-        softwareCopy.recycle()
-        return null
-    }
-
-    if (scaledBitmap !== softwareCopy) {
-        softwareCopy.recycle()
-    }
-
-    return try {
-        val pixelCount = width * height
-        val pixels = IntArray(pixelCount)
-        val temporary = IntArray(pixelCount)
-
-        scaledBitmap.getPixels(
-            pixels,
-            0,
-            width,
-            0,
-            0,
-            width,
-            height,
-        )
-
-        val radius = (minOf(width, height) / 12)
-            .coerceAtLeast(2)
-
-        repeat(BLUR_PASSES) {
-            blurPass(
-                pixels,
-                temporary,
-                width,
-                height,
-                radius,
-                horizontal = true,
-            )
-
-            blurPass(
-                temporary,
-                pixels,
-                width,
-                height,
-                radius,
-                horizontal = false,
-            )
-        }
-
-        scaledBitmap.setPixels(
-            pixels,
-            0,
-            width,
-            0,
-            0,
-            width,
-            height,
-        )
-
-        temporary.fill(0)
-        scaledBitmap
-    } catch (_: Exception) {
-        if (!scaledBitmap.isRecycled) {
-            scaledBitmap.recycle()
-        }
-        null
-    }
-}
-
-private fun blurPass(
-    source: IntArray,
-    target: IntArray,
-    width: Int,
-    height: Int,
-    radius: Int,
-    horizontal: Boolean,
-) {
-    val major = if (horizontal) width else height
-    val minor = if (horizontal) height else width
-    val window = radius * 2 + 1
-
-    repeat(minor) { fixed ->
-        var alpha = 0
-        var red = 0
-        var green = 0
-        var blue = 0
-
-        fun pixel(at: Int): Int {
-            val position = at.coerceIn(0, major - 1)
-
-            return if (horizontal) {
-                source[fixed * width + position]
-            } else {
-                source[position * width + fixed]
-            }
-        }
-
-        for (offset in -radius..radius) {
-            val color = pixel(offset)
-            alpha += color ushr 24 and 0xFF
-            red += color ushr 16 and 0xFF
-            green += color ushr 8 and 0xFF
-            blue += color and 0xFF
-        }
-
-        repeat(major) { moving ->
-            val index = if (horizontal) {
-                fixed * width + moving
-            } else {
-                moving * width + fixed
-            }
-
-            target[index] =
-                ((alpha / window) shl 24) or
-                    ((red / window) shl 16) or
-                    ((green / window) shl 8) or
-                    (blue / window)
-
-            val leaving = pixel(moving - radius)
-            val entering = pixel(moving + radius + 1)
-
-            alpha +=
-                (entering ushr 24 and 0xFF) -
-                    (leaving ushr 24 and 0xFF)
-
-            red +=
-                (entering ushr 16 and 0xFF) -
-                    (leaving ushr 16 and 0xFF)
-
-            green +=
-                (entering ushr 8 and 0xFF) -
-                    (leaving ushr 8 and 0xFF)
-
-            blue +=
-                (entering and 0xFF) -
-                    (leaving and 0xFF)
-        }
-    }
 }
 
 private fun artworkSurfaceColor(
@@ -483,5 +357,5 @@ private fun fallbackArtworkColor(
     Color(0xFFF7F5F8)
 }
 
-private const val BLUR_SOURCE_MAX_DIMENSION = 144
-private const val BLUR_PASSES = 3
+private const val BACKDROP_SOURCE_MAX_DIMENSION = 144
+private const val BACKDROP_RENDER_SCALE = 4f
