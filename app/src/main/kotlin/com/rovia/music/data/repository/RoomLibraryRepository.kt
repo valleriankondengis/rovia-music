@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.atStartOfDayIn
 
 class RoomLibraryRepository(
     private val database: RoviaDatabase,
@@ -448,6 +449,28 @@ class RoomLibraryRepository(
             ?.let(Uri::parse)
             ?: Uri.EMPTY
 
+        // FIX: previously this mapping dropped metadataDateEpochMillis
+        // and inferredDateEpochMillis entirely (both always null for Room
+        // tracks), and it passed an old album year-range string
+        // ("2019-2023") through as the track's release date. Resolve the
+        // year first, sanitise the date against it, and derive the two
+        // date fields from the resolved year/month/day so Track Info's
+        // "Metadata date" / "Created (inferred)" rows are not blank.
+        // Note: composer/author/writer/sample-rate/bit-depth/bitrate/
+        // label/copyright have no Room column at all, so they cannot be
+        // recovered here; Track Info now reads them on demand from the
+        // embedded tags instead (see TrackInfo.kt).
+        val resolvedYear = releaseYear ?: album?.releaseYear ?: mediaStoreYear
+        val resolvedReleaseDate = sanitizeReleaseDate(
+            raw = releaseDateRaw ?: album?.releaseDateRaw,
+            year = resolvedYear,
+        ) ?: resolvedYear?.toString()
+        val resolvedMonth = releaseMonth ?: album?.releaseMonth
+        val resolvedDay = releaseDay ?: album?.releaseDay
+        val inferredDateEpochMillis = resolvedYear?.let {
+            com.rovia.music.util.KotlinDateTime.yearStartEpochMillis(it)
+        }
+
         return LocalAudioTrack(
             id = mediaStoreId ?: trackId,
             uri = uri,
@@ -460,9 +483,15 @@ class RoomLibraryRepository(
             dateModifiedSeconds = dateModifiedSeconds,
             albumId = album?.providerAlbumId,
             albumArtist = albumArtistCreditRaw ?: album?.albumArtistCreditRaw,
-            releaseYear = releaseYear ?: album?.releaseYear ?: mediaStoreYear,
+            releaseYear = resolvedYear,
             genres = relatedGenreNames,
-            releaseDate = releaseDateRaw ?: album?.releaseDateRaw,
+            releaseDate = resolvedReleaseDate,
+            metadataDateEpochMillis = releaseDateEpochMillis(
+                year = resolvedYear,
+                month = resolvedMonth,
+                day = resolvedDay,
+            ),
+            inferredDateEpochMillis = inferredDateEpochMillis,
             trackNumber = trackNumber,
             discNumber = discNumber,
             cdTrackNumber = trackNumber?.toString(),
@@ -472,8 +501,8 @@ class RoomLibraryRepository(
             displayName = displayName,
             fileSizeBytes = fileSizeBytes,
             volumeName = volumeName,
-            releaseMonth = releaseMonth ?: album?.releaseMonth,
-            releaseDay = releaseDay ?: album?.releaseDay,
+            releaseMonth = resolvedMonth,
+            releaseDay = resolvedDay,
             releaseDatePrecision = releaseDatePrecision ?: album?.releaseDatePrecision,
             releaseDateSource = releaseDateSource ?: album?.releaseDateSource,
             releaseTypeSource = album?.releaseTypeSource,
@@ -517,3 +546,28 @@ private data class LibrarySnapshot(
 private fun normalizeLibraryIdentity(value: String): String = Normalizer
     .normalize(value.trim().replace(Regex("\\s+"), " "), Normalizer.Form.NFC)
     .lowercase()
+
+private val ROOM_RELEASE_YEAR_RANGE_PATTERN = Regex("""^\d{4}-\d{4}$""")
+
+/** See MediaStoreAudioRepository.sanitizeReleaseDate: a "2019-2023" range is not a date. */
+private fun sanitizeReleaseDate(raw: String?, year: Int?): String? {
+    if (raw.isNullOrBlank()) return null
+    val trimmed = raw.trim()
+    if (ROOM_RELEASE_YEAR_RANGE_PATTERN.matches(trimmed)) {
+        return year?.toString() ?: trimmed.substring(0, 4)
+    }
+    return trimmed
+}
+
+/**
+ * Epoch millis for a resolved year/month/day, or null when only a year
+ * is known (callers then fall back to the inferred Jan-1 value).
+ */
+private fun releaseDateEpochMillis(year: Int?, month: Int?, day: Int?): Long? {
+    if (year == null || year !in 1000..9999 || month == null) return null
+    return runCatching {
+        kotlinx.datetime.LocalDate(year, month, day ?: 1)
+            .atStartOfDayIn(kotlinx.datetime.TimeZone.UTC)
+            .toEpochMilliseconds()
+    }.getOrNull()
+}

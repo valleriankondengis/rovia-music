@@ -494,6 +494,12 @@ class MediaStoreAudioRepository(
                             albumId = albumId,
                             albumArtist = albumArtist,
                             releaseYear = releaseYear,
+                            // MediaStore has no full release-date column, only YEAR.
+                            // Expose the year as the release date instead of leaving
+                            // it null, so Track Info never shows a blank date when
+                            // only the year is known. The embedded reader (below)
+                            // replaces this with the full DATE tag when available.
+                            releaseDate = releaseYear?.toString(),
                             releaseDatePrecision = if (releaseYear != null) "YEAR" else null,
                             releaseDateSource = if (releaseYear != null) "MEDIASTORE_YEAR" else null,
                             inferredDateEpochMillis = yearStartEpochMillis(releaseYear),
@@ -556,7 +562,10 @@ class MediaStoreAudioRepository(
 
         return track.copy(
             albumArtist = track.albumArtist ?: cached.albumArtistCreditRaw,
-            releaseDate = cached.releaseDateRaw ?: track.releaseDate,
+            releaseDate = sanitizeReleaseDate(
+                raw = cached.releaseDateRaw ?: track.releaseDate,
+                year = releaseYear,
+            ),
             releaseYear = releaseYear,
             releaseMonth = cached.releaseMonth ?: track.releaseMonth,
             releaseDay = cached.releaseDay ?: track.releaseDay,
@@ -692,10 +701,15 @@ class MediaStoreAudioRepository(
         return track.copy(
             albumArtist = track.albumArtist ?: metadata.albumArtist,
             releaseYear = releaseYear,
-            releaseDate = if (metadata.releaseDateSource == "EMBEDDED_DATE") {
-                metadata.releaseDate
-            } else {
-                track.releaseDate
+            // Previously only EMBEDDED_DATE set releaseDate, so a file tagged
+            // with YEAR only (very common) kept a blank release date even
+            // after a successful embedded read. A year-only tag now yields
+            // the year as the release date, and an old album year-range
+            // string (e.g. "2019-2023") is never passed through as a date.
+            releaseDate = when (metadata.releaseDateSource) {
+                "EMBEDDED_DATE" -> metadata.releaseDate
+                "EMBEDDED_YEAR" -> metadata.releaseYear?.toString()
+                else -> sanitizeReleaseDate(track.releaseDate, releaseYear)
             },
             releaseMonth = if (hasEmbeddedReleaseMetadata) metadata.releaseMonth else track.releaseMonth,
             releaseDay = if (hasEmbeddedReleaseMetadata) metadata.releaseDay else track.releaseDay,
@@ -849,6 +863,22 @@ class MediaStoreAudioRepository(
         "1", "true", "yes" -> true
         "0", "false", "no" -> false
         else -> null
+    }
+
+    /**
+     * The old album sync stored a year range ("2019-2023") in the same
+     * column used for a single release date. That string is not a date,
+     * it breaks date parsing (month "20" is invalid), and it used to leak
+     * into Track Info. Collapse it to the first year; any other value
+     * passes through unchanged.
+     */
+    private fun sanitizeReleaseDate(raw: String?, year: Int?): String? {
+        if (raw.isNullOrBlank()) return raw
+        val trimmed = raw.trim()
+        if (RELEASE_YEAR_RANGE_PATTERN.matches(trimmed)) {
+            return year?.toString() ?: trimmed.substring(0, 4)
+        }
+        return trimmed
     }
 
     private fun yearStartEpochMillis(year: Int?): Long? {
@@ -1023,6 +1053,7 @@ class MediaStoreAudioRepository(
         const val CONTENT_CHANGE_DEBOUNCE_MS = 600L
         const val EMBEDDED_METADATA_EXTRACTION_VERSION = 1
         val METADATA_DATE_PATTERN = Regex("""^(\d{4})(?:[-/.](\d{1,2}))?(?:[-/.](\d{1,2}))?.*$""")
+        val RELEASE_YEAR_RANGE_PATTERN = Regex("""^\d{4}-\d{4}$""")
     }
 }
 private fun android.database.Cursor.getStringOrNull(columnIndex: Int): String? {

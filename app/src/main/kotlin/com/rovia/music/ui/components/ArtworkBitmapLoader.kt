@@ -278,16 +278,20 @@ object ArtworkBitmapLoader {
             .coerceIn(128, DEFAULT_MAX_DIMENSION)
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun loadBitmapFromSource(
         context: Context,
         uri: Uri,
         maxDimension: Int,
         preferThumbnailApi: Boolean
     ): Bitmap? {
-        if (
-            preferThumbnailApi &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-        ) {
+        loadEmbeddedArtwork(
+            context = context,
+            uri = uri,
+            maxDimension = maxDimension
+        )?.let { return it }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val thumbnail = runCatching {
                 context.contentResolver.loadThumbnail(
                     uri,
@@ -300,12 +304,6 @@ object ArtworkBitmapLoader {
                 return thumbnail
             }
         }
-
-        loadEmbeddedArtwork(
-            context = context,
-            uri = uri,
-            maxDimension = maxDimension
-        )?.let { return it }
 
         return decodeBitmap(
             context = context,
@@ -558,6 +556,6 @@ object ArtworkBitmapLoader {
             else -> return null
         }
 
-        return "$normalizedUri|$sourceVersion|$maxDimension"
+        return "$normalizedUri|$sourceVersion|$maxDimension|$ARTWORK_CACHE_VERSION"
     }
 }

@@ -430,15 +430,22 @@ class MediaStoreCatalogSynchronizer(
                             albumReleaseId = prepared.albumReleaseId,
                             durationMs = prepared.track.durationMs,
                             mediaStoreYear = prepared.track.releaseYear,
+                            // FIX: previously a non-current embedded cache wiped
+                            // every release field to null, on the assumption that
+                            // embedded metadata would refill them. Nothing ever
+                            // refills them during sync, so the database ended up
+                            // with no year/date at all. Fall back to the
+                            // MediaStore year instead; embedded data, when it is
+                            // current, still wins via the branches below.
                             releaseDateRaw = if (embeddedMetadataIsCurrent) {
                                 existing.releaseDateRaw
                             } else {
-                                null
+                                prepared.track.releaseYear?.toString()
                             },
                             releaseYear = if (embeddedMetadataIsCurrent) {
                                 existing.releaseYear
                             } else {
-                                null
+                                prepared.track.releaseYear
                             },
                             releaseMonth = if (embeddedMetadataIsCurrent) {
                                 existing.releaseMonth
@@ -453,12 +460,12 @@ class MediaStoreCatalogSynchronizer(
                             releaseDatePrecision = if (embeddedMetadataIsCurrent) {
                                 existing.releaseDatePrecision
                             } else {
-                                null
+                                prepared.track.releaseYear?.let { "YEAR" }
                             },
                             releaseDateSource = if (embeddedMetadataIsCurrent) {
                                 existing.releaseDateSource
                             } else {
-                                null
+                                prepared.track.releaseYear?.let { "MEDIASTORE_YEAR" }
                             },
                             trackNumber = prepared.track.trackNumber,
                             discNumber = prepared.track.discNumber,
@@ -1171,6 +1178,13 @@ class MediaStoreCatalogSynchronizer(
     private fun resolveReleaseDate(years: AlbumYearRange?): ReleaseDateValues {
         val first = years?.firstYear
         val last = years?.lastYear
+        // FIX: previously a multi-year album stored raw = "2019-2023"
+        // with year = null. That range is not a release date, it broke
+        // date parsing downstream, and it leaked into Track Info as the
+        // track's release date. The first/last years are still kept in
+        // firstMediaStoreReleaseYear / lastMediaStoreReleaseYear on the
+        // album row; releaseDateRaw now always holds a single year, and
+        // releaseYear is never null when any year is known.
         return when {
             first != null && (last == null || first == last) -> ReleaseDateValues(
                 raw = first.toString(),
@@ -1179,14 +1193,14 @@ class MediaStoreCatalogSynchronizer(
                 source = "MEDIASTORE_ALBUM_FIRST_YEAR"
             )
             first != null && last != null -> ReleaseDateValues(
-                raw = "$first-$last",
-                year = null,
+                raw = first.toString(),
+                year = first,
                 precision = "YEAR_RANGE",
                 source = "MEDIASTORE_ALBUM_FIRST_LAST_YEAR"
             )
             first == null && last != null -> ReleaseDateValues(
                 raw = last.toString(),
-                year = null,
+                year = last,
                 precision = "LAST_YEAR_ONLY",
                 source = "MEDIASTORE_ALBUM_LAST_YEAR"
             )

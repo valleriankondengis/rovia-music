@@ -43,6 +43,7 @@ data class SearchAlbumResult(
 private const val DATABASE_SEARCH_RESULT_LIMIT = 30
 
 private val DatabaseSearchWhitespace = Regex("\\s+")
+private val DATABASE_SEARCH_RELEASE_YEAR_RANGE_PATTERN = Regex("""^\d{4}-\d{4}$""")
 
 data class SearchPlaylistResult(
     val playlistId: Long,
@@ -312,6 +313,19 @@ class DatabaseSearchRepository(
                 ?.let(Uri::parse)
                 ?: Uri.EMPTY
             val releaseYear = row.releaseYear ?: album?.releaseYear ?: row.mediaStoreYear
+            // Same fixes as RoomLibraryRepository: never surface an old
+            // album year-range as a release date, and derive the inferred
+            // date from the resolved year so search results match the
+            // library instead of showing blank date rows.
+            val sanitizedReleaseDate = (row.releaseDateRaw ?: album?.releaseDateRaw)
+                ?.trim()
+                ?.let { raw ->
+                    if (DATABASE_SEARCH_RELEASE_YEAR_RANGE_PATTERN.matches(raw)) {
+                        releaseYear?.toString() ?: raw.substring(0, 4)
+                    } else {
+                        raw
+                    }
+                } ?: releaseYear?.toString()
             LocalAudioTrack(
                 id = row.mediaStoreId ?: row.trackId,
                 uri = uri,
@@ -326,7 +340,10 @@ class DatabaseSearchRepository(
                 albumArtist = row.albumArtistCreditRaw ?: album?.albumArtistCreditRaw,
                 releaseYear = releaseYear,
                 genres = genresByTrackId[row.trackId].orEmpty(),
-                releaseDate = row.releaseDateRaw ?: album?.releaseDateRaw,
+                releaseDate = sanitizedReleaseDate,
+                inferredDateEpochMillis = releaseYear?.let {
+                    com.rovia.music.util.KotlinDateTime.yearStartEpochMillis(it)
+                },
                 releaseMonth = row.releaseMonth ?: album?.releaseMonth,
                 releaseDay = row.releaseDay ?: album?.releaseDay,
                 releaseDatePrecision = row.releaseDatePrecision ?: album?.releaseDatePrecision,
