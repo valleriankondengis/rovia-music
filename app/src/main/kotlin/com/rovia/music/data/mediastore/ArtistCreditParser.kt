@@ -2,8 +2,6 @@
 package com.rovia.music.data.mediastore
 
 import java.text.Normalizer
-import java.util.Locale
-
 object ArtistCreditParser {
 
     private val protectedArtistPatterns = listOf(
@@ -48,6 +46,91 @@ object ArtistCreditParser {
 
     private val whitespacePattern = Regex("""\s+""")
 
+    fun normalizeIdentity(value: String): String = Normalizer
+        .normalize(whitespacePattern.replace(value.trim(), " "), Normalizer.Form.NFC)
+        .lowercase()
+
+    fun resolveDisplayNames(credits: Iterable<String?>): List<String> {
+        val namesByIdentity = linkedMapOf<String, MutableList<String>>()
+        credits.flatMap(::parse).forEach { name ->
+            namesByIdentity.getOrPut(normalizeIdentity(name)) { mutableListOf() } += name
+        }
+
+        return namesByIdentity.values.map { variants ->
+            variants.groupingBy { it }
+                .eachCount()
+                .maxWithOrNull(
+                    compareBy<Map.Entry<String, Int>> { it.value }
+                        .thenBy { it.key.count(Char::isUpperCase) }
+                        .thenBy { it.key }
+                )
+                ?.key
+                .orEmpty()
+        }
+    }
+
+    fun resolvePrimaryDisplayName(credits: Iterable<String?>): String? {
+        data class Candidate(
+            val displayName: String,
+            val occurrenceCount: Int,
+            val firstOccurrence: Int,
+        )
+
+        val parsedNames = credits.flatMap(::parse)
+        if (parsedNames.isEmpty()) return null
+
+        val indexedNames = parsedNames.withIndex()
+            .groupBy { normalizeIdentity(it.value) }
+        val candidates = indexedNames.values.map { entries ->
+            val variants = entries.groupingBy { it.value }.eachCount()
+            val displayName = variants.maxWithOrNull(
+                compareBy<Map.Entry<String, Int>> { it.value }
+                    .thenBy { it.key.count(Char::isUpperCase) }
+                    .thenBy { it.key }
+            )?.key.orEmpty()
+            Candidate(
+                displayName = displayName,
+                occurrenceCount = entries.size,
+                firstOccurrence = entries.minOf { it.index },
+            )
+        }
+
+        return candidates.sortedWith(
+            compareByDescending<Candidate> { it.occurrenceCount }
+                .thenBy { it.firstOccurrence }
+                .thenByDescending { it.displayName.count(Char::isUpperCase) }
+                .thenBy { it.displayName }
+        ).firstOrNull()?.displayName
+    }
+
+    fun resolveDisplayName(
+        artistName: String,
+        primaryCredits: Iterable<String?>,
+        fallbackCredits: Iterable<String?>,
+    ): String? {
+        val identity = normalizeIdentity(artistName)
+        if (identity.isBlank()) return null
+
+        val primaryCandidates = primaryCredits
+            .flatMap(::parse)
+            .filter { normalizeIdentity(it) == identity }
+        val candidates = primaryCandidates.ifEmpty {
+            fallbackCredits.flatMap(::parse)
+                .filter { normalizeIdentity(it) == identity }
+        }
+        if (candidates.isEmpty()) return null
+
+        return candidates
+            .groupingBy { it }
+            .eachCount()
+            .maxWithOrNull(
+                compareBy<Map.Entry<String, Int>> { it.value }
+                    .thenBy { it.key.count(Char::isUpperCase) }
+                    .thenBy { it.key }
+            )
+            ?.key
+    }
+
     fun parse(artistCredit: String?): List<String> {
         val credit = artistCredit?.trim().orEmpty()
 
@@ -73,9 +156,7 @@ object ArtistCreditParser {
                 return@forEach
             }
 
-            val identity = Normalizer
-                .normalize(displayName, Normalizer.Form.NFC)
-                .lowercase(Locale.ROOT)
+            val identity = normalizeIdentity(displayName)
 
             uniqueArtists.putIfAbsent(identity, displayName)
         }

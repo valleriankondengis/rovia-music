@@ -1,8 +1,5 @@
 package com.rovia.music.data.mediastore
 
-import java.text.Normalizer
-import java.util.Locale
-
 /**
  * A release type inferred from the local MediaStore catalog.
  *
@@ -30,7 +27,7 @@ data class AlbumRelease(
     val type: AlbumReleaseType
 ) {
     val artworkUri: String?
-        get() = tracks.firstOrNull()?.uri?.toString()
+        get() = CatalogArtworkSelector.albumArtworkTrack(tracks)?.uri?.toString()
 
     /**
      * Album-artist metadata takes priority when present, so a featured guest does not make an
@@ -44,14 +41,14 @@ data class AlbumRelease(
             .flatMap { track -> ArtistCreditParser.parse(track.albumArtist.orEmpty()) }
             .distinctBy(::normalizeAlbumIdentity)
 
-        val candidates = if (albumArtistCredits.isNotEmpty()) {
-            albumArtistCredits
-        } else {
-            tracks.flatMap(LocalAudioTrack::artistNames)
-                .distinctBy(::normalizeAlbumIdentity)
+        if (albumArtistCredits.isNotEmpty()) {
+            return albumArtistCredits.any { normalizeAlbumIdentity(it) == expectedArtist }
         }
 
-        return candidates.any { normalizeAlbumIdentity(it) == expectedArtist }
+        val inferredPrimaryArtist = ArtistCreditParser.resolvePrimaryDisplayName(
+            tracks.map(LocalAudioTrack::artist)
+        )
+        return inferredPrimaryArtist?.let(::normalizeAlbumIdentity) == expectedArtist
     }
 }
 
@@ -104,16 +101,21 @@ object AlbumParser {
         }
 
         return groupedTracks.mapNotNull { (key, group) ->
-            val distinctTracks = group.distinctBy(LocalAudioTrack::id)
+            val distinctTracks = group.distinctBy(LocalAudioTrack::id).sortedWith(
+                compareBy<LocalAudioTrack> { it.discNumber ?: Int.MAX_VALUE }
+                    .thenBy { it.trackNumber ?: Int.MAX_VALUE }
+                    .thenBy { it.title.orEmpty().lowercase() }
+                    .thenBy { it.id }
+            )
             val firstTrack = distinctTracks.firstOrNull() ?: return@mapNotNull null
             val title = firstTrack.album?.trim().orEmpty()
             val durations = distinctTracks.map(LocalAudioTrack::durationMs)
-            val albumArtistCredits = distinctTracks
-                .flatMap { track -> ArtistCreditParser.parse(track.albumArtist.orEmpty()) }
-                .distinctBy(::normalizeAlbumIdentity)
-            val trackArtists = distinctTracks
-                .flatMap(LocalAudioTrack::artistNames)
-                .distinctBy(::normalizeAlbumIdentity)
+            val albumArtistCredits = ArtistCreditParser.resolveDisplayNames(
+                distinctTracks.map(LocalAudioTrack::albumArtist)
+            )
+            val trackArtists = ArtistCreditParser.resolveDisplayNames(
+                distinctTracks.map(LocalAudioTrack::artist)
+            )
             val displayArtists = albumArtistCredits.ifEmpty { trackArtists }
             val totalDuration = durations.sumOf { it.coerceAtLeast(0L) }
 
@@ -128,8 +130,8 @@ object AlbumParser {
                 type = classify(title, durations)
             )
         }.sortedWith(
-            compareBy<AlbumRelease> { it.title.lowercase(Locale.ROOT) }
-                .thenBy { it.albumArtist.orEmpty().lowercase(Locale.ROOT) }
+            compareBy<AlbumRelease> { it.title.lowercase() }
+                .thenBy { it.albumArtist.orEmpty().lowercase() }
         )
     }
 
@@ -221,5 +223,4 @@ object AlbumParser {
 }
 
 private fun normalizeAlbumIdentity(value: String): String =
-    Normalizer.normalize(value.trim(), Normalizer.Form.NFC)
-        .lowercase(Locale.ROOT)
+    ArtistCreditParser.normalizeIdentity(value)

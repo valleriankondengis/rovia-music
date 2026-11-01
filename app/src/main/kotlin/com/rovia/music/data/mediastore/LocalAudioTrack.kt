@@ -36,6 +36,11 @@ data class LocalAudioTrack(
     val displayName: String? = null,
     val fileSizeBytes: Long? = null,
     val volumeName: String? = null,
+    val releaseMonth: Int? = null,
+    val releaseDay: Int? = null,
+    val releaseDatePrecision: String? = null,
+    val releaseDateSource: String? = null,
+    val releaseTypeSource: String? = null,
 ) {
     val artistNames: List<String>
         get() = ArtistCreditParser.parse(artist)

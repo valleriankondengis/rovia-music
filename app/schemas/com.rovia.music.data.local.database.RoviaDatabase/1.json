@@ -1,0 +1,2273 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "acc5698f1192430be2aab8b4749879f2",
+    "entities": [
+      {
+        "tableName": "artwork_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`assetKey` TEXT NOT NULL, `sourceUri` TEXT, `relativeFilePath` TEXT, `mimeType` TEXT, `contentHash` TEXT, `byteSize` INTEGER, `createdAtEpochMillis` INTEGER NOT NULL, `lastAccessedAtEpochMillis` INTEGER NOT NULL, `isPinned` INTEGER NOT NULL, `isAvailable` INTEGER NOT NULL, PRIMARY KEY(`assetKey`))",
+        "fields": [
+          {
+            "fieldPath": "assetKey",
+            "columnName": "assetKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceUri",
+            "columnName": "sourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "relativeFilePath",
+            "columnName": "relativeFilePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "contentHash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "byteSize",
+            "columnName": "byteSize",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAccessedAtEpochMillis",
+            "columnName": "lastAccessedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPinned",
+            "columnName": "isPinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isAvailable",
+            "columnName": "isAvailable",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "assetKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_artwork_assets_contentHash",
+            "unique": true,
+            "columnNames": [
+              "contentHash"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_artwork_assets_contentHash` ON `${TABLE_NAME}` (`contentHash`)"
+          },
+          {
+            "name": "index_artwork_assets_lastAccessedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "lastAccessedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artwork_assets_lastAccessedAtEpochMillis` ON `${TABLE_NAME}` (`lastAccessedAtEpochMillis`)"
+          },
+          {
+            "name": "index_artwork_assets_isPinned",
+            "unique": false,
+            "columnNames": [
+              "isPinned"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artwork_assets_isPinned` ON `${TABLE_NAME}` (`isPinned`)"
+          }
+        ]
+      },
+      {
+        "tableName": "artists",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`artistId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `normalizedName` TEXT NOT NULL, `identityKey` TEXT NOT NULL, `artworkAssetKey` TEXT, `artworkSourceUri` TEXT, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`artworkAssetKey`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "artistId",
+            "columnName": "artistId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalizedName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "identityKey",
+            "columnName": "identityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artworkAssetKey",
+            "columnName": "artworkAssetKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUri",
+            "columnName": "artworkSourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "artistId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_artists_identityKey",
+            "unique": true,
+            "columnNames": [
+              "identityKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_artists_identityKey` ON `${TABLE_NAME}` (`identityKey`)"
+          },
+          {
+            "name": "index_artists_normalizedName",
+            "unique": false,
+            "columnNames": [
+              "normalizedName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artists_normalizedName` ON `${TABLE_NAME}` (`normalizedName`)"
+          },
+          {
+            "name": "index_artists_artworkAssetKey",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artists_artworkAssetKey` ON `${TABLE_NAME}` (`artworkAssetKey`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKey"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "albums",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`albumId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `identityKey` TEXT NOT NULL, `title` TEXT NOT NULL, `normalizedTitle` TEXT NOT NULL, `albumArtistCreditRaw` TEXT, `providerAlbumId` INTEGER, `providerVolumeName` TEXT, `releaseDateRaw` TEXT, `releaseYear` INTEGER, `releaseMonth` INTEGER, `releaseDay` INTEGER, `releaseDatePrecision` TEXT, `releaseDateSource` TEXT, `firstMediaStoreReleaseYear` INTEGER, `lastMediaStoreReleaseYear` INTEGER, `releaseType` TEXT NOT NULL, `releaseTypeSource` TEXT NOT NULL, `artworkAssetKey` TEXT, `artworkSourceUri` TEXT, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`artworkAssetKey`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "albumId",
+            "columnName": "albumId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "identityKey",
+            "columnName": "identityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedTitle",
+            "columnName": "normalizedTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "albumArtistCreditRaw",
+            "columnName": "albumArtistCreditRaw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "providerAlbumId",
+            "columnName": "providerAlbumId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "providerVolumeName",
+            "columnName": "providerVolumeName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDateRaw",
+            "columnName": "releaseDateRaw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "releaseYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseMonth",
+            "columnName": "releaseMonth",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseDay",
+            "columnName": "releaseDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseDatePrecision",
+            "columnName": "releaseDatePrecision",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDateSource",
+            "columnName": "releaseDateSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "firstMediaStoreReleaseYear",
+            "columnName": "firstMediaStoreReleaseYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMediaStoreReleaseYear",
+            "columnName": "lastMediaStoreReleaseYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseType",
+            "columnName": "releaseType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseTypeSource",
+            "columnName": "releaseTypeSource",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artworkAssetKey",
+            "columnName": "artworkAssetKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUri",
+            "columnName": "artworkSourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "albumId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_albums_identityKey",
+            "unique": true,
+            "columnNames": [
+              "identityKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_albums_identityKey` ON `${TABLE_NAME}` (`identityKey`)"
+          },
+          {
+            "name": "index_albums_normalizedTitle",
+            "unique": false,
+            "columnNames": [
+              "normalizedTitle"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_albums_normalizedTitle` ON `${TABLE_NAME}` (`normalizedTitle`)"
+          },
+          {
+            "name": "index_albums_providerVolumeName_providerAlbumId",
+            "unique": false,
+            "columnNames": [
+              "providerVolumeName",
+              "providerAlbumId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_albums_providerVolumeName_providerAlbumId` ON `${TABLE_NAME}` (`providerVolumeName`, `providerAlbumId`)"
+          },
+          {
+            "name": "index_albums_releaseYear",
+            "unique": false,
+            "columnNames": [
+              "releaseYear"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_albums_releaseYear` ON `${TABLE_NAME}` (`releaseYear`)"
+          },
+          {
+            "name": "index_albums_releaseType",
+            "unique": false,
+            "columnNames": [
+              "releaseType"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_albums_releaseType` ON `${TABLE_NAME}` (`releaseType`)"
+          },
+          {
+            "name": "index_albums_artworkAssetKey",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_albums_artworkAssetKey` ON `${TABLE_NAME}` (`artworkAssetKey`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKey"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "genres",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`genreId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `normalizedName` TEXT NOT NULL, `identityKey` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "genreId",
+            "columnName": "genreId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalizedName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "identityKey",
+            "columnName": "identityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "genreId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_genres_identityKey",
+            "unique": true,
+            "columnNames": [
+              "identityKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_genres_identityKey` ON `${TABLE_NAME}` (`identityKey`)"
+          },
+          {
+            "name": "index_genres_normalizedName",
+            "unique": false,
+            "columnNames": [
+              "normalizedName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_genres_normalizedName` ON `${TABLE_NAME}` (`normalizedName`)"
+          }
+        ]
+      },
+      {
+        "tableName": "tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trackId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceKey` TEXT, `mediaStoreId` INTEGER, `volumeName` TEXT, `contentUri` TEXT, `displayName` TEXT, `title` TEXT NOT NULL, `normalizedTitle` TEXT NOT NULL, `artistCreditRaw` TEXT, `albumArtistCreditRaw` TEXT, `albumTitleSnapshot` TEXT, `albumReleaseId` INTEGER, `durationMs` INTEGER NOT NULL, `mediaStoreYear` INTEGER, `releaseDateRaw` TEXT, `releaseYear` INTEGER, `releaseMonth` INTEGER, `releaseDay` INTEGER, `releaseDatePrecision` TEXT, `releaseDateSource` TEXT, `trackNumber` INTEGER, `discNumber` INTEGER, `dateAddedSeconds` INTEGER NOT NULL, `dateModifiedSeconds` INTEGER NOT NULL, `relativePath` TEXT, `fileSizeBytes` INTEGER, `mimeType` TEXT, `isCompilation` INTEGER, `artworkAssetKey` TEXT, `artworkSourceUri` TEXT, `metadataFingerprint` TEXT, `metadataExtractionVersion` INTEGER NOT NULL, `metadataExtractedAtEpochMillis` INTEGER, `lastSeenScanToken` TEXT, `lastSeenGeneration` INTEGER, `isAvailable` INTEGER NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`albumReleaseId`) REFERENCES `albums`(`albumId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKey`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceKey",
+            "columnName": "sourceKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaStoreId",
+            "columnName": "mediaStoreId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "volumeName",
+            "columnName": "volumeName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentUri",
+            "columnName": "contentUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedTitle",
+            "columnName": "normalizedTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistCreditRaw",
+            "columnName": "artistCreditRaw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumArtistCreditRaw",
+            "columnName": "albumArtistCreditRaw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumTitleSnapshot",
+            "columnName": "albumTitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumReleaseId",
+            "columnName": "albumReleaseId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaStoreYear",
+            "columnName": "mediaStoreYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseDateRaw",
+            "columnName": "releaseDateRaw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "releaseYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseMonth",
+            "columnName": "releaseMonth",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseDay",
+            "columnName": "releaseDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "releaseDatePrecision",
+            "columnName": "releaseDatePrecision",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDateSource",
+            "columnName": "releaseDateSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trackNumber",
+            "columnName": "trackNumber",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "discNumber",
+            "columnName": "discNumber",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dateAddedSeconds",
+            "columnName": "dateAddedSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateModifiedSeconds",
+            "columnName": "dateModifiedSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relativePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fileSizeBytes",
+            "columnName": "fileSizeBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isCompilation",
+            "columnName": "isCompilation",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "artworkAssetKey",
+            "columnName": "artworkAssetKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUri",
+            "columnName": "artworkSourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "metadataFingerprint",
+            "columnName": "metadataFingerprint",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "metadataExtractionVersion",
+            "columnName": "metadataExtractionVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadataExtractedAtEpochMillis",
+            "columnName": "metadataExtractedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSeenScanToken",
+            "columnName": "lastSeenScanToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSeenGeneration",
+            "columnName": "lastSeenGeneration",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isAvailable",
+            "columnName": "isAvailable",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "trackId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tracks_sourceKey",
+            "unique": true,
+            "columnNames": [
+              "sourceKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tracks_sourceKey` ON `${TABLE_NAME}` (`sourceKey`)"
+          },
+          {
+            "name": "index_tracks_normalizedTitle",
+            "unique": false,
+            "columnNames": [
+              "normalizedTitle"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_normalizedTitle` ON `${TABLE_NAME}` (`normalizedTitle`)"
+          },
+          {
+            "name": "index_tracks_dateAddedSeconds",
+            "unique": false,
+            "columnNames": [
+              "dateAddedSeconds"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_dateAddedSeconds` ON `${TABLE_NAME}` (`dateAddedSeconds`)"
+          },
+          {
+            "name": "index_tracks_dateModifiedSeconds",
+            "unique": false,
+            "columnNames": [
+              "dateModifiedSeconds"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_dateModifiedSeconds` ON `${TABLE_NAME}` (`dateModifiedSeconds`)"
+          },
+          {
+            "name": "index_tracks_relativePath",
+            "unique": false,
+            "columnNames": [
+              "relativePath"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_relativePath` ON `${TABLE_NAME}` (`relativePath`)"
+          },
+          {
+            "name": "index_tracks_isAvailable_dateAddedSeconds",
+            "unique": false,
+            "columnNames": [
+              "isAvailable",
+              "dateAddedSeconds"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_isAvailable_dateAddedSeconds` ON `${TABLE_NAME}` (`isAvailable`, `dateAddedSeconds`)"
+          },
+          {
+            "name": "index_tracks_albumReleaseId",
+            "unique": false,
+            "columnNames": [
+              "albumReleaseId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_albumReleaseId` ON `${TABLE_NAME}` (`albumReleaseId`)"
+          },
+          {
+            "name": "index_tracks_artworkAssetKey",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_artworkAssetKey` ON `${TABLE_NAME}` (`artworkAssetKey`)"
+          },
+          {
+            "name": "index_tracks_volumeName_mediaStoreId",
+            "unique": false,
+            "columnNames": [
+              "volumeName",
+              "mediaStoreId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tracks_volumeName_mediaStoreId` ON `${TABLE_NAME}` (`volumeName`, `mediaStoreId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "albums",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "albumReleaseId"
+            ],
+            "referencedColumns": [
+              "albumId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKey"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "track_artist_cross_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trackId` INTEGER NOT NULL, `artistId` INTEGER NOT NULL, `creditOrder` INTEGER NOT NULL, `creditRole` TEXT NOT NULL, PRIMARY KEY(`trackId`, `artistId`), FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`artistId`) REFERENCES `artists`(`artistId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistId",
+            "columnName": "artistId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditOrder",
+            "columnName": "creditOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditRole",
+            "columnName": "creditRole",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "trackId",
+            "artistId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_track_artist_cross_ref_artistId_trackId",
+            "unique": false,
+            "columnNames": [
+              "artistId",
+              "trackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_track_artist_cross_ref_artistId_trackId` ON `${TABLE_NAME}` (`artistId`, `trackId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "artists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artistId"
+            ],
+            "referencedColumns": [
+              "artistId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album_artist_cross_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`albumId` INTEGER NOT NULL, `artistId` INTEGER NOT NULL, `creditOrder` INTEGER NOT NULL, PRIMARY KEY(`albumId`, `artistId`), FOREIGN KEY(`albumId`) REFERENCES `albums`(`albumId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`artistId`) REFERENCES `artists`(`artistId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "albumId",
+            "columnName": "albumId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistId",
+            "columnName": "artistId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditOrder",
+            "columnName": "creditOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "albumId",
+            "artistId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_artist_cross_ref_artistId_albumId",
+            "unique": false,
+            "columnNames": [
+              "artistId",
+              "albumId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_artist_cross_ref_artistId_albumId` ON `${TABLE_NAME}` (`artistId`, `albumId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "albums",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "albumId"
+            ],
+            "referencedColumns": [
+              "albumId"
+            ]
+          },
+          {
+            "table": "artists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artistId"
+            ],
+            "referencedColumns": [
+              "artistId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "track_genre_cross_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trackId` INTEGER NOT NULL, `genreId` INTEGER NOT NULL, `genreOrder` INTEGER NOT NULL, PRIMARY KEY(`trackId`, `genreId`), FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`genreId`) REFERENCES `genres`(`genreId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "genreId",
+            "columnName": "genreId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "genreOrder",
+            "columnName": "genreOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "trackId",
+            "genreId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_track_genre_cross_ref_genreId_trackId",
+            "unique": false,
+            "columnNames": [
+              "genreId",
+              "trackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_track_genre_cross_ref_genreId_trackId` ON `${TABLE_NAME}` (`genreId`, `trackId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "genres",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "genreId"
+            ],
+            "referencedColumns": [
+              "genreId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playlists",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlistId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `normalizedName` TEXT NOT NULL, `description` TEXT, `artworkAssetKey` TEXT, `artworkSourceUri` TEXT, `createdAtEpochMillis` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`artworkAssetKey`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlistId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalizedName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKey",
+            "columnName": "artworkAssetKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUri",
+            "columnName": "artworkSourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "playlistId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playlists_normalizedName",
+            "unique": false,
+            "columnNames": [
+              "normalizedName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlists_normalizedName` ON `${TABLE_NAME}` (`normalizedName`)"
+          },
+          {
+            "name": "index_playlists_updatedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "updatedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlists_updatedAtEpochMillis` ON `${TABLE_NAME}` (`updatedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playlists_artworkAssetKey",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlists_artworkAssetKey` ON `${TABLE_NAME}` (`artworkAssetKey`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKey"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playlist_tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlistTrackId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `playlistId` INTEGER NOT NULL, `trackId` INTEGER, `sortOrder` INTEGER NOT NULL, `addedAtEpochMillis` INTEGER NOT NULL, `trackTitleSnapshot` TEXT NOT NULL, `artistCreditSnapshot` TEXT, `albumTitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, FOREIGN KEY(`playlistId`) REFERENCES `playlists`(`playlistId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "playlistTrackId",
+            "columnName": "playlistTrackId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlistId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAtEpochMillis",
+            "columnName": "addedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackTitleSnapshot",
+            "columnName": "trackTitleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistCreditSnapshot",
+            "columnName": "artistCreditSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumTitleSnapshot",
+            "columnName": "albumTitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKeySnapshot",
+            "columnName": "artworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "playlistTrackId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playlist_tracks_playlistId_sortOrder",
+            "unique": false,
+            "columnNames": [
+              "playlistId",
+              "sortOrder"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_tracks_playlistId_sortOrder` ON `${TABLE_NAME}` (`playlistId`, `sortOrder`)"
+          },
+          {
+            "name": "index_playlist_tracks_trackId",
+            "unique": false,
+            "columnNames": [
+              "trackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_tracks_trackId` ON `${TABLE_NAME}` (`trackId`)"
+          },
+          {
+            "name": "index_playlist_tracks_artworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_tracks_artworkAssetKeySnapshot` ON `${TABLE_NAME}` (`artworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "playlists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "playlistId"
+            ],
+            "referencedColumns": [
+              "playlistId"
+            ]
+          },
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "liked_tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`likedTrackId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackId` INTEGER, `sourceKeySnapshot` TEXT, `titleSnapshot` TEXT NOT NULL, `artistCreditSnapshot` TEXT, `albumTitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, `likedAtEpochMillis` INTEGER NOT NULL, FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "likedTrackId",
+            "columnName": "likedTrackId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceKeySnapshot",
+            "columnName": "sourceKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "titleSnapshot",
+            "columnName": "titleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistCreditSnapshot",
+            "columnName": "artistCreditSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumTitleSnapshot",
+            "columnName": "albumTitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKeySnapshot",
+            "columnName": "artworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "likedAtEpochMillis",
+            "columnName": "likedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "likedTrackId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_liked_tracks_trackId",
+            "unique": true,
+            "columnNames": [
+              "trackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_liked_tracks_trackId` ON `${TABLE_NAME}` (`trackId`)"
+          },
+          {
+            "name": "index_liked_tracks_sourceKeySnapshot",
+            "unique": true,
+            "columnNames": [
+              "sourceKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_liked_tracks_sourceKeySnapshot` ON `${TABLE_NAME}` (`sourceKeySnapshot`)"
+          },
+          {
+            "name": "index_liked_tracks_likedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "likedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_liked_tracks_likedAtEpochMillis` ON `${TABLE_NAME}` (`likedAtEpochMillis`)"
+          },
+          {
+            "name": "index_liked_tracks_artworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_liked_tracks_artworkAssetKeySnapshot` ON `${TABLE_NAME}` (`artworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playback_activities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`activityId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `activityKey` TEXT NOT NULL, `entityType` TEXT NOT NULL, `entityKey` TEXT NOT NULL, `timestampEpochMillis` INTEGER NOT NULL, `timeZoneIdAtEvent` TEXT NOT NULL, `triggerTrackId` INTEGER, `titleSnapshot` TEXT NOT NULL, `subtitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, FOREIGN KEY(`triggerTrackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "activityId",
+            "columnName": "activityId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activityKey",
+            "columnName": "activityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityType",
+            "columnName": "entityType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityKey",
+            "columnName": "entityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampEpochMillis",
+            "columnName": "timestampEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeZoneIdAtEvent",
+            "columnName": "timeZoneIdAtEvent",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "triggerTrackId",
+            "columnName": "triggerTrackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "titleSnapshot",
+            "columnName": "titleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitleSnapshot",
+            "columnName": "subtitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKeySnapshot",
+            "columnName": "artworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "activityId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playback_activities_activityKey",
+            "unique": true,
+            "columnNames": [
+              "activityKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playback_activities_activityKey` ON `${TABLE_NAME}` (`activityKey`)"
+          },
+          {
+            "name": "index_playback_activities_timestampEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "timestampEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_activities_timestampEpochMillis` ON `${TABLE_NAME}` (`timestampEpochMillis`)"
+          },
+          {
+            "name": "index_playback_activities_entityType_entityKey_timestampEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "entityType",
+              "entityKey",
+              "timestampEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_activities_entityType_entityKey_timestampEpochMillis` ON `${TABLE_NAME}` (`entityType`, `entityKey`, `timestampEpochMillis`)"
+          },
+          {
+            "name": "index_playback_activities_triggerTrackId",
+            "unique": false,
+            "columnNames": [
+              "triggerTrackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_activities_triggerTrackId` ON `${TABLE_NAME}` (`triggerTrackId`)"
+          },
+          {
+            "name": "index_playback_activities_artworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_activities_artworkAssetKeySnapshot` ON `${TABLE_NAME}` (`artworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "triggerTrackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playback_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sessionId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionKey` TEXT NOT NULL, `originType` TEXT NOT NULL, `originEntityKey` TEXT NOT NULL, `originTitleSnapshot` TEXT NOT NULL, `originSubtitleSnapshot` TEXT, `originArtworkAssetKeySnapshot` TEXT, `originArtworkSourceUriSnapshot` TEXT, `primaryTrackId` INTEGER, `startedAtEpochMillis` INTEGER NOT NULL, `endedAtEpochMillis` INTEGER, `timeZoneIdAtStart` TEXT NOT NULL, `wasInterrupted` INTEGER NOT NULL, FOREIGN KEY(`primaryTrackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`originArtworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionKey",
+            "columnName": "sessionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originType",
+            "columnName": "originType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originEntityKey",
+            "columnName": "originEntityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originTitleSnapshot",
+            "columnName": "originTitleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originSubtitleSnapshot",
+            "columnName": "originSubtitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originArtworkAssetKeySnapshot",
+            "columnName": "originArtworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originArtworkSourceUriSnapshot",
+            "columnName": "originArtworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "primaryTrackId",
+            "columnName": "primaryTrackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtEpochMillis",
+            "columnName": "endedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "timeZoneIdAtStart",
+            "columnName": "timeZoneIdAtStart",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wasInterrupted",
+            "columnName": "wasInterrupted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "sessionId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playback_sessions_sessionKey",
+            "unique": true,
+            "columnNames": [
+              "sessionKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playback_sessions_sessionKey` ON `${TABLE_NAME}` (`sessionKey`)"
+          },
+          {
+            "name": "index_playback_sessions_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_sessions_startedAtEpochMillis` ON `${TABLE_NAME}` (`startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playback_sessions_originType_originEntityKey_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "originType",
+              "originEntityKey",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_sessions_originType_originEntityKey_startedAtEpochMillis` ON `${TABLE_NAME}` (`originType`, `originEntityKey`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playback_sessions_primaryTrackId",
+            "unique": false,
+            "columnNames": [
+              "primaryTrackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_sessions_primaryTrackId` ON `${TABLE_NAME}` (`primaryTrackId`)"
+          },
+          {
+            "name": "index_playback_sessions_originArtworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "originArtworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_sessions_originArtworkAssetKeySnapshot` ON `${TABLE_NAME}` (`originArtworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "primaryTrackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "originArtworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playback_track_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`eventId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `eventKey` TEXT NOT NULL, `sessionId` INTEGER, `trackId` INTEGER, `playbackSourceType` TEXT NOT NULL, `playbackSourceEntityKey` TEXT NOT NULL, `playbackSourceTitleSnapshot` TEXT NOT NULL, `trackTitleSnapshot` TEXT NOT NULL, `artistCreditSnapshot` TEXT, `albumTitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, `trackDurationMsSnapshot` INTEGER, `startedAtEpochMillis` INTEGER NOT NULL, `endedAtEpochMillis` INTEGER, `startPositionMs` INTEGER NOT NULL, `endPositionMs` INTEGER, `heardDurationMs` INTEGER NOT NULL, `qualifiedPlay` INTEGER NOT NULL, `playbackSequence` INTEGER NOT NULL, `timeZoneIdAtStart` TEXT NOT NULL, FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`sessionId`) REFERENCES `playback_sessions`(`sessionId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "eventId",
+            "columnName": "eventId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventKey",
+            "columnName": "eventKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "playbackSourceType",
+            "columnName": "playbackSourceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playbackSourceEntityKey",
+            "columnName": "playbackSourceEntityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playbackSourceTitleSnapshot",
+            "columnName": "playbackSourceTitleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackTitleSnapshot",
+            "columnName": "trackTitleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistCreditSnapshot",
+            "columnName": "artistCreditSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumTitleSnapshot",
+            "columnName": "albumTitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKeySnapshot",
+            "columnName": "artworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trackDurationMsSnapshot",
+            "columnName": "trackDurationMsSnapshot",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtEpochMillis",
+            "columnName": "endedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startPositionMs",
+            "columnName": "startPositionMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endPositionMs",
+            "columnName": "endPositionMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "heardDurationMs",
+            "columnName": "heardDurationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qualifiedPlay",
+            "columnName": "qualifiedPlay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playbackSequence",
+            "columnName": "playbackSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeZoneIdAtStart",
+            "columnName": "timeZoneIdAtStart",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "eventId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playback_track_events_eventKey",
+            "unique": true,
+            "columnNames": [
+              "eventKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playback_track_events_eventKey` ON `${TABLE_NAME}` (`eventKey`)"
+          },
+          {
+            "name": "index_playback_track_events_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_track_events_startedAtEpochMillis` ON `${TABLE_NAME}` (`startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playback_track_events_trackId_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "trackId",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_track_events_trackId_startedAtEpochMillis` ON `${TABLE_NAME}` (`trackId`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playback_track_events_sessionId_playbackSequence",
+            "unique": false,
+            "columnNames": [
+              "sessionId",
+              "playbackSequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_track_events_sessionId_playbackSequence` ON `${TABLE_NAME}` (`sessionId`, `playbackSequence`)"
+          },
+          {
+            "name": "index_playback_track_events_playbackSourceType_playbackSourceEntityKey_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "playbackSourceType",
+              "playbackSourceEntityKey",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_track_events_playbackSourceType_playbackSourceEntityKey_startedAtEpochMillis` ON `${TABLE_NAME}` (`playbackSourceType`, `playbackSourceEntityKey`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_playback_track_events_artworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_track_events_artworkAssetKeySnapshot` ON `${TABLE_NAME}` (`artworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          },
+          {
+            "table": "playback_sessions",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sessionId"
+            ],
+            "referencedColumns": [
+              "sessionId"
+            ]
+          },
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "listening_segments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`segmentId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentKey` TEXT NOT NULL, `playbackEventId` INTEGER, `sessionId` INTEGER, `trackId` INTEGER, `startedAtEpochMillis` INTEGER NOT NULL, `endedAtEpochMillis` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `startPositionMs` INTEGER NOT NULL, `endPositionMs` INTEGER NOT NULL, `timeZoneIdAtStart` TEXT NOT NULL, FOREIGN KEY(`playbackEventId`) REFERENCES `playback_track_events`(`eventId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`sessionId`) REFERENCES `playback_sessions`(`sessionId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "segmentId",
+            "columnName": "segmentId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segmentKey",
+            "columnName": "segmentKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playbackEventId",
+            "columnName": "playbackEventId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtEpochMillis",
+            "columnName": "endedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startPositionMs",
+            "columnName": "startPositionMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endPositionMs",
+            "columnName": "endPositionMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeZoneIdAtStart",
+            "columnName": "timeZoneIdAtStart",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "segmentId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_listening_segments_segmentKey",
+            "unique": true,
+            "columnNames": [
+              "segmentKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_listening_segments_segmentKey` ON `${TABLE_NAME}` (`segmentKey`)"
+          },
+          {
+            "name": "index_listening_segments_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_segments_startedAtEpochMillis` ON `${TABLE_NAME}` (`startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_listening_segments_trackId_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "trackId",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_segments_trackId_startedAtEpochMillis` ON `${TABLE_NAME}` (`trackId`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_listening_segments_playbackEventId",
+            "unique": false,
+            "columnNames": [
+              "playbackEventId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_segments_playbackEventId` ON `${TABLE_NAME}` (`playbackEventId`)"
+          },
+          {
+            "name": "index_listening_segments_sessionId",
+            "unique": false,
+            "columnNames": [
+              "sessionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_segments_sessionId` ON `${TABLE_NAME}` (`sessionId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "playback_track_events",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "playbackEventId"
+            ],
+            "referencedColumns": [
+              "eventId"
+            ]
+          },
+          {
+            "table": "playback_sessions",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sessionId"
+            ],
+            "referencedColumns": [
+              "sessionId"
+            ]
+          },
+          {
+            "table": "tracks",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_store_sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`volumeName` TEXT NOT NULL, `mediaStoreVersion` TEXT, `lastGenerationAdded` INTEGER NOT NULL, `lastGenerationModified` INTEGER NOT NULL, `lastSuccessfulFullSyncAtEpochMillis` INTEGER, `lastSuccessfulIncrementalSyncAtEpochMillis` INTEGER, `lastFullScanToken` TEXT, `forceFullSync` INTEGER NOT NULL, PRIMARY KEY(`volumeName`))",
+        "fields": [
+          {
+            "fieldPath": "volumeName",
+            "columnName": "volumeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaStoreVersion",
+            "columnName": "mediaStoreVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastGenerationAdded",
+            "columnName": "lastGenerationAdded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastGenerationModified",
+            "columnName": "lastGenerationModified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSuccessfulFullSyncAtEpochMillis",
+            "columnName": "lastSuccessfulFullSyncAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessfulIncrementalSyncAtEpochMillis",
+            "columnName": "lastSuccessfulIncrementalSyncAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastFullScanToken",
+            "columnName": "lastFullScanToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "forceFullSync",
+            "columnName": "forceFullSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "volumeName"
+          ]
+        }
+      },
+      {
+        "tableName": "excluded_folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`path` TEXT NOT NULL, `normalizedPath` TEXT NOT NULL, `excludedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`path`))",
+        "fields": [
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedPath",
+            "columnName": "normalizedPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "excludedAtEpochMillis",
+            "columnName": "excludedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "path"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_excluded_folders_normalizedPath",
+            "unique": true,
+            "columnNames": [
+              "normalizedPath"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_excluded_folders_normalizedPath` ON `${TABLE_NAME}` (`normalizedPath`)"
+          }
+        ]
+      },
+      {
+        "tableName": "user_action_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userActionEventId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `actionKey` TEXT NOT NULL, `actionType` TEXT NOT NULL, `targetType` TEXT NOT NULL, `targetKey` TEXT NOT NULL, `occurredAtEpochMillis` INTEGER NOT NULL, `timeZoneIdAtEvent` TEXT NOT NULL, `titleSnapshot` TEXT, `subtitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "userActionEventId",
+            "columnName": "userActionEventId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionKey",
+            "columnName": "actionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionType",
+            "columnName": "actionType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetType",
+            "columnName": "targetType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetKey",
+            "columnName": "targetKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAtEpochMillis",
+            "columnName": "occurredAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeZoneIdAtEvent",
+            "columnName": "timeZoneIdAtEvent",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleSnapshot",
+            "columnName": "titleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "subtitleSnapshot",
+            "columnName": "subtitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkAssetKeySnapshot",
+            "columnName": "artworkAssetKeySnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "userActionEventId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_user_action_events_actionKey",
+            "unique": true,
+            "columnNames": [
+              "actionKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_user_action_events_actionKey` ON `${TABLE_NAME}` (`actionKey`)"
+          },
+          {
+            "name": "index_user_action_events_occurredAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "occurredAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_action_events_occurredAtEpochMillis` ON `${TABLE_NAME}` (`occurredAtEpochMillis`)"
+          },
+          {
+            "name": "index_user_action_events_actionType_occurredAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "actionType",
+              "occurredAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_action_events_actionType_occurredAtEpochMillis` ON `${TABLE_NAME}` (`actionType`, `occurredAtEpochMillis`)"
+          },
+          {
+            "name": "index_user_action_events_targetType_targetKey",
+            "unique": false,
+            "columnNames": [
+              "targetType",
+              "targetKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_action_events_targetType_targetKey` ON `${TABLE_NAME}` (`targetType`, `targetKey`)"
+          },
+          {
+            "name": "index_user_action_events_artworkAssetKeySnapshot",
+            "unique": false,
+            "columnNames": [
+              "artworkAssetKeySnapshot"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_action_events_artworkAssetKeySnapshot` ON `${TABLE_NAME}` (`artworkAssetKeySnapshot`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "artwork_assets",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artworkAssetKeySnapshot"
+            ],
+            "referencedColumns": [
+              "assetKey"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'acc5698f1192430be2aab8b4749879f2')"
+    ]
+  }
+}

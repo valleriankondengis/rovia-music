@@ -1,5 +1,9 @@
 package com.rovia.music.data.mediastore
 
+import com.rovia.music.util.KotlinDateTime
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.LocalDate
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.database.ContentObserver
@@ -9,6 +13,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import androidx.room3.withWriteTransaction
+import com.rovia.music.data.local.database.RoviaDatabase
+import com.rovia.music.data.local.entity.TrackEntity
 import com.rovia.music.data.repository.FolderFilterRepository
 import com.rovia.music.data.repository.isExcludedFolderPath
 import kotlinx.coroutines.CancellationException
@@ -16,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,14 +33,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.util.Comparator
-import java.util.Locale
 
 class MediaStoreAudioRepository(
     private val contentResolver: ContentResolver,
     private val folderFilterRepository: FolderFilterRepository,
+    private val catalogSynchronizer: MediaStoreCatalogSynchronizer? = null,
+    private val database: RoviaDatabase? = null,
 ) {
     data class CatalogState(
         val tracks: List<LocalAudioTrack> = emptyList(),
@@ -48,11 +54,20 @@ class MediaStoreAudioRepository(
         val name: String,
     )
 
+    private data class CatalogSyncRequest(
+        val tracks: List<LocalAudioTrack>,
+        val initialSnapshot: MediaStoreGenerationSnapshot,
+    )
+
     private data class EmbeddedTrackMetadata(
         val releaseDate: String? = null,
         val metadataDateEpochMillis: Long? = null,
         val inferredDateEpochMillis: Long? = null,
         val releaseYear: Int? = null,
+        val releaseMonth: Int? = null,
+        val releaseDay: Int? = null,
+        val releaseDatePrecision: String? = null,
+        val releaseDateSource: String? = null,
         val albumArtist: String? = null,
         val cdTrackNumber: String? = null,
         val trackNumber: Int? = null,
@@ -66,10 +81,14 @@ class MediaStoreAudioRepository(
         val sampleRateHz: Int? = null,
         val bitsPerSample: Int? = null,
         val bitrateBps: Int? = null,
+        val extractionSucceeded: Boolean = false,
     )
 
     private data class ParsedMetadataDate(
         val year: Int,
+        val month: Int?,
+        val day: Int?,
+        val precision: String,
         val metadataDateEpochMillis: Long?,
         val inferredDateEpochMillis: Long?,
     )
@@ -80,6 +99,7 @@ class MediaStoreAudioRepository(
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshMutex = Mutex()
+    private val catalogSyncRequests = Channel<CatalogSyncRequest>(Channel.CONFLATED)
     private val observerLock = Any()
 
     private val mutableCatalogState = MutableStateFlow(CatalogState())
@@ -100,13 +120,37 @@ class MediaStoreAudioRepository(
         override fun onChange(selfChange: Boolean) {
             scheduleMediaStoreRefresh()
         }
-
-        override fun onChange(selfChange: Boolean, uri: Uri?) {
-            scheduleMediaStoreRefresh()
-        }
     }
 
     init {
+        val synchronizer = catalogSynchronizer
+        if (synchronizer != null) {
+            repositoryScope.launch {
+                for (request in catalogSyncRequests) {
+                    try {
+                        val report = synchronizer.synchronize(
+                            tracks = request.tracks,
+                            initialSnapshot = request.initialSnapshot,
+                        )
+                        if (report.didWork) {
+                            Log.d(
+                                TAG,
+                                "Room catalog sync: full=${report.fullSyncVolumeCount}, " +
+                                    "incremental=${report.incrementalSyncVolumeCount}, " +
+                                    "inserted=${report.insertedTrackCount}, " +
+                                    "updated=${report.updatedTrackCount}, " +
+                                    "unavailable=${report.unavailableTrackCount}",
+                            )
+                        }
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        Log.w(TAG, "Unable to synchronize the Room catalog", exception)
+                    }
+                }
+            }
+        }
+
         repositoryScope.launch {
             folderFilterRepository.excludedFolders.collect { excludedFolders ->
                 refreshMutex.withLock {
@@ -145,6 +189,14 @@ class MediaStoreAudioRepository(
             }
 
             try {
+                val generationSnapshot = try {
+                    catalogSynchronizer?.captureGenerationSnapshot()
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    Log.w(TAG, "Unable to capture MediaStore generation snapshot", exception)
+                    null
+                }
                 val freshRawTracks = queryRawTracks()
                 val excludedFolders = folderFilterRepository.excludedFolders.value
                 val previousRawTracks = cachedRawTracks
@@ -152,8 +204,10 @@ class MediaStoreAudioRepository(
 
                 cachedRawTracks = freshRawTracks
 
-                synchronized(observerLock) {
-                    cacheInvalidated = mediaChangeSequence != queryStartSequence
+                val querySnapshotStable = synchronized(observerLock) {
+                    val stable = mediaChangeSequence == queryStartSequence
+                    cacheInvalidated = !stable
+                    stable
                 }
 
                 val currentVisible = mutableCatalogState.value
@@ -173,6 +227,18 @@ class MediaStoreAudioRepository(
                         isRefreshing = false,
                         loadFailed = false,
                     )
+                }
+
+                if (querySnapshotStable && generationSnapshot != null && catalogSynchronizer != null) {
+                    val enqueueResult = catalogSyncRequests.trySend(
+                        CatalogSyncRequest(
+                            tracks = freshRawTracks,
+                            initialSnapshot = generationSnapshot,
+                        ),
+                    )
+                    if (enqueueResult.isFailure) {
+                        Log.w(TAG, "Unable to enqueue Room catalog synchronization")
+                    }
                 }
             } catch (exception: CancellationException) {
                 cacheInvalidated = true
@@ -212,6 +278,47 @@ class MediaStoreAudioRepository(
                 track = track,
                 metadata = readEmbeddedMetadata(track.uri),
             )
+        }
+
+    suspend fun loadReleaseMetadata(track: LocalAudioTrack): LocalAudioTrack =
+        withContext(Dispatchers.IO) {
+            val roomDatabase = database
+            val volumeName = track.volumeName?.takeIf(String::isNotBlank)
+            val existingTrack = if (roomDatabase != null && volumeName != null) {
+                roomDatabase.trackDao().getByMediaStoreIdentity(
+                    mediaStoreId = track.id,
+                    volumeName = volumeName,
+                )
+            } else {
+                null
+            }
+
+            if (existingTrack != null && isEmbeddedMetadataCacheCurrent(existingTrack, track)) {
+                return@withContext applyStoredMetadata(track, existingTrack)
+            }
+
+            val metadata = readEmbeddedMetadata(track.uri)
+            val enrichedTrack = applyEmbeddedMetadata(track, metadata)
+            if (roomDatabase == null || !metadata.extractionSucceeded || volumeName == null) {
+                return@withContext enrichedTrack
+            }
+
+            val trackToUpdate = existingTrack
+                ?: roomDatabase.trackDao().getByMediaStoreIdentity(
+                    mediaStoreId = track.id,
+                    volumeName = volumeName,
+                )
+                ?: return@withContext enrichedTrack
+
+            persistEmbeddedMetadata(
+                database = roomDatabase,
+                trackEntity = trackToUpdate,
+                metadata = metadata,
+                enrichedTrack = enrichedTrack,
+            )
+
+            val updatedTrack = roomDatabase.trackDao().getById(trackToUpdate.trackId)
+            if (updatedTrack != null) applyStoredMetadata(track, updatedTrack) else enrichedTrack
         }
 
     private fun ensureContentObserverRegistered() {
@@ -284,6 +391,10 @@ class MediaStoreAudioRepository(
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.VOLUME_NAME,
         )
 
         val selection =
@@ -310,7 +421,7 @@ class MediaStoreAudioRepository(
             selection,
             null,
             sortOrder,
-        ) ?: return@withContext emptyList()
+        ) ?: throw IllegalStateException("MediaStore audio catalog query returned no cursor")
 
         val rawTracks = cursor.use { result ->
             val idColumn = result.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
@@ -383,6 +494,8 @@ class MediaStoreAudioRepository(
                             albumId = albumId,
                             albumArtist = albumArtist,
                             releaseYear = releaseYear,
+                            releaseDatePrecision = if (releaseYear != null) "YEAR" else null,
+                            releaseDateSource = if (releaseYear != null) "MEDIASTORE_YEAR" else null,
                             inferredDateEpochMillis = yearStartEpochMillis(releaseYear),
                             trackNumber = trackNumber,
                             discNumber = discNumber,
@@ -409,27 +522,195 @@ class MediaStoreAudioRepository(
         }
     }
 
+    private fun isEmbeddedMetadataCacheCurrent(
+        cached: TrackEntity,
+        track: LocalAudioTrack,
+    ): Boolean {
+        val title = track.title
+            ?: track.displayName?.substringBeforeLast('.')?.takeIf(String::isNotBlank)
+            ?: ""
+
+        return cached.isAvailable &&
+            cached.mediaStoreId == track.id &&
+            cached.volumeName == track.volumeName &&
+            cached.metadataExtractionVersion >= EMBEDDED_METADATA_EXTRACTION_VERSION &&
+            cached.metadataExtractedAtEpochMillis != null &&
+            cached.title == title &&
+            cached.artistCreditRaw == track.artist &&
+            cached.albumTitleSnapshot == track.album &&
+            cached.durationMs == track.durationMs &&
+            cached.mediaStoreYear == track.releaseYear &&
+            cached.dateAddedSeconds == track.dateAddedSeconds &&
+            cached.dateModifiedSeconds == track.dateModifiedSeconds &&
+            cached.relativePath == track.relativePath &&
+            cached.fileSizeBytes == track.fileSizeBytes &&
+            cached.mimeType == track.mimeType
+    }
+
+    private fun applyStoredMetadata(
+        track: LocalAudioTrack,
+        cached: TrackEntity,
+    ): LocalAudioTrack {
+        val parsedDate = parseMetadataDate(cached.releaseDateRaw)
+        val releaseYear = cached.releaseYear ?: cached.mediaStoreYear ?: track.releaseYear
+
+        return track.copy(
+            albumArtist = track.albumArtist ?: cached.albumArtistCreditRaw,
+            releaseDate = cached.releaseDateRaw ?: track.releaseDate,
+            releaseYear = releaseYear,
+            releaseMonth = cached.releaseMonth ?: track.releaseMonth,
+            releaseDay = cached.releaseDay ?: track.releaseDay,
+            releaseDatePrecision = cached.releaseDatePrecision ?: track.releaseDatePrecision,
+            releaseDateSource = cached.releaseDateSource ?: track.releaseDateSource,
+            metadataDateEpochMillis = parsedDate?.metadataDateEpochMillis
+                ?: track.metadataDateEpochMillis,
+            inferredDateEpochMillis = parsedDate?.inferredDateEpochMillis
+                ?: track.inferredDateEpochMillis
+                ?: yearStartEpochMillis(releaseYear),
+            trackNumber = cached.trackNumber ?: track.trackNumber,
+            discNumber = cached.discNumber ?: track.discNumber,
+            compilation = cached.isCompilation?.toString() ?: track.compilation,
+        )
+    }
+
+    private suspend fun persistEmbeddedMetadata(
+        database: RoviaDatabase,
+        trackEntity: TrackEntity,
+        metadata: EmbeddedTrackMetadata,
+        enrichedTrack: LocalAudioTrack,
+    ) {
+        val now = KotlinDateTime.nowEpochMilliseconds()
+        database.withWriteTransaction {
+            val current = database.trackDao().getById(trackEntity.trackId)
+                ?: return@withWriteTransaction
+            if (!current.isAvailable) return@withWriteTransaction
+
+            val hasEmbeddedReleaseDate = metadata.releaseDateSource == "EMBEDDED_DATE"
+            val hasEmbeddedReleaseYear = metadata.releaseDateSource == "EMBEDDED_YEAR"
+            val hasEmbeddedReleaseMetadata = hasEmbeddedReleaseDate || hasEmbeddedReleaseYear
+            val fallbackYear = current.releaseYear ?: current.mediaStoreYear
+            val releaseYear = if (hasEmbeddedReleaseMetadata) {
+                metadata.releaseYear ?: fallbackYear
+            } else {
+                fallbackYear
+            }
+            val releaseDateRaw = when {
+                hasEmbeddedReleaseDate -> metadata.releaseDate
+                hasEmbeddedReleaseYear -> metadata.releaseYear?.toString()
+                !current.releaseDateRaw.isNullOrBlank() -> current.releaseDateRaw
+                current.mediaStoreYear != null -> current.mediaStoreYear.toString()
+                else -> null
+            }
+            val releaseMonth = if (hasEmbeddedReleaseMetadata) metadata.releaseMonth else current.releaseMonth
+            val releaseDay = if (hasEmbeddedReleaseMetadata) metadata.releaseDay else current.releaseDay
+            val releaseDatePrecision = when {
+                hasEmbeddedReleaseMetadata -> metadata.releaseDatePrecision ?: "YEAR"
+                !current.releaseDatePrecision.isNullOrBlank() -> current.releaseDatePrecision
+                current.mediaStoreYear != null -> "YEAR"
+                else -> null
+            }
+            val releaseDateSource = when {
+                hasEmbeddedReleaseMetadata -> metadata.releaseDateSource
+                !current.releaseDateSource.isNullOrBlank() -> current.releaseDateSource
+                current.mediaStoreYear != null -> "MEDIASTORE_YEAR"
+                else -> null
+            }
+            val updatedTrack = current.copy(
+                albumArtistCreditRaw = current.albumArtistCreditRaw
+                    ?: enrichedTrack.albumArtist?.takeIf(String::isNotBlank),
+                releaseDateRaw = releaseDateRaw,
+                releaseYear = releaseYear,
+                releaseMonth = releaseMonth,
+                releaseDay = releaseDay,
+                releaseDatePrecision = releaseDatePrecision,
+                releaseDateSource = releaseDateSource,
+                trackNumber = enrichedTrack.trackNumber ?: current.trackNumber,
+                discNumber = enrichedTrack.discNumber ?: current.discNumber,
+                isCompilation = enrichedTrack.compilation?.let(::parseBooleanMetadata)
+                    ?: current.isCompilation,
+                metadataExtractionVersion = EMBEDDED_METADATA_EXTRACTION_VERSION,
+                metadataExtractedAtEpochMillis = now,
+                updatedAtEpochMillis = now,
+            )
+            database.trackDao().update(updatedTrack)
+
+            val albumId = updatedTrack.albumReleaseId ?: return@withWriteTransaction
+            if (!hasEmbeddedReleaseMetadata) return@withWriteTransaction
+
+            val albumDao = database.albumDao()
+            val album = albumDao.getById(albumId) ?: return@withWriteTransaction
+            val candidatePriority = releaseDatePriority(
+                source = updatedTrack.releaseDateSource,
+                precision = updatedTrack.releaseDatePrecision,
+            )
+            val existingPriority = releaseDatePriority(
+                source = album.releaseDateSource,
+                precision = album.releaseDatePrecision,
+            )
+            if (candidatePriority <= existingPriority) return@withWriteTransaction
+
+            albumDao.update(
+                album.copy(
+                    releaseDateRaw = updatedTrack.releaseDateRaw,
+                    releaseYear = updatedTrack.releaseYear,
+                    releaseMonth = updatedTrack.releaseMonth,
+                    releaseDay = updatedTrack.releaseDay,
+                    releaseDatePrecision = updatedTrack.releaseDatePrecision,
+                    releaseDateSource = updatedTrack.releaseDateSource,
+                    updatedAtEpochMillis = now,
+                ),
+            )
+        }
+    }
+
+    private fun releaseDatePriority(source: String?, precision: String?): Int = when (source) {
+        "EMBEDDED_DATE" -> when (precision) {
+            "DAY" -> 500
+            "MONTH" -> 400
+            else -> 300
+        }
+        "EMBEDDED_YEAR" -> 250
+        "MEDIASTORE_ALBUM_FIRST_YEAR" -> 200
+        "MEDIASTORE_YEAR" -> 180
+        "MEDIASTORE_ALBUM_FIRST_LAST_YEAR", "MEDIASTORE_ALBUM_LAST_YEAR" -> 100
+        else -> 0
+    }
+
     private fun applyEmbeddedMetadata(
         track: LocalAudioTrack,
         metadata: EmbeddedTrackMetadata,
     ): LocalAudioTrack {
-        val releaseYear = track.releaseYear ?: metadata.releaseYear
+        val releaseYear = metadata.releaseYear ?: track.releaseYear
+        val hasEmbeddedReleaseMetadata = metadata.releaseDateSource != null
         val metadataGenres = metadata.genre
             ?.split(',', ';')
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
-            ?.distinctBy { it.lowercase(Locale.ROOT) }
+            ?.distinctBy { it.lowercase() }
             .orEmpty()
 
         return track.copy(
             albumArtist = track.albumArtist ?: metadata.albumArtist,
             releaseYear = releaseYear,
-            releaseDate = metadata.releaseDate ?: track.releaseDate,
-            metadataDateEpochMillis = metadata.metadataDateEpochMillis
-                ?: track.metadataDateEpochMillis,
-            inferredDateEpochMillis = metadata.inferredDateEpochMillis
-                ?: track.inferredDateEpochMillis
-                ?: yearStartEpochMillis(releaseYear),
+            releaseDate = if (metadata.releaseDateSource == "EMBEDDED_DATE") {
+                metadata.releaseDate
+            } else {
+                track.releaseDate
+            },
+            releaseMonth = if (hasEmbeddedReleaseMetadata) metadata.releaseMonth else track.releaseMonth,
+            releaseDay = if (hasEmbeddedReleaseMetadata) metadata.releaseDay else track.releaseDay,
+            releaseDatePrecision = metadata.releaseDatePrecision ?: track.releaseDatePrecision,
+            releaseDateSource = metadata.releaseDateSource ?: track.releaseDateSource,
+            metadataDateEpochMillis = if (hasEmbeddedReleaseMetadata) {
+                metadata.metadataDateEpochMillis
+            } else {
+                track.metadataDateEpochMillis
+            },
+            inferredDateEpochMillis = if (hasEmbeddedReleaseMetadata) {
+                metadata.inferredDateEpochMillis
+            } else {
+                track.inferredDateEpochMillis ?: yearStartEpochMillis(releaseYear)
+            },
             genres = track.genres.ifEmpty { metadataGenres },
             trackNumber = metadata.trackNumber ?: track.trackNumber,
             discNumber = metadata.discNumber ?: track.discNumber,
@@ -475,6 +756,15 @@ class MediaStoreAudioRepository(
                     inferredDateEpochMillis = parsedDate?.inferredDateEpochMillis
                         ?: if (parsedDate == null) yearStartEpochMillis(releaseYear) else null,
                     releaseYear = releaseYear,
+                    releaseMonth = parsedDate?.month,
+                    releaseDay = parsedDate?.day,
+                    releaseDatePrecision = parsedDate?.precision
+                        ?: metadataYear?.let { "YEAR" },
+                    releaseDateSource = when {
+                        parsedDate != null -> "EMBEDDED_DATE"
+                        metadataYear != null -> "EMBEDDED_YEAR"
+                        else -> null
+                    },
                     albumArtist = value(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST),
                     cdTrackNumber = cdTrackNumber,
                     trackNumber = mediaTrackNumber,
@@ -494,6 +784,7 @@ class MediaStoreAudioRepository(
                     bitrateBps = value(MediaMetadataRetriever.METADATA_KEY_BITRATE)
                         ?.toIntOrNull()
                         ?.takeIf { it > 0 },
+                    extractionSucceeded = true,
                 )
             } ?: EmbeddedTrackMetadata()
         } catch (exception: Exception) {
@@ -509,30 +800,37 @@ class MediaStoreAudioRepository(
 
     private fun parseMetadataDate(value: String?): ParsedMetadataDate? {
         val text = value?.trim()?.takeIf(String::isNotBlank) ?: return null
-        val match = Regex("""^(\d{4})(?:[-/.](\d{1,2}))?(?:[-/.](\d{1,2}))?.*$""")
-            .matchEntire(text) ?: return null
+        val match = METADATA_DATE_PATTERN.matchEntire(text) ?: return null
         val year = match.groupValues[1].toIntOrNull()
             ?.takeIf { it in 1000..9999 } ?: return null
-        val month = match.groupValues[2].takeIf(String::isNotEmpty)?.toIntOrNull()
-        val day = match.groupValues[3].takeIf(String::isNotEmpty)?.toIntOrNull()
+        val month = match.groupValues[2]
+            .takeIf(String::isNotEmpty)
+            ?.toIntOrNull()
+        val day = match.groupValues[3]
+            .takeIf(String::isNotEmpty)
+            ?.toIntOrNull()
+
+        if (day != null && month == null) return null
 
         return try {
             val normalizedDate = when {
-                month == null -> LocalDate.of(year, 1, 1)
-                day == null -> LocalDate.of(year, month, 1)
-                else -> LocalDate.of(year, month, day)
+                month == null -> LocalDate(year, 1, 1)
+                day == null -> LocalDate(year, month, 1)
+                else -> LocalDate(year, month, day)
             }
-            val timestamp = normalizedDate
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant()
-                .toEpochMilli()
-            val yearStart = LocalDate.of(year, 1, 1)
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant()
-                .toEpochMilli()
+            val timestamp = normalizedDate.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            val yearStart = LocalDate(year, 1, 1).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            val precision = when {
+                day != null -> "DAY"
+                month != null -> "MONTH"
+                else -> "YEAR"
+            }
 
             ParsedMetadataDate(
                 year = year,
+                month = month,
+                day = day,
+                precision = precision,
                 metadataDateEpochMillis = timestamp.takeIf { month != null },
                 inferredDateEpochMillis = yearStart.takeIf { month == null },
             )
@@ -547,14 +845,17 @@ class MediaStoreAudioRepository(
         ?.toIntOrNull()
         ?.takeIf { it > 0 }
 
+    private fun parseBooleanMetadata(value: String?): Boolean? = when (value?.trim()?.lowercase()) {
+        "1", "true", "yes" -> true
+        "0", "false", "no" -> false
+        else -> null
+    }
+
     private fun yearStartEpochMillis(year: Int?): Long? {
         if (year == null || year !in 1000..9999) return null
 
         return try {
-            LocalDate.of(year, 1, 1)
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant()
-                .toEpochMilli()
+            LocalDate(year, 1, 1).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
         } catch (_: Exception) {
             null
         }
@@ -613,7 +914,7 @@ class MediaStoreAudioRepository(
                             continue
                         }
 
-                        val normalizedGenreName = genre.name.lowercase(Locale.ROOT)
+                        val normalizedGenreName = genre.name.lowercase()
 
                         genresByAudioId
                             .getOrPut(audioId) { linkedMapOf() }
@@ -680,38 +981,30 @@ class MediaStoreAudioRepository(
         }
     }
 
-    private fun publishCatalog(
+    private suspend fun publishCatalog(
         rawTracks: List<LocalAudioTrack>,
         excludedFolders: Set<String>,
         isRefreshing: Boolean,
     ) {
-        val visibleTracks = rawTracks.filter { track ->
-            !isExcludedFolderPath(
-                path = track.relativePath.orEmpty(),
-                excludedFolders = excludedFolders,
-            )
-        }
-
-        val recentlyAddedTracks = visibleTracks.sortedWith(
-            Comparator { left, right ->
-                val dateOrder = right.dateAddedSeconds.compareTo(left.dateAddedSeconds)
-
-                if (dateOrder != 0) {
-                    dateOrder
-                } else {
-                    String.CASE_INSENSITIVE_ORDER.compare(
-                        left.title.orEmpty(),
-                        right.title.orEmpty(),
+        val previous = mutableCatalogState.value
+        val (visibleTracks, recentlyAddedTracks, contentChanged) =
+            withContext(Dispatchers.Default) {
+                val visible = rawTracks.filter { track ->
+                    !isExcludedFolderPath(
+                        path = track.relativePath.orEmpty(),
+                        excludedFolders = excludedFolders,
                     )
                 }
-            },
-        )
-
-        val previous = mutableCatalogState.value
-        val contentChanged =
-            !previous.isLoaded ||
-                previous.tracks != visibleTracks ||
-                previous.recentlyAddedTracks != recentlyAddedTracks
+                val recentlyAdded = visible.sortedWith(
+                    compareByDescending<LocalAudioTrack> { it.dateAddedSeconds }
+                        .thenBy { it.title.orEmpty().lowercase() },
+                )
+                val changed =
+                    !previous.isLoaded ||
+                        previous.tracks != visible ||
+                        previous.recentlyAddedTracks != recentlyAdded
+                Triple(visible, recentlyAdded, changed)
+            }
 
         lastAppliedExcludedFolders = excludedFolders
 
@@ -727,7 +1020,9 @@ class MediaStoreAudioRepository(
 
     private companion object {
         const val TAG = "MediaStoreAudioRepo"
-        const val CONTENT_CHANGE_DEBOUNCE_MS = 350L
+        const val CONTENT_CHANGE_DEBOUNCE_MS = 600L
+        const val EMBEDDED_METADATA_EXTRACTION_VERSION = 1
+        val METADATA_DATE_PATTERN = Regex("""^(\d{4})(?:[-/.](\d{1,2}))?(?:[-/.](\d{1,2}))?.*$""")
     }
 }
 private fun android.database.Cursor.getStringOrNull(columnIndex: Int): String? {
