@@ -119,7 +119,12 @@ object ArtworkBitmapLoader {
 
         val applicationContext = context.applicationContext
         val safeMaxDimension = normalizeDimension(maxDimension)
-        val key = memoryCacheKey(uri, safeMaxDimension)
+        val diskKey = createPersistentCacheKey(
+            context = applicationContext,
+            uri = uri,
+            maxDimension = safeMaxDimension
+        )
+        val key = diskKey ?: memoryCacheKey(uri, safeMaxDimension)
 
         getCachedBitmap(key)?.let { return it }
 
@@ -143,7 +148,8 @@ object ArtworkBitmapLoader {
                             uri = uri,
                             maxDimension = safeMaxDimension,
                             preferThumbnailApi = preferThumbnailApi,
-                            memoryKey = key
+                            memoryKey = key,
+                            diskKey = diskKey
                         )
                     }
                 }
@@ -199,14 +205,9 @@ object ArtworkBitmapLoader {
         uri: Uri,
         maxDimension: Int,
         preferThumbnailApi: Boolean,
-        memoryKey: String
+        memoryKey: String,
+        diskKey: String?
     ): Bitmap? {
-        val diskKey = createPersistentCacheKey(
-            context = context,
-            uri = uri,
-            maxDimension = maxDimension
-        )
-
         if (diskKey != null) {
             when (
                 val result = ArtworkDiskCache.read(

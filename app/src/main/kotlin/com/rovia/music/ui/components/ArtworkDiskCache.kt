@@ -1,11 +1,12 @@
 package com.rovia.music.ui.components
 
+import org.kotlincrypto.hash.sha2.SHA256
+import com.rovia.music.util.KotlinDateTime
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.File
 import java.io.FileOutputStream
-import java.security.MessageDigest
 import java.util.LinkedHashMap
 
 internal sealed interface ArtworkDiskCacheResult {
@@ -51,7 +52,7 @@ internal object ArtworkDiskCache {
                 return@synchronized null
             }
 
-            current.setLastModified(System.currentTimeMillis())
+            current.setLastModified(KotlinDateTime.nowEpochMilliseconds())
             current
         } ?: return ArtworkDiskCacheResult.Miss
 
@@ -197,7 +198,7 @@ internal object ArtworkDiskCache {
                     return@synchronized
                 }
 
-                targetFile.setLastModified(System.currentTimeMillis())
+                targetFile.setLastModified(KotlinDateTime.nowEpochMilliseconds())
                 cacheEntries[hashedKey] = targetFile
                 totalCachedBytes += targetFile.length()
 
@@ -259,7 +260,7 @@ internal object ArtworkDiskCache {
                 current.isFile &&
                 current.name.endsWith(NO_ARTWORK_EXTENSION)
             ) {
-                current.setLastModified(System.currentTimeMillis())
+                current.setLastModified(KotlinDateTime.nowEpochMilliseconds())
                 return
             }
 
@@ -289,7 +290,7 @@ internal object ArtworkDiskCache {
                 return
             }
 
-            markerFile.setLastModified(System.currentTimeMillis())
+            markerFile.setLastModified(KotlinDateTime.nowEpochMilliseconds())
             cacheEntries[hashedKey] = markerFile
             totalCachedBytes += markerFile.length()
 
@@ -441,9 +442,7 @@ internal object ArtworkDiskCache {
     }
 
     private fun hashKey(key: String): String {
-        val digest = MessageDigest
-            .getInstance("SHA-256")
-            .digest(key.toByteArray(Charsets.UTF_8))
+        val digest = SHA256().apply { update(key.encodeToByteArray()) }.digest()
 
         return buildString(digest.size * 2) {
             digest.forEach { byte ->
