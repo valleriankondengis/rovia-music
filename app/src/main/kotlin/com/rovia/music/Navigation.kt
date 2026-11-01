@@ -39,13 +39,17 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.Player
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -68,13 +72,22 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEvent
+import com.rovia.music.data.repository.GenreDetailCatalog
+import com.rovia.music.data.repository.ArtistDetailCatalog
 import com.rovia.music.feature.album.AlbumPage
 import com.rovia.music.feature.artist.ArtistPage
 import com.rovia.music.feature.genre.GenrePage
 import com.rovia.music.feature.single.SinglePage
 import com.rovia.music.feature.home.HomeRecentlyAddedScreen
 import com.rovia.music.feature.home.HomeScreen
+import com.rovia.music.feature.history.HistoryActivityType
+import com.rovia.music.feature.history.HistoryActivityUiModel
+import com.rovia.music.feature.history.HistoryScreen
+import com.rovia.music.feature.history.HistoryViewModel
+import com.rovia.music.feature.history.HistoryViewModelFactory
 import com.rovia.music.feature.library.LibraryScreen
+import com.rovia.music.feature.library.LibraryViewModel
+import com.rovia.music.feature.library.LibraryViewModelFactory
 import com.rovia.music.feature.player.PlayerScreen
 import com.rovia.music.feature.search.SearchScreen
 import com.rovia.music.feature.settings.AboutScreen
@@ -82,6 +95,7 @@ import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -89,6 +103,9 @@ private data object HomeDestination : NavKey
 
 @Serializable
 private data object HomeRecentlyAddedDestination : NavKey
+
+@Serializable
+private data object HistoryDestination : NavKey
 
 @Serializable
 private data object SearchDestination : NavKey
@@ -219,6 +236,12 @@ fun Navigation(appContainer: AppContainer) {
                             destination = HomeRecentlyAddedDestination,
                         )
                     },
+                    onOpenHistory = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.HOME,
+                            destination = HistoryDestination,
+                        )
+                    },
                     onOpenSettings = {
                         navigationState.navigateWithin(
                             owner = TopLevelSection.HOME,
@@ -243,11 +266,191 @@ fun Navigation(appContainer: AppContainer) {
             }
         }
 
+        entry<HistoryDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val historyRepository = appContainer.playbackHistoryRepository
+            val historyViewModel: HistoryViewModel = viewModel(
+                factory = remember(historyRepository) {
+                    HistoryViewModelFactory(historyRepository)
+                },
+            )
+            val historyState by historyViewModel.state.collectAsStateWithLifecycle()
+            val coroutineScope = rememberCoroutineScope()
+
+            val trackTypeLabel = stringResource(R.string.history_type_track)
+            val artistTypeLabel = stringResource(R.string.history_type_artist)
+            val albumTypeLabel = stringResource(R.string.history_type_album)
+            val genreTypeLabel = stringResource(R.string.history_type_genre)
+            val playlistTypeLabel = stringResource(R.string.history_type_playlist)
+            val likesTypeLabel = stringResource(R.string.history_type_likes)
+            val singleTypeLabel = stringResource(R.string.artist_release_type_single)
+            val epTypeLabel = stringResource(R.string.artist_release_type_ep)
+
+            val historyItems = remember(
+                historyState.activities,
+                historyState.dailyTrackPlayCounts,
+                trackTypeLabel,
+                artistTypeLabel,
+                albumTypeLabel,
+                genreTypeLabel,
+                playlistTypeLabel,
+                likesTypeLabel,
+                singleTypeLabel,
+                epTypeLabel,
+            ) {
+                historyState.activities.mapNotNull { activity ->
+                    val type = HistoryActivityType.entries.firstOrNull {
+                        it.name == activity.entityType
+                    } ?: when (activity.entityType) {
+                        "SINGLE", "EP" -> HistoryActivityType.ALBUM
+                        else -> return@mapNotNull null
+                    }
+                    val typeLabel = when (activity.entityType) {
+                        "SINGLE" -> singleTypeLabel
+                        "EP" -> epTypeLabel
+                        else -> when (type) {
+                            HistoryActivityType.TRACK -> trackTypeLabel
+                            HistoryActivityType.ARTIST -> artistTypeLabel
+                            HistoryActivityType.ALBUM -> albumTypeLabel
+                            HistoryActivityType.GENRE -> genreTypeLabel
+                            HistoryActivityType.PLAYLIST -> playlistTypeLabel
+                            HistoryActivityType.LIKES -> likesTypeLabel
+                        }
+                    }
+                    HistoryActivityUiModel(
+                        activityId = activity.activityId,
+                        activityKey = activity.activityKey,
+                        entityKey = activity.entityKey,
+                        type = type,
+                        title = activity.titleSnapshot.ifBlank { typeLabel },
+                        subtitle = activity.subtitleSnapshot,
+                        typeLabel = typeLabel,
+                        timestampEpochMillis = activity.timestampEpochMillis,
+                        timeZoneIdAtEvent = activity.timeZoneIdAtEvent,
+                        artworkUri = activity.artworkSourceUriSnapshot,
+                        trackId = activity.triggerTrackId,
+                        playCount = historyState.dailyTrackPlayCounts[activity.activityKey] ?: 1L,
+                        entityTypeName = activity.entityType,
+                    )
+                }
+            }
+
+            val mediaController by appContainer.playbackController.mediaController
+                .collectAsStateWithLifecycle()
+            var currentMediaId by remember(mediaController) {
+                mutableStateOf(mediaController?.currentMediaItem?.mediaId)
+            }
+
+            DisposableEffect(mediaController) {
+                val controller = mediaController
+                if (controller == null) {
+                    currentMediaId = null
+                    onDispose {}
+                } else {
+                    val listener = object : Player.Listener {
+                        override fun onEvents(
+                            player: Player,
+                            events: Player.Events,
+                        ) {
+                            currentMediaId = player.currentMediaItem?.mediaId
+                        }
+                    }
+                    controller.addListener(listener)
+                    currentMediaId = controller.currentMediaItem?.mediaId
+                    onDispose { controller.removeListener(listener) }
+                }
+            }
+
+            NavigationDestinationSurface {
+                HistoryScreen(
+                    items = historyItems,
+                    title = stringResource(R.string.history_title),
+                    emptyMessage = stringResource(R.string.history_empty),
+                    errorMessage = stringResource(R.string.history_load_error),
+                    retryLabel = stringResource(R.string.library_retry),
+                    backContentDescription = stringResource(R.string.player_back),
+                    isLoading = historyState.isLoading,
+                    loadFailed = historyState.loadFailed,
+                    canLoadMore = historyState.canLoadMore,
+                    isLoadingMore = historyState.isLoadingMore,
+                    miniPlayerVisible = currentMediaId != null,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.HOME)
+                    },
+                    onRetry = historyViewModel::retry,
+                    onLoadMore = historyViewModel::loadMore,
+                    onActivityClick = { item ->
+                        when (item.entityTypeName) {
+                            "SINGLE", "EP" -> {
+                                navigationState.navigateWithin(
+                                    owner = TopLevelSection.HOME,
+                                    destination = SingleDestination(
+                                        releaseKey = item.entityKey,
+                                        owner = TopLevelSection.HOME,
+                                    ),
+                                )
+                            }
+
+                            else -> when (item.type) {
+                                HistoryActivityType.TRACK -> {
+                                    coroutineScope.launch {
+                                        val track = historyRepository.getPlayableTrackForActivity(
+                                            item.activityKey,
+                                        )
+                                        if (track != null) {
+                                            appContainer.playbackController.playQueue(
+                                                tracks = listOf(track),
+                                                startIndex = 0,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                HistoryActivityType.ARTIST -> {
+                                    navigationState.navigateWithin(
+                                        owner = TopLevelSection.HOME,
+                                        destination = ArtistDestination(
+                                            artistName = item.entityKey,
+                                            owner = TopLevelSection.HOME,
+                                        ),
+                                    )
+                                }
+
+                                HistoryActivityType.ALBUM -> {
+                                    navigationState.navigateWithin(
+                                        owner = TopLevelSection.HOME,
+                                        destination = AlbumDestination(
+                                            releaseKey = item.entityKey,
+                                            owner = TopLevelSection.HOME,
+                                        ),
+                                    )
+                                }
+
+                                HistoryActivityType.GENRE -> {
+                                    navigationState.navigateWithin(
+                                        owner = TopLevelSection.HOME,
+                                        destination = GenreDestination(
+                                            genreKey = item.entityKey,
+                                            owner = TopLevelSection.HOME,
+                                        ),
+                                    )
+                                }
+
+                                HistoryActivityType.PLAYLIST,
+                                HistoryActivityType.LIKES -> Unit
+                            }
+                        }
+                    },
+                )
+            }
+        }
+
         entry<SearchDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             NavigationDestinationSurface {
                 SearchScreen(
                     audioRepository =
                         appContainer.mediaStoreAudioRepository,
+                    databaseSearchRepository =
+                        appContainer.databaseSearchRepository,
                     playbackController =
                         appContainer.playbackController,
                     onOpenSettings = {
@@ -279,10 +482,18 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<LibraryDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val libraryRepository = appContainer.libraryRepository
+            val libraryViewModel: LibraryViewModel = viewModel(
+                factory = remember(libraryRepository) {
+                    LibraryViewModelFactory(
+                        libraryRepository = libraryRepository,
+                    )
+                },
+            )
+
             NavigationDestinationSurface {
                 LibraryScreen(
-                    audioRepository =
-                        appContainer.mediaStoreAudioRepository,
+                    libraryViewModel = libraryViewModel,
                     playbackController =
                         appContainer.playbackController,
                     onOpenArtist = { artistName ->
@@ -314,13 +525,19 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<ArtistDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
-            val catalog by appContainer.mediaStoreAudioRepository.catalogState
-                .collectAsStateWithLifecycle()
+            val libraryRepository = appContainer.libraryRepository
+            val artistDetailFlow = remember(libraryRepository, destination.artistName) {
+                libraryRepository.observeArtistDetail(destination.artistName)
+            }
+            val artistDetail by artistDetailFlow.collectAsStateWithLifecycle(
+                initialValue = ArtistDetailCatalog(),
+            )
 
             NavigationDestinationSurface {
                 ArtistPage(
                     artistName = destination.artistName,
-                    tracks = catalog.tracks,
+                    tracks = artistDetail.tracks,
+                    releases = artistDetail.releases,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -359,13 +576,16 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<SingleDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
-            val catalog by appContainer.mediaStoreAudioRepository.catalogState
-                .collectAsStateWithLifecycle()
+            val libraryRepository = appContainer.libraryRepository
+            val releaseFlow = remember(libraryRepository, destination.releaseKey) {
+                libraryRepository.observeRelease(destination.releaseKey)
+            }
+            val release by releaseFlow.collectAsStateWithLifecycle(initialValue = null)
 
             NavigationDestinationSurface {
                 SinglePage(
                     releaseKey = destination.releaseKey,
-                    catalogTracks = catalog.tracks,
+                    releaseData = release,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -375,13 +595,16 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<AlbumDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
-            val catalog by appContainer.mediaStoreAudioRepository.catalogState
-                .collectAsStateWithLifecycle()
+            val libraryRepository = appContainer.libraryRepository
+            val releaseFlow = remember(libraryRepository, destination.releaseKey) {
+                libraryRepository.observeRelease(destination.releaseKey)
+            }
+            val release by releaseFlow.collectAsStateWithLifecycle(initialValue = null)
 
             NavigationDestinationSurface {
                 AlbumPage(
                     releaseKey = destination.releaseKey,
-                    catalogTracks = catalog.tracks,
+                    release = release,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -391,13 +614,18 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<GenreDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
-            val catalog by appContainer.mediaStoreAudioRepository.catalogState
-                .collectAsStateWithLifecycle()
+            val libraryRepository = appContainer.libraryRepository
+            val genreDetailFlow = remember(libraryRepository, destination.genreKey) {
+                libraryRepository.observeGenreDetail(destination.genreKey)
+            }
+            val genreDetail by genreDetailFlow.collectAsStateWithLifecycle(
+                initialValue = GenreDetailCatalog(),
+            )
 
             NavigationDestinationSurface {
                 GenrePage(
                     genreKey = destination.genreKey,
-                    catalogTracks = catalog.tracks,
+                    genreData = genreDetail,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -407,14 +635,26 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<ArtistGenreDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
-            val catalog by appContainer.mediaStoreAudioRepository.catalogState
-                .collectAsStateWithLifecycle()
+            val libraryRepository = appContainer.libraryRepository
+            val genreDetailFlow = remember(
+                libraryRepository,
+                destination.genreKey,
+                destination.artistName,
+            ) {
+                libraryRepository.observeGenreDetail(
+                    genreKey = destination.genreKey,
+                    artistName = destination.artistName,
+                )
+            }
+            val genreDetail by genreDetailFlow.collectAsStateWithLifecycle(
+                initialValue = GenreDetailCatalog(),
+            )
 
             NavigationDestinationSurface {
                 GenrePage(
                     genreKey = destination.genreKey,
                     artistName = destination.artistName,
-                    catalogTracks = catalog.tracks,
+                    genreData = genreDetail,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -479,20 +719,66 @@ fun Navigation(appContainer: AppContainer) {
             },
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
+                val initialContentKey = initialState.entries.lastOrNull()?.contentKey
+                val targetContentKey = targetState.entries.lastOrNull()?.contentKey
+                val topLevelDirection = if (
+                    isTopLevelDestination(initialContentKey) &&
+                    isTopLevelDestination(targetContentKey)
+                ) {
+                    val initialSection = destinationSection(initialContentKey)
+                    val targetSection = destinationSection(targetContentKey)
+
+                    if (initialSection != null && targetSection != null) {
+                        targetSection.ordinal > initialSection.ordinal
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+                val enterFromRight = topLevelDirection ?: true
+
                 slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
+                    initialOffsetX = { fullWidth ->
+                        if (enterFromRight) fullWidth else -fullWidth
+                    },
                     animationSpec = motionScheme.defaultSpatialSpec(),
                 ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth },
+                    targetOffsetX = { fullWidth ->
+                        if (enterFromRight) -fullWidth else fullWidth
+                    },
                     animationSpec = motionScheme.defaultSpatialSpec(),
                 )
             },
             popTransitionSpec = {
+                val initialContentKey = initialState.entries.lastOrNull()?.contentKey
+                val targetContentKey = targetState.entries.lastOrNull()?.contentKey
+                val topLevelDirection = if (
+                    isTopLevelDestination(initialContentKey) &&
+                    isTopLevelDestination(targetContentKey)
+                ) {
+                    val initialSection = destinationSection(initialContentKey)
+                    val targetSection = destinationSection(targetContentKey)
+
+                    if (initialSection != null && targetSection != null) {
+                        targetSection.ordinal > initialSection.ordinal
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+                val enterFromRight = topLevelDirection ?: false
+
                 slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth },
+                    initialOffsetX = { fullWidth ->
+                        if (enterFromRight) fullWidth else -fullWidth
+                    },
                     animationSpec = motionScheme.defaultSpatialSpec(),
                 ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
+                    targetOffsetX = { fullWidth ->
+                        if (enterFromRight) -fullWidth else fullWidth
+                    },
                     animationSpec = motionScheme.defaultSpatialSpec(),
                 )
             },
@@ -676,6 +962,7 @@ private fun navigationContentKey(key: NavKey): String =
     when (key) {
         HomeDestination -> "home"
         HomeRecentlyAddedDestination -> "home:recently-added"
+        HistoryDestination -> "home:history"
         SearchDestination -> "search"
         LibraryDestination -> "library"
         is ArtistDestination -> "${key.owner.contentKeyPrefix()}:artist:${key.artistName}"

@@ -1,36 +1,34 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Rovia</string>
-
     <string name="navigation_home">Beranda</string>
     <string name="navigation_search">Cari</string>
     <string name="navigation_library">Pustaka</string>
-
     <string name="home_title">Beranda</string>
     <string name="home_recently_added_title">Baru ditambahkan</string>
     <string name="home_recently_added_view_all">Lihat semua lagu yang baru ditambahkan</string>
     <string name="home_recently_added_empty">Belum ada lagu yang baru ditambahkan</string>
     <string name="home_recently_added_load_error">Musik yang baru ditambahkan tidak dapat dimuat.</string>
-
     <string name="search_hint">Cari</string>
     <string name="search_clear">Hapus pencarian</string>
     <string name="search_no_results">Tidak ada hasil</string>
     <string name="search_section_songs">Lagu</string>
     <string name="search_section_artists">Artis</string>
     <string name="search_section_albums">Album</string>
-
+    <string name="search_section_likes">Lagu disukai</string>
+    <string name="search_section_playlists">Playlist</string>
+    <string name="search_playlist_matching_track">Lagu terkait: %1$s • %2$s</string>
+    <string name="search_playlist_matching_track_title">Lagu terkait: %1$s</string>
     <string name="library_title">Pustaka</string>
     <string name="library_loading">Memuat musik…</string>
     <string name="library_no_tracks">Tidak ada musik yang ditemukan di perangkat ini.</string>
     <string name="library_load_error">File audio tidak dapat dimuat.</string>
     <string name="library_retry">Coba lagi</string>
-
     <string name="library_category_all_songs">Semua Lagu</string>
     <string name="library_category_artists">Artis</string>
     <string name="library_category_albums">Album</string>
     <string name="library_category_genres">Genre</string>
     <string name="library_category_folders">Folder</string>
-
     <string name="artist_songs_and_eps">Single &amp; EP</string>
     <string name="artist_release_type_single">Single</string>
     <string name="artist_release_type_ep">EP</string>
@@ -44,12 +42,10 @@
     <string name="library_folders_back">Semua folder</string>
     <string name="library_album_supporting">%1$s • %2$s</string>
     <string name="library_folder_supporting">%1$s • %2$s</string>
-
     <plurals name="library_track_count">
         <item quantity="one">%1$d lagu</item>
         <item quantity="other">%1$d lagu</item>
     </plurals>
-
     <string name="player_title">Sedang diputar</string>
     <string name="player_back">Kembali</string>
     <string name="player_play">Putar</string>
@@ -61,12 +57,10 @@
     <string name="player_connecting">Menghubungkan pemutar…</string>
     <string name="player_unknown_track">Judul tidak diketahui</string>
     <string name="player_unknown_artist">Artis tidak diketahui</string>
-
     <string name="settings_title">Pengaturan</string>
     <string name="settings_back">Kembali</string>
-    <string name="folder_filter_title">Filter folder</string>
+    <string name="folder_filter_title">Filter Folder</string>
     <string name="about_menu_title">Tentang</string>
-
     <string name="about_title">Tentang Rovia</string>
     <string name="about_back">Kembali</string>
     <string name="about_version_label">Versi</string>
@@ -104,4 +98,18 @@
     <string name="queue_empty">Tidak ada lagu dalam antrean.</string>
     <string name="queue_current_track">Sedang diputar</string>
     <string name="player_lyrics_unavailable">Lirik untuk lagu ini belum tersedia.</string>
+    <string name="history_type_track">Lagu</string>
+    <string name="history_type_artist">Artis</string>
+    <string name="history_type_album">Album</string>
+    <string name="history_type_genre">Genre</string>
+    <string name="history_type_playlist">Playlist</string>
+    <string name="history_type_likes">Lagu disukai</string>
+    <string name="history_title">Riwayat</string>
+    <string name="history_open">Buka riwayat pemutaran</string>
+    <string name="history_empty">Aktivitas pemutaran akan muncul di sini.</string>
+    <string name="history_load_error">Riwayat pemutaran tidak dapat dimuat.</string>
+    <plurals name="history_play_count">
+        <item quantity="one">%1$d kali diputar</item>
+        <item quantity="other">%1$d kali diputar</item>
+    </plurals>
 </resources>
