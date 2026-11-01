@@ -1,5 +1,6 @@
 package com.rovia.music.data.lyrics
 
+import kotlin.coroutines.cancellation.CancellationException
 import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
@@ -14,10 +15,6 @@ import androidx.media3.inspector.MetadataRetriever
 import com.rovia.music.ui.components.LyricLine
 import com.rovia.music.ui.components.LyricWord
 import com.rovia.music.ui.components.SyncedLyrics
-import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
-import java.util.Locale
-import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -79,14 +76,14 @@ object EmbeddedLyricsReader {
     private fun parseEntry(
         entry: Metadata.Entry,
     ): SyncedLyrics? = when (entry) {
-        is BinaryFrame -> when (entry.id.uppercase(Locale.ROOT)) {
+        is BinaryFrame -> when (entry.id.uppercase()) {
             "USLT", "ULT" -> parseLyricsText(decodeUnsynchronizedLyrics(entry.data))
             "SYLT", "SLT" -> decodeSynchronizedLyrics(entry.data)
             else -> null
         }
 
         is VorbisComment -> {
-            if (entry.key.uppercase(Locale.ROOT) in LYRICS_COMMENT_KEYS) {
+            if (entry.key.uppercase() in LYRICS_COMMENT_KEYS) {
                 parseLyricsText(entry.value)
             } else {
                 null
@@ -97,7 +94,7 @@ object EmbeddedLyricsReader {
             val description = entry.description.orEmpty()
             if (
                 entry.id.equals("TXXX", ignoreCase = true) &&
-                description.uppercase(Locale.ROOT) in LYRICS_COMMENT_KEYS
+                description.uppercase() in LYRICS_COMMENT_KEYS
             ) {
                 entry.values.firstNotNullOfOrNull(::parseLyricsText)
             } else {
@@ -122,7 +119,7 @@ object EmbeddedLyricsReader {
         if (data.size < 5) return null
 
         val encoding = data[0].toInt() and 0xFF
-        val charset = charsetFor(encoding) ?: return null
+        if (charsetFor(encoding) == null) return null
         val descriptionStart = 4
         val descriptionEnd = findTerminator(data, descriptionStart, encoding)
         if (descriptionEnd >= data.size) return null
@@ -130,7 +127,7 @@ object EmbeddedLyricsReader {
         val lyricsStart = (descriptionEnd + terminatorLength(encoding))
             .coerceAtMost(data.size)
 
-        return decodeText(data, lyricsStart, data.size, charset)
+        return decodeText(data, lyricsStart, data.size, encoding)
             .trim()
             .takeIf(String::isNotBlank)
     }
@@ -141,7 +138,7 @@ object EmbeddedLyricsReader {
         if (data.size < 7) return null
 
         val encoding = data[0].toInt() and 0xFF
-        val charset = charsetFor(encoding) ?: return null
+        if (charsetFor(encoding) == null) return null
         val timestampFormat = data[4].toInt() and 0xFF
         var cursor = 6
         val descriptionEnd = findTerminator(data, cursor, encoding)
@@ -154,7 +151,7 @@ object EmbeddedLyricsReader {
             val textEnd = findTerminator(data, cursor, encoding)
             if (textEnd >= data.size) break
 
-            val text = decodeText(data, cursor, textEnd, charset).trim()
+            val text = decodeText(data, cursor, textEnd, encoding).trim()
             cursor = textEnd + terminatorLength(encoding)
 
             if (cursor + 4 > data.size) break
@@ -444,7 +441,7 @@ object EmbeddedLyricsReader {
 
     private fun parseSingerPrefix(text: String): Pair<String?, String> {
         val match = SINGER_PREFIX_REGEX.find(text) ?: return null to text.trimStart()
-        val rawId = match.groupValues[1].lowercase(Locale.ROOT)
+        val rawId = match.groupValues[1].lowercase()
         val singerId = if (rawId.all(Char::isDigit)) "v$rawId" else rawId
         return singerId to text.removeRange(match.range).trimStart()
     }
@@ -511,11 +508,11 @@ object EmbeddedLyricsReader {
 
     private fun charsetFor(
         encoding: Int,
-    ): Charset? = when (encoding) {
-        0 -> StandardCharsets.ISO_8859_1
-        1 -> StandardCharsets.UTF_16
-        2 -> StandardCharsets.UTF_16BE
-        3 -> StandardCharsets.UTF_8
+    ) = when (encoding) {
+        0 -> Charsets.ISO_8859_1
+        1 -> Charsets.UTF_16
+        2 -> Charsets.UTF_16BE
+        3 -> Charsets.UTF_8
         else -> null
     }
 
@@ -523,12 +520,13 @@ object EmbeddedLyricsReader {
         data: ByteArray,
         start: Int,
         end: Int,
-        charset: Charset,
+        encoding: Int,
     ): String {
         if (start >= end || start !in 0..data.size || end > data.size) {
             return ""
         }
 
+        val charset = charsetFor(encoding) ?: return ""
         return String(data, start, end - start, charset).removePrefix("\uFEFF")
     }
 
