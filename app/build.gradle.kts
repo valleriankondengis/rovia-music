@@ -2,6 +2,12 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room3)
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
 }
 
 android {
@@ -90,6 +96,13 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.inspector)
     implementation(libs.androidx.media3.extractor)
+
+    implementation(libs.androidx.room3.runtime)
+    implementation(libs.androidx.sqlite.framework)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlincrypto.sha2)
+    ksp(libs.androidx.room3.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 
