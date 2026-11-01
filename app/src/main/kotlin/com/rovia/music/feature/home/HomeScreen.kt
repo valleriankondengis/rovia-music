@@ -1,6 +1,5 @@
 package com.rovia.music.feature.home
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
@@ -37,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,20 +44,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.playback.controller.PlaybackController
-import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.TrackListCard
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 private val HomeNavigationBarHeight = 80.dp
 private val HomeMiniPlayerHeight = 80.dp
@@ -71,9 +74,28 @@ fun HomeScreen(
     audioRepository: MediaStoreAudioRepository,
     playbackController: PlaybackController,
     onOpenRecentlyAdded: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val hasAudioPermission = rememberAudioPermissionGranted()
+
+    val recentlyAddedCarouselState = remember { LazyListState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val carouselScope = rememberCoroutineScope()
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                carouselScope.launch {
+                    recentlyAddedCarouselState.scrollToItem(0)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -196,6 +218,7 @@ fun HomeScreen(
                     onRetry = {
                         reloadRequest += 1
                     },
+                    carouselState = recentlyAddedCarouselState,
                     onTrackClick = { track, index ->
                         val controller = mediaController
 
@@ -240,19 +263,39 @@ fun HomeScreen(
         TopAppBar(
             title = {},
             actions = {
-                FilledIconButton(
-                    onClick = onOpenSettings,
-                    shapes = IconButtonDefaults.shapes(),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor =
-                            MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_settings),
-                        contentDescription = stringResource(R.string.settings_title)
-                    )
+                    FilledIconButton(
+                        onClick = onOpenHistory,
+                        shapes = IconButtonDefaults.shapes(),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_history),
+                            contentDescription = stringResource(R.string.history_open)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = onOpenSettings,
+                        shapes = IconButtonDefaults.shapes(),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.settings_title)
+                        )
+                    }
                 }
             },
             modifier = Modifier
@@ -272,6 +315,7 @@ fun HomeScreen(
 @Composable
 private fun RecentlyAddedCarouselSection(
     tracks: List<LocalAudioTrack>,
+    carouselState: LazyListState,
     currentMediaId: String?,
     itemsEnabled: Boolean,
     isLoading: Boolean,
@@ -350,6 +394,7 @@ private fun RecentlyAddedCarouselSection(
 
             else -> {
                 LazyRow(
+                    state = carouselState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(HomeCarouselItemHeight),
@@ -360,75 +405,21 @@ private fun RecentlyAddedCarouselSection(
                         items = previewTracks,
                         key = { _, track -> "recently-added:${track.id}" }
                     ) { index, track ->
-                        RecentlyAddedCarouselItem(
+                        TrackListCard(
                             track = track,
-                            isCurrent = track.id.toString() == currentMediaId,
-                            itemsEnabled = itemsEnabled,
+                            isSelected = track.id.toString() == currentMediaId,
+                            enabled = itemsEnabled,
                             onClick = {
                                 onTrackClick(track, index)
-                            }
+                            },
+                            width = HomeCarouselItemWidth,
+                            height = HomeCarouselItemHeight,
+                            artworkSize = HomeCarouselArtworkSize,
                         )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun RecentlyAddedCarouselItem(
-    track: LocalAudioTrack,
-    isCurrent: Boolean,
-    itemsEnabled: Boolean,
-    onClick: () -> Unit
-) {
-    val title = track.title
-        ?.takeIf(String::isNotBlank)
-        ?: stringResource(R.string.player_unknown_track)
-    val artist = track.artist
-        ?.takeIf(String::isNotBlank)
-        ?: stringResource(R.string.player_unknown_artist)
-
-    Column(
-        modifier = Modifier
-            .width(HomeCarouselItemWidth)
-            .height(HomeCarouselItemHeight)
-            .clickable(enabled = itemsEnabled, onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        AlbumArtwork(
-            artworkUri = track.uri.toString(),
-            fallbackText = title,
-            contentDescription = title,
-            modifier = Modifier.size(HomeCarouselArtworkSize),
-            size = HomeCarouselArtworkSize,
-            shape = MaterialTheme.shapes.large
-        )
-
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-            color = if (isCurrent) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = 1,
-            minLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Text(
-            text = artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            minLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 

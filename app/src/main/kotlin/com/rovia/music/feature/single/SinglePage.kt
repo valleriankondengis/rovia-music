@@ -1,5 +1,6 @@
 package com.rovia.music.feature.single
 
+import com.rovia.music.util.KotlinDateTime
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,10 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
-import com.rovia.music.data.mediastore.AlbumParser
+import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.AlbumReleaseType
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.playback.queue.PlaybackOrigin
+import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
@@ -61,26 +64,29 @@ import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 private val SinglePageNavigationBarHeight = 80.dp
 private val SinglePageMiniPlayerHeight = 80.dp
 
-/** Single/EP detail page styled consistently with AlbumPage. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SinglePage(
     releaseKey: String,
-    catalogTracks: List<LocalAudioTrack>,
+    releaseData: AlbumRelease?,
     playbackController: PlaybackController,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
-    val release = remember(catalogTracks, releaseKey) {
-        AlbumParser.parse(catalogTracks).firstOrNull { candidate ->
-            candidate.key == releaseKey &&
-                (candidate.type == AlbumReleaseType.SINGLE || candidate.type == AlbumReleaseType.EP)
-        }
+    val release = releaseData?.takeIf { candidate ->
+        candidate.type == AlbumReleaseType.SINGLE || candidate.type == AlbumReleaseType.EP
     }
     val pageTitle = release?.title ?: stringResource(R.string.artist_songs_and_eps)
     val pageTracks = release?.tracks.orEmpty()
     val releaseArtist = release?.albumArtist?.takeIf(String::isNotBlank)
         ?: release?.artists?.joinToString(", ")?.takeIf(String::isNotBlank)
         ?: stringResource(R.string.player_unknown_artist)
+
+    val playbackOriginType = when (release?.type) {
+        AlbumReleaseType.SINGLE -> PlaybackOriginType.SINGLE
+        AlbumReleaseType.EP -> PlaybackOriginType.EP
+        else -> PlaybackOriginType.ALBUM
+    }
+
     val releaseTypeLabel = stringResource(
         when (release?.type) {
             AlbumReleaseType.SINGLE -> R.string.artist_release_type_single
@@ -90,12 +96,21 @@ fun SinglePage(
         }
     )
     val releaseYear = remember(release) {
-        release?.tracks.orEmpty()
-            .mapNotNull(LocalAudioTrack::releaseYear)
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
+        val releaseTracks = release?.tracks.orEmpty()
+        val bestMetadataTrack = releaseTracks
+            .filter { track -> track.releaseYear?.let { it in 1000..9999 } == true }
+            .maxWithOrNull(
+                compareBy<LocalAudioTrack> { it.releaseDatePriority() }
+                    .thenBy { it.metadataDateEpochMillis ?: it.inferredDateEpochMillis ?: 0L }
+            )
+
+        bestMetadataTrack?.releaseYear
+            ?: releaseTracks.maxOfOrNull { it.dateModifiedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
+            ?: releaseTracks.maxOfOrNull { it.dateAddedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
     }
     val trackCountLabel = pluralStringResource(
         R.plurals.library_track_count,
@@ -135,7 +150,7 @@ fun SinglePage(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val artworkUri = release?.artworkUri
+        val artworkUri = remember(release) { release?.artworkUri }
         val artworkSize = minOf(maxWidth * 0.78f, 340.dp, maxHeight * 0.36f).coerceAtLeast(150.dp)
         val playButtonWidth = (maxWidth * 0.66f).coerceAtMost(360.dp).coerceAtLeast(220.dp)
 
@@ -179,7 +194,14 @@ fun SinglePage(
                             } else {
                                 playbackController.playQueue(
                                     tracks = pageTracks,
-                                    startIndex = index
+                                    startIndex = index,
+                                    origin = PlaybackOrigin(
+                                        type = playbackOriginType,
+                                        entityKey = releaseKey,
+                                        title = pageTitle,
+                                        subtitle = releaseArtist,
+                                        artworkSourceUri = artworkUri,
+                                    ),
                                 )
                             }
                         }
@@ -244,7 +266,17 @@ fun SinglePage(
                                 Button(
                                     onClick = {
                                         if (mediaController != null) {
-                                            playbackController.playQueue(tracks = pageTracks, startIndex = 0)
+                                            playbackController.playQueue(
+                                                tracks = pageTracks,
+                                                startIndex = 0,
+                                                origin = PlaybackOrigin(
+                                                    type = playbackOriginType,
+                                                    entityKey = releaseKey,
+                                                    title = pageTitle,
+                                                    subtitle = releaseArtist,
+                                                    artworkSourceUri = artworkUri,
+                                                ),
+                                            )
                                         }
                                     },
                                     enabled = mediaController != null && pageTracks.isNotEmpty(),
@@ -310,3 +342,19 @@ fun SinglePage(
         }
     }
 }
+
+private fun LocalAudioTrack.releaseDatePriority(): Int = when (releaseDateSource) {
+    "EMBEDDED_DATE" -> when (releaseDatePrecision) {
+        "DAY" -> 500
+        "MONTH" -> 400
+        else -> 300
+    }
+    "EMBEDDED_YEAR" -> 250
+    "MEDIASTORE_ALBUM_FIRST_YEAR" -> 200
+    "MEDIASTORE_YEAR" -> 180
+    "MEDIASTORE_ALBUM_FIRST_LAST_YEAR", "MEDIASTORE_ALBUM_LAST_YEAR" -> 100
+    else -> 0
+}
+
+private fun epochSecondsYear(epochSeconds: Long): Int? =
+    KotlinDateTime.epochSecondsYear(epochSeconds)

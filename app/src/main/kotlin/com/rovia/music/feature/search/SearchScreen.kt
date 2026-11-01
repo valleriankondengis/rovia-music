@@ -1,5 +1,6 @@
 package com.rovia.music.feature.search
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -60,20 +62,18 @@ import com.rovia.music.R
 import com.rovia.music.data.mediastore.AlbumReleaseType
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
+import com.rovia.music.data.repository.DatabaseSearchRepository
+import com.rovia.music.data.repository.DatabaseSearchResults
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.TrackListItem
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
-import java.util.Locale
-import java.util.WeakHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.flow.collect
 
 private val SearchNavigationBarHeight = 80.dp
 private val SearchMiniPlayerHeight = 80.dp
@@ -82,36 +82,6 @@ private val SearchBarTopPadding = 8.dp
 private val SearchResultsSpacing = 12.dp
 private const val SearchDebounceMillis = 150L
 
-private object SearchIndexCache {
-
-    private data class Entry(
-        val revision: Long,
-        val index: SearchIndex
-    )
-
-    private val entries = WeakHashMap<MediaStoreAudioRepository, Entry>()
-
-    @Synchronized
-    fun get(
-        repository: MediaStoreAudioRepository,
-        revision: Long
-    ): SearchIndex? = entries[repository]
-        ?.takeIf { it.revision == revision }
-        ?.index
-
-    @Synchronized
-    fun put(
-        repository: MediaStoreAudioRepository,
-        revision: Long,
-        index: SearchIndex
-    ) {
-        entries[repository] = Entry(
-            revision = revision,
-            index = index
-        )
-    }
-}
-
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3ExpressiveApi::class
@@ -119,6 +89,7 @@ private object SearchIndexCache {
 @Composable
 fun SearchScreen(
     audioRepository: MediaStoreAudioRepository,
+    databaseSearchRepository: DatabaseSearchRepository,
     playbackController: PlaybackController,
     onOpenSettings: () -> Unit,
     onOpenArtist: (String) -> Unit,
@@ -134,20 +105,16 @@ fun SearchScreen(
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
     val catalog by audioRepository.catalogState.collectAsStateWithLifecycle()
-    val tracks = catalog.tracks
     val isLoading = hasAudioPermission && !catalog.isLoaded && !catalog.loadFailed
     val loadFailed = catalog.loadFailed
 
-    var searchIndex by remember {
-        mutableStateOf<SearchIndex?>(null)
-    }
     var searchResults by remember {
-        mutableStateOf(SearchResults())
+        mutableStateOf(DatabaseSearchResults())
     }
-    var isIndexing by remember {
+    var isSearching by remember {
         mutableStateOf(false)
     }
-    var isFiltering by remember {
+    var searchFailed by remember {
         mutableStateOf(false)
     }
     var reloadRequest by remember {
@@ -157,7 +124,7 @@ fun SearchScreen(
         mutableStateOf(mediaController?.currentMediaItem?.mediaId)
     }
 
-    val isSearchPending = hasQuery && (isIndexing || isFiltering)
+    val isSearchPending = hasQuery && (isSearching || (isLoading && searchResults.isEmpty))
     val statusBarTopInset = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
@@ -192,10 +159,9 @@ fun SearchScreen(
 
     LaunchedEffect(hasAudioPermission, reloadRequest) {
         if (!hasAudioPermission) {
-            searchIndex = null
-            searchResults = SearchResults()
-            isIndexing = false
-            isFiltering = false
+            searchResults = DatabaseSearchResults()
+            isSearching = false
+            searchFailed = false
             return@LaunchedEffect
         }
 
@@ -204,93 +170,48 @@ fun SearchScreen(
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {
-            searchResults = SearchResults()
+            if (!catalog.isLoaded) {
+                searchFailed = true
+            }
         }
     }
 
-    LaunchedEffect(
-        audioRepository,
-        hasAudioPermission,
-        catalog.isLoaded,
-        catalog.revision
-    ) {
-        if (!hasAudioPermission || !catalog.isLoaded) {
-            searchIndex = null
-            searchResults = SearchResults()
-            isIndexing = false
+    LaunchedEffect(databaseSearchRepository, query, hasAudioPermission, reloadRequest) {
+        if (!hasAudioPermission || query.isBlank()) {
+            searchResults = DatabaseSearchResults()
+            isSearching = false
+            searchFailed = false
             return@LaunchedEffect
         }
 
-        val cachedIndex = SearchIndexCache.get(
-            repository = audioRepository,
-            revision = catalog.revision
-        )
-        if (cachedIndex != null) {
-            searchIndex = cachedIndex
-            isIndexing = false
-            return@LaunchedEffect
-        }
-
-        searchIndex = null
-        searchResults = SearchResults()
-        isIndexing = true
+        searchResults = DatabaseSearchResults()
+        isSearching = true
+        searchFailed = false
 
         try {
-            val builtIndex = withContext(Dispatchers.Default) {
-                SearchEngine.buildIndex(tracks)
+            delay(SearchDebounceMillis)
+            databaseSearchRepository.observeSearch(query).collect { results ->
+                searchResults = results
+                isSearching = false
             }
-            coroutineContext.ensureActive()
-            SearchIndexCache.put(
-                repository = audioRepository,
-                revision = catalog.revision,
-                index = builtIndex
-            )
-            searchIndex = builtIndex
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {
-            searchIndex = null
+            searchFailed = true
         } finally {
-            isIndexing = false
-        }
-    }
-
-    LaunchedEffect(query, searchIndex) {
-        val activeIndex = searchIndex
-        if (query.isBlank() || activeIndex == null) {
-            searchResults = SearchResults()
-            isFiltering = false
-            return@LaunchedEffect
-        }
-
-        searchResults = SearchResults()
-        isFiltering = true
-        try {
-            delay(SearchDebounceMillis)
-            val results = withContext(Dispatchers.Default) {
-                SearchEngine.search(
-                    index = activeIndex,
-                    query = query
-                )
-            }
-            coroutineContext.ensureActive()
-            searchResults = results
-        } catch (exception: CancellationException) {
-            throw exception
-        } finally {
-            isFiltering = false
+            isSearching = false
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         SearchResultsContent(
-            tracks = tracks,
             results = searchResults,
             hasQuery = hasQuery,
             isSearchPending = isSearchPending,
             hasAudioPermission = hasAudioPermission,
             isLoading = isLoading,
             loadFailed = loadFailed,
+            searchFailed = searchFailed,
             currentMediaId = currentMediaId,
             itemsEnabled = mediaController != null,
             modifier = Modifier
@@ -303,7 +224,7 @@ fun SearchScreen(
             messageTopPadding = contentTopPadding,
             messageBottomPadding = contentBottomPadding,
             onRetry = { reloadRequest += 1 },
-            onTrackClick = { track, index ->
+            onTrackClick = { track ->
                 val controller = mediaController
                 if (controller != null) {
                     if (currentMediaId == track.id.toString()) {
@@ -317,12 +238,11 @@ fun SearchScreen(
                         }
                     } else {
                         val queueTracks = searchResults.songs.map { it.track }
-                        if (index in queueTracks.indices) {
-                            playbackController.playQueue(
-                                tracks = queueTracks,
-                                startIndex = index
-                            )
-                        }
+                        val startIndex = queueTracks.indexOfFirst { it.id == track.id }
+                        playbackController.playQueue(
+                            tracks = if (startIndex >= 0) queueTracks else listOf(track),
+                            startIndex = startIndex.takeIf { it >= 0 } ?: 0
+                        )
                     }
                 }
             },
@@ -414,13 +334,13 @@ fun SearchScreen(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SearchResultsContent(
-    tracks: List<LocalAudioTrack>,
-    results: SearchResults,
+    results: DatabaseSearchResults,
     hasQuery: Boolean,
     isSearchPending: Boolean,
     hasAudioPermission: Boolean,
     isLoading: Boolean,
     loadFailed: Boolean,
+    searchFailed: Boolean,
     currentMediaId: String?,
     itemsEnabled: Boolean,
     modifier: Modifier,
@@ -428,7 +348,7 @@ private fun SearchResultsContent(
     messageTopPadding: Dp,
     messageBottomPadding: Dp,
     onRetry: () -> Unit,
-    onTrackClick: (LocalAudioTrack, Int) -> Unit,
+    onTrackClick: (LocalAudioTrack) -> Unit,
     onArtistClick: (String) -> Unit,
     onAlbumClick: (String) -> Unit
 ) {
@@ -441,17 +361,16 @@ private fun SearchResultsContent(
             )
         )
 
-        isLoading -> Box(
-            modifier = modifier.fillMaxSize().padding(
-                top = messageTopPadding,
-                bottom = messageBottomPadding
-            ),
+        !hasQuery -> Box(modifier = modifier.fillMaxSize())
+
+        results.isEmpty && (isLoading || isSearchPending) -> Box(
+            modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator()
         }
 
-        loadFailed -> SearchMessage(
+        results.isEmpty && (searchFailed || loadFailed) -> SearchMessage(
             message = stringResource(R.string.library_load_error),
             modifier = modifier.fillMaxSize().padding(
                 top = messageTopPadding,
@@ -461,26 +380,7 @@ private fun SearchResultsContent(
             onAction = onRetry
         )
 
-        tracks.isEmpty() -> SearchMessage(
-            message = stringResource(R.string.library_no_tracks),
-            modifier = modifier.fillMaxSize().padding(
-                top = messageTopPadding,
-                bottom = messageBottomPadding
-            )
-        )
-
-        !hasQuery -> Box(modifier = modifier.fillMaxSize())
-
-        isSearchPending && results.songs.isEmpty() &&
-            results.artists.isEmpty() && results.albums.isEmpty() -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator()
-        }
-
-        results.songs.isEmpty() && results.artists.isEmpty() &&
-            results.albums.isEmpty() -> SearchMessage(
+        results.isEmpty -> SearchMessage(
             message = stringResource(R.string.search_no_results),
             modifier = modifier.fillMaxSize().padding(
                 top = messageTopPadding,
@@ -525,64 +425,17 @@ private fun SearchResultsContent(
                             .trim()
                             .ifBlank { track.album.orEmpty().trim() }
                             .ifBlank { stringResource(R.string.player_unknown_artist) }
-                        val artworkFallback = title.firstOrNull()
-                            ?.uppercaseChar()
-                            ?.toString()
-                            ?: "♪"
-                        val totalSeconds = track.durationMs.coerceAtLeast(0L) / 1000L
 
-                        SegmentedListItem(
+                        TrackListItem(
+                            title = title,
+                            supportingText = supportingText,
+                            artworkUri = track.uri.toString(),
+                            durationMs = track.durationMs,
                             selected = currentMediaId == track.id.toString(),
-                            onClick = { onTrackClick(track, index) },
                             enabled = itemsEnabled,
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            shapes = ListItemDefaults.segmentedShapes(
-                                index = index,
-                                count = results.songs.size
-                            ),
-                            colors = rowColors,
-                            verticalAlignment = Alignment.CenterVertically,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            leadingContent = {
-                                AlbumArtwork(
-                                    artworkUri = track.uri.toString(),
-                                    fallbackText = artworkFallback,
-                                    contentDescription = title,
-                                    modifier = Modifier.size(56.dp),
-                                    size = 56.dp,
-                                    shape = MaterialTheme.shapes.medium
-                                )
-                            },
-                            content = {
-                                Text(
-                                    text = title,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            supportingContent = {
-                                Text(
-                                    text = supportingText,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            trailingContent = {
-                                Text(
-                                    text = String.format(
-                                        Locale.getDefault(),
-                                        "%d:%02d",
-                                        totalSeconds / 60L,
-                                        totalSeconds % 60L
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
+                            onClick = { onTrackClick(track) },
+                            index = index,
+                            count = results.songs.size,
                         )
                     }
                 }
@@ -736,6 +589,122 @@ private fun SearchResultsContent(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
+                        )
+                    }
+                }
+
+                if (results.playlists.isNotEmpty()) {
+                    item(key = "search-section-playlists") {
+                        SearchSectionTitle(
+                            title = stringResource(R.string.search_section_playlists)
+                        )
+                    }
+                    itemsIndexed(
+                        items = results.playlists,
+                        key = { _, result -> "search-playlist-${result.playlistId}" }
+                    ) { _, result ->
+                        val matchingTrackTitle = result.matchingTrackTitle
+                            ?.takeIf(String::isNotBlank)
+                        val matchingTrackArtist = result.matchingTrackArtist
+                            ?.takeIf(String::isNotBlank)
+                        val trackLabel = when {
+                            matchingTrackTitle != null && matchingTrackArtist != null ->
+                                stringResource(
+                                    R.string.search_playlist_matching_track,
+                                    matchingTrackTitle,
+                                    matchingTrackArtist
+                                )
+                            matchingTrackTitle != null ->
+                                stringResource(
+                                    R.string.search_playlist_matching_track_title,
+                                    matchingTrackTitle
+                                )
+                            else -> null
+                        }
+                        val playlistTrackCount = result.trackCount
+                            .coerceIn(0L, Int.MAX_VALUE.toLong())
+                            .toInt()
+                        val playlistCountLabel = pluralStringResource(
+                            R.plurals.library_track_count,
+                            playlistTrackCount,
+                            playlistTrackCount
+                        )
+                        val supportingText = buildList {
+                            trackLabel?.let(::add)
+                            result.description?.takeIf(String::isNotBlank)?.let(::add)
+                            if (isEmpty()) add(playlistCountLabel)
+                        }.joinToString(" • ")
+                        val artworkFallback = result.name.firstOrNull()
+                            ?.uppercaseChar()
+                            ?.toString()
+                            ?: "♫"
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AlbumArtwork(
+                                artworkUri = result.artworkUri,
+                                fallbackText = artworkFallback,
+                                contentDescription = result.name,
+                                modifier = Modifier.size(56.dp),
+                                size = 56.dp,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = result.name,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = supportingText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (results.likedTracks.isNotEmpty()) {
+                    item(key = "search-section-likes") {
+                        SearchSectionTitle(
+                            title = stringResource(R.string.search_section_likes)
+                        )
+                    }
+                    itemsIndexed(
+                        items = results.likedTracks,
+                        key = { _, result -> "search-liked-${result.likedTrackId}" }
+                    ) { index, result ->
+                        val track = result.track
+                        val title = result.title.trim()
+                            .ifBlank { stringResource(R.string.player_unknown_track) }
+                        val supportingText = result.artist?.trim()
+                            ?.takeIf(String::isNotBlank)
+                            ?: result.album?.trim()?.takeIf(String::isNotBlank)
+                            ?: stringResource(R.string.player_unknown_artist)
+
+                        TrackListItem(
+                            title = title,
+                            supportingText = supportingText,
+                            artworkUri = result.artworkUri ?: track?.uri?.toString(),
+                            durationMs = track?.durationMs,
+                            selected = track != null && currentMediaId == track.id.toString(),
+                            enabled = itemsEnabled && track != null,
+                            onClick = { track?.let(onTrackClick) },
+                            index = index,
+                            count = results.likedTracks.size,
                         )
                     }
                 }

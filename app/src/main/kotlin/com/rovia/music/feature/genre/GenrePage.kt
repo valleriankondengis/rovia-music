@@ -47,8 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
-import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
+import com.rovia.music.data.repository.GenreDetailCatalog
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.playback.queue.PlaybackOrigin
+import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
@@ -56,8 +59,6 @@ import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackList
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import java.text.Normalizer
-import java.util.Locale
-
 private val GenrePageNavigationBarHeight = 80.dp
 private val GenrePageMiniPlayerHeight = 80.dp
 
@@ -66,7 +67,7 @@ private val GenrePageMiniPlayerHeight = 80.dp
 @Composable
 fun GenrePage(
     genreKey: String,
-    catalogTracks: List<LocalAudioTrack>,
+    genreData: GenreDetailCatalog,
     playbackController: PlaybackController,
     onBack: () -> Unit,
     artistName: String? = null
@@ -77,28 +78,11 @@ fun GenrePage(
             ?.let(::normalizeGenreKey)
     }
 
-    val pageTracks = remember(catalogTracks, genreKey, normalizedArtistKey) {
-        catalogTracks.filter { track ->
-            val matchesGenre = track.genres.any { genre ->
-                normalizeGenreKey(genre) == genreKey
-            }
-            val matchesArtist = normalizedArtistKey == null ||
-                track.artistNames.any { artist ->
-                    normalizeGenreKey(artist) == normalizedArtistKey
-                }
-            matchesGenre && matchesArtist
-        }
-    }
-
-    val genreTitle = remember(catalogTracks, genreKey) {
-        catalogTracks.asSequence()
-            .flatMap { it.genres.asSequence() }
-            .firstOrNull { normalizeGenreKey(it) == genreKey }
-            ?: genreKey
-    }
+    val pageTracks = genreData.tracks
+    val genreTitle = genreData.title.ifBlank { genreKey }
     val pageTitle = genreTitle.ifBlank { stringResource(R.string.library_category_genres) }
     val subtitleArtist = artistName?.trim()?.takeIf(String::isNotBlank)
-    val artworkUri = pageTracks.firstOrNull()?.uri?.toString()
+    val artworkUri = CatalogArtworkSelector.latestReleaseTrack(pageTracks)?.uri?.toString()
     val trackCountLabel = pluralStringResource(
         R.plurals.library_track_count,
         pageTracks.size,
@@ -181,7 +165,14 @@ fun GenrePage(
                             } else {
                                 playbackController.playQueue(
                                     tracks = pageTracks,
-                                    startIndex = index
+                                    startIndex = index,
+                                    origin = PlaybackOrigin(
+                                        type = PlaybackOriginType.GENRE,
+                                        entityKey = genreKey,
+                                        title = pageTitle,
+                                        subtitle = subtitleArtist,
+                                        artworkSourceUri = artworkUri,
+                                    ),
                                 )
                             }
                         }
@@ -253,7 +244,17 @@ fun GenrePage(
                                 Button(
                                     onClick = {
                                         if (mediaController != null) {
-                                            playbackController.playQueue(tracks = pageTracks, startIndex = 0)
+                                            playbackController.playQueue(
+                                                tracks = pageTracks,
+                                                startIndex = 0,
+                                                origin = PlaybackOrigin(
+                                                    type = PlaybackOriginType.GENRE,
+                                                    entityKey = genreKey,
+                                                    title = pageTitle,
+                                                    subtitle = subtitleArtist,
+                                                    artworkSourceUri = artworkUri,
+                                                ),
+                                            )
                                         }
                                     },
                                     enabled = mediaController != null && pageTracks.isNotEmpty(),
@@ -322,4 +323,4 @@ fun GenrePage(
 }
 
 private fun normalizeGenreKey(value: String): String =
-    Normalizer.normalize(value.trim(), Normalizer.Form.NFC).lowercase(Locale.ROOT)
+    Normalizer.normalize(value.trim(), Normalizer.Form.NFC).lowercase()

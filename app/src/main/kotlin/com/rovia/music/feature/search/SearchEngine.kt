@@ -5,7 +5,6 @@ import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import java.text.Normalizer
-import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -424,7 +423,7 @@ object SearchEngine {
     private fun normalizeSearchText(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)
             .replace(SearchDiacritics, "")
-            .lowercase(Locale.ROOT)
+            .lowercase()
             .replace(SearchWordSeparator, " ")
             .replace(SearchWhitespace, " ")
             .trim()

@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -36,9 +37,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -60,19 +64,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rovia.music.R
-import com.rovia.music.data.mediastore.AlbumParser
 import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.AlbumReleaseType
+import com.rovia.music.data.mediastore.ArtistCreditParser
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.playback.queue.PlaybackOrigin
+import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.ArtworkBitmapLoader
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
-import java.text.Normalizer
-import java.util.Locale
+import com.rovia.music.util.KotlinDateTime
 
 private val ArtistCarouselArtworkSize = 150.dp
 private val ArtistCarouselItemWidth = ArtistCarouselArtworkSize
@@ -84,7 +90,14 @@ private data class ArtistGenreCollection(
     val tracks: List<LocalAudioTrack>
 ) {
     val artworkUri: String?
-        get() = latestArtworkTrack(tracks)?.uri?.toString()
+        get() = CatalogArtworkSelector.latestReleaseTrack(tracks)?.uri?.toString()
+}
+
+private class ArtistGenreCollectionBuilder(
+    val title: String,
+) {
+    val tracks = mutableListOf<LocalAudioTrack>()
+    val trackIds = hashSetOf<Long>()
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -92,59 +105,75 @@ private data class ArtistGenreCollection(
 fun ArtistPage(
     artistName: String,
     tracks: List<LocalAudioTrack>,
+    releases: List<AlbumRelease>,
     playbackController: PlaybackController,
     onBack: () -> Unit,
     onOpenSingle: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenGenre: (String) -> Unit,
-    @StringRes songsAndEpsTitleRes: Int
+    @StringRes songsAndEpsTitleRes: Int,
 ) {
-    val context = LocalContext.current
-    val artistKey = remember(artistName) { normalizeArtistKey(artistName) }
+    val artistKey = remember(artistName) {
+        ArtistCreditParser.normalizeIdentity(artistName)
+    }
 
-    val artistTracks = remember(tracks, artistKey) {
-        tracks.filter { track ->
-            track.artistNames.any { creditedArtist ->
-                normalizeArtistKey(creditedArtist) == artistKey
+    val artistTracks = tracks
+    val artistReleases = releases
+
+    val sortedArtistReleases = remember(artistReleases) {
+        sortReleasesByRecency(artistReleases)
+    }
+
+    val resolvedArtistName = remember(artistName, artistTracks, sortedArtistReleases) {
+        sortedArtistReleases
+            .firstNotNullOfOrNull { release ->
+                ArtistCreditParser.resolveDisplayName(
+                    artistName = artistName,
+                    primaryCredits = listOf(release.albumArtist),
+                    fallbackCredits = emptyList()
+                ) ?: ArtistCreditParser.resolvePrimaryDisplayName(
+                    release.tracks.map(LocalAudioTrack::artist)
+                )?.takeIf {
+                    ArtistCreditParser.normalizeIdentity(it) == artistKey
+                }
             }
+            ?: ArtistCreditParser.resolveDisplayName(
+                artistName = artistName,
+                primaryCredits = artistTracks.map(LocalAudioTrack::albumArtist),
+                fallbackCredits = artistTracks.map(LocalAudioTrack::artist)
+            )
+            ?: artistName.trim()
+    }
+
+    val heroArtworkUri = remember(artistName, artistTracks, artistReleases) {
+        CatalogArtworkSelector.artistArtworkTrack(
+            artistName = artistName,
+            releases = artistReleases,
+            ungroupedArtistTracks = artistTracks.filter { it.album.isNullOrBlank() }
+        )?.uri?.toString()
+    }
+
+    val singlesAndEps = remember(sortedArtistReleases) {
+        sortedArtistReleases.filter { release ->
+            release.type == AlbumReleaseType.SINGLE || release.type == AlbumReleaseType.EP
         }
     }
 
-    // Parse the entire catalog so release classification uses every locally available track in
-    // an album, rather than only tracks on which this particular artist is credited.
-    val artistReleases = remember(tracks, artistKey) {
-        AlbumParser.parse(tracks).filter { release ->
-            release.isForArtist(artistName)
-        }
+    val albums = remember(sortedArtistReleases) {
+        sortedArtistReleases.filter { it.type == AlbumReleaseType.ALBUM }
     }
-    val singlesAndEps = remember(artistReleases) {
-        artistReleases
-            .filter { release ->
-                release.type == AlbumReleaseType.SINGLE ||
-                    release.type == AlbumReleaseType.EP
-            }
-            .sortedWith(Comparator(::compareReleaseRecency))
-    }
-    val albums = remember(artistReleases) {
-        artistReleases
-            .filter { it.type == AlbumReleaseType.ALBUM }
-            .sortedWith(Comparator(::compareReleaseRecency))
-    }
+
     val genres = remember(artistTracks) {
         buildArtistGenres(artistTracks)
     }
 
+    val singlesAndEpsListState = rememberLazyListState()
+    val albumsListState = rememberLazyListState()
+    val genresListState = rememberLazyListState()
+
     val mediaController by playbackController.mediaController
         .collectAsStateWithLifecycle()
     val currentTrackId = mediaController?.currentMediaItem?.mediaId
-
-    val heroArtworkUri = remember(artistTracks, artistReleases) {
-        val artistReleaseTracks = artistReleases.flatMap { it.tracks }
-        val artworkCandidates = (artistReleaseTracks + artistTracks)
-            .distinctBy { it.uri }
-
-        latestArtworkTrack(artworkCandidates)?.uri?.toString()
-    }
 
     val navigationBarBottomInset = WindowInsets.navigationBars
         .asPaddingValues()
@@ -161,12 +190,13 @@ fun ArtistPage(
             .coerceAtLeast(220.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Fixed back layer: only the blurred artwork remains when the sharp hero scrolls away.
-            ArtworkBackdrop(
-                artworkUri = heroArtworkUri,
-                foregroundArtworkHeight = 0.dp,
-                modifier = Modifier.fillMaxSize()
-            )
+            key(heroArtworkUri) {
+                ArtworkBackdrop(
+                    artworkUri = heroArtworkUri,
+                    foregroundArtworkHeight = 0.dp,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
             LazyColumn(
                 modifier = Modifier
@@ -177,14 +207,23 @@ fun ArtistPage(
             ) {
                 item(key = "artist-hero") {
                     ArtistHeroHeader(
-                        artistName = artistName,
+                        artistName = resolvedArtistName,
                         artworkUri = heroArtworkUri,
                         heroHeight = heroHeight,
                         playButtonWidth = playButtonWidth,
                         trackCount = artistTracks.size,
                         onPlay = {
                             if (artistTracks.isNotEmpty()) {
-                                playbackController.playQueue(artistTracks, 0)
+                                playbackController.playQueue(
+                                    tracks = artistTracks,
+                                    startIndex = 0,
+                                    origin = PlaybackOrigin(
+                                        type = PlaybackOriginType.ARTIST,
+                                        entityKey = resolvedArtistName,
+                                        title = resolvedArtistName,
+                                        artworkSourceUri = heroArtworkUri
+                                    )
+                                )
                             }
                         }
                     )
@@ -196,6 +235,7 @@ fun ArtistPage(
                             title = stringResource(songsAndEpsTitleRes)
                         ) {
                             LazyRow(
+                                state = singlesAndEpsListState,
                                 contentPadding = PaddingValues(horizontal = 18.dp),
                                 horizontalArrangement = Arrangement.spacedBy(18.dp)
                             ) {
@@ -206,10 +246,10 @@ fun ArtistPage(
                                     ArtistReleaseCarouselItem(
                                         release = release,
                                         isCurrent = currentTrackId != null &&
-                                            release.tracks.any { it.id.toString() == currentTrackId },
-                                        onClick = {
-                                            onOpenSingle(release.key)
-                                        }
+                                            release.tracks.any {
+                                                it.id.toString() == currentTrackId
+                                            },
+                                        onClick = { onOpenSingle(release.key) }
                                     )
                                 }
                             }
@@ -223,6 +263,7 @@ fun ArtistPage(
                             title = stringResource(R.string.library_category_albums)
                         ) {
                             LazyRow(
+                                state = albumsListState,
                                 contentPadding = PaddingValues(horizontal = 18.dp),
                                 horizontalArrangement = Arrangement.spacedBy(18.dp)
                             ) {
@@ -233,10 +274,10 @@ fun ArtistPage(
                                     ArtistReleaseCarouselItem(
                                         release = release,
                                         isCurrent = currentTrackId != null &&
-                                            release.tracks.any { it.id.toString() == currentTrackId },
-                                        onClick = {
-                                            onOpenAlbum(release.key)
-                                        }
+                                            release.tracks.any {
+                                                it.id.toString() == currentTrackId
+                                            },
+                                        onClick = { onOpenAlbum(release.key) }
                                     )
                                 }
                             }
@@ -250,6 +291,7 @@ fun ArtistPage(
                             title = stringResource(R.string.library_category_genres)
                         ) {
                             LazyRow(
+                                state = genresListState,
                                 contentPadding = PaddingValues(horizontal = 18.dp),
                                 horizontalArrangement = Arrangement.spacedBy(18.dp)
                             ) {
@@ -259,9 +301,7 @@ fun ArtistPage(
                                 ) { genre ->
                                     ArtistGenreCarouselItem(
                                         genre = genre,
-                                        onClick = {
-                                            onOpenGenre(genre.key)
-                                        }
+                                        onClick = { onOpenGenre(genre.key) }
                                     )
                                 }
                             }
@@ -272,16 +312,15 @@ fun ArtistPage(
 
             FadeScrim(
                 edge = FadeScrimEdge.Top,
-                modifier = Modifier.align(Alignment.TopCenter),
+                modifier = Modifier.align(Alignment.TopCenter)
             )
 
             FadeScrim(
                 edge = FadeScrimEdge.Bottom,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                withMiniPlayer = currentTrackId != null,
+                withMiniPlayer = currentTrackId != null
             )
 
-            // Match HomeRecentlyAddedScreen's TopAppBar/FilledIconButton sizing and colors.
             TopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -308,7 +347,7 @@ fun ArtistPage(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
                 ),
-                contentPadding = PaddingValues(horizontal = 10.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp)
             )
         }
     }
@@ -324,16 +363,19 @@ private fun ArtistHeroHeader(
     onPlay: () -> Unit
 ) {
     val context = LocalContext.current.applicationContext
-    val heroBitmap by produceState<Bitmap?>(
-        initialValue = null,
-        key1 = artworkUri,
-        key2 = context
-    ) {
-        value = ArtworkBitmapLoader.load(
-            context = context,
-            artworkUri = artworkUri,
-            maxDimension = 1280
-        )
+    var heroBitmap by remember(artworkUri, context) {
+        mutableStateOf<Bitmap?>(null)
+    }
+
+    LaunchedEffect(artworkUri, context) {
+        heroBitmap = null
+        if (!artworkUri.isNullOrBlank()) {
+            heroBitmap = ArtworkBitmapLoader.load(
+                context = context,
+                artworkUri = artworkUri,
+                maxDimension = 1280
+            )
+        }
     }
 
     Box(
@@ -341,7 +383,6 @@ private fun ArtistHeroHeader(
             .fillMaxWidth()
             .height(heroHeight)
     ) {
-        // The foreground artwork fades out at its lower edge into the fixed blurred backdrop.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -471,12 +512,15 @@ private fun ArtistReleaseCarouselItem(
         }
     )
     val releaseYear = remember(release) {
-        release.tracks
-            .mapNotNull(LocalAudioTrack::releaseYear)
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
+        bestReleaseMetadataTrack(release.tracks)
+            ?.releaseYear
+            ?.takeIf { it in 1000..9999 }
+            ?: release.tracks.maxOfOrNull { it.dateModifiedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
+            ?: release.tracks.maxOfOrNull { it.dateAddedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
     }
     val supportingText = if (releaseYear != null) {
         stringResource(
@@ -488,8 +532,8 @@ private fun ArtistReleaseCarouselItem(
         releaseTypeLabel
     }
 
-    val artworkUri = remember(release) {
-        latestArtworkTrack(release.tracks)?.uri?.toString() ?: release.artworkUri
+    val artworkUri = remember(release.tracks) {
+        CatalogArtworkSelector.albumArtworkTrack(release.tracks)?.uri?.toString()
     }
 
     ArtistCarouselItem(
@@ -576,72 +620,56 @@ private fun ArtistCarouselItem(
     }
 }
 
-private fun latestArtworkTrack(
+private fun bestReleaseMetadataTrack(
     tracks: List<LocalAudioTrack>
-): LocalAudioTrack? {
-    if (tracks.isEmpty()) return null
+): LocalAudioTrack? = CatalogArtworkSelector.bestReleaseMetadataTrack(tracks)
 
-    val tracksWithReleaseMetadata = tracks.filter {
-        it.releaseSortTimestamp() != null
+private data class ReleaseRecencyKey(
+    val release: AlbumRelease,
+    val timestamp: Long?,
+    val dateAddedSeconds: Long,
+    val dateModifiedSeconds: Long,
+)
+
+private fun sortReleasesByRecency(releases: List<AlbumRelease>): List<AlbumRelease> {
+    val keyedReleases = releases.map { release ->
+        val bestTrack = bestReleaseMetadataTrack(release.tracks)
+        ReleaseRecencyKey(
+            release = release,
+            timestamp = bestTrack?.releaseSortTimestamp(),
+            dateAddedSeconds = bestTrack?.dateAddedSeconds ?: 0L,
+            dateModifiedSeconds = bestTrack?.dateModifiedSeconds ?: 0L,
+        )
     }
-    val candidates = tracksWithReleaseMetadata.ifEmpty { tracks }
 
-    return candidates.maxWithOrNull(
-        compareBy<LocalAudioTrack> { it.releaseSortTimestamp() ?: Long.MIN_VALUE }
-            .thenBy { it.dateAddedSeconds }
-            .thenBy { it.dateModifiedSeconds }
-            .thenBy { it.id }
-    )
+    return keyedReleases.sortedWith { left, right ->
+        when {
+            left.timestamp != null && right.timestamp != null && left.timestamp != right.timestamp ->
+                right.timestamp.compareTo(left.timestamp)
+            left.timestamp != null && right.timestamp == null -> -1
+            left.timestamp == null && right.timestamp != null -> 1
+            left.dateAddedSeconds != right.dateAddedSeconds ->
+                right.dateAddedSeconds.compareTo(left.dateAddedSeconds)
+            left.dateModifiedSeconds != right.dateModifiedSeconds ->
+                right.dateModifiedSeconds.compareTo(left.dateModifiedSeconds)
+            else -> String.CASE_INSENSITIVE_ORDER.compare(
+                left.release.title,
+                right.release.title,
+            )
+        }
+    }.map(ReleaseRecencyKey::release)
 }
 
-private fun compareReleaseRecency(
-    left: AlbumRelease,
-    right: AlbumRelease,
-): Int {
-    val leftTrack = latestArtworkTrack(left.tracks)
-    val rightTrack = latestArtworkTrack(right.tracks)
-    val leftTimestamp = leftTrack?.releaseSortTimestamp()
-    val rightTimestamp = rightTrack?.releaseSortTimestamp()
-
-    if (leftTimestamp != null && rightTimestamp != null && leftTimestamp != rightTimestamp) {
-        return rightTimestamp.compareTo(leftTimestamp)
-    }
-    if (leftTimestamp != null && rightTimestamp == null) return -1
-    if (leftTimestamp == null && rightTimestamp != null) return 1
-
-    val addedOrder = (rightTrack?.dateAddedSeconds ?: 0L)
-        .compareTo(leftTrack?.dateAddedSeconds ?: 0L)
-    if (addedOrder != 0) return addedOrder
-
-    val modifiedOrder = (rightTrack?.dateModifiedSeconds ?: 0L)
-        .compareTo(leftTrack?.dateModifiedSeconds ?: 0L)
-    if (modifiedOrder != 0) return modifiedOrder
-
-    return String.CASE_INSENSITIVE_ORDER.compare(left.title, right.title)
-}
+private fun epochSecondsYear(epochSeconds: Long): Int? =
+    KotlinDateTime.epochSecondsYear(epochSeconds)
 
 private fun LocalAudioTrack.releaseSortTimestamp(): Long? =
-    metadataDateEpochMillis
-        ?: inferredDateEpochMillis
-        ?: releaseYear?.let(::yearStartEpochMillis)
-
-private fun yearStartEpochMillis(year: Int): Long? {
-    if (year !in 1000..9999) return null
-
-    return try {
-        java.time.LocalDate.of(year, 1, 1)
-            .atStartOfDay(java.time.ZoneOffset.UTC)
-            .toInstant()
-            .toEpochMilli()
-    } catch (_: Exception) {
-        null
-    }
-}
+    CatalogArtworkSelector.releaseSortTimestamp(this)
 
 private fun buildArtistGenres(
     tracks: List<LocalAudioTrack>
 ): List<ArtistGenreCollection> {
-    val groups = linkedMapOf<String, Pair<String, MutableList<LocalAudioTrack>>>()
+    val groups = linkedMapOf<String, ArtistGenreCollectionBuilder>()
 
     tracks.forEach { track ->
         track.genres.forEach genreLoop@{ rawGenre ->
@@ -649,9 +677,9 @@ private fun buildArtistGenres(
             if (genre.isBlank()) return@genreLoop
 
             val key = normalizeArtistKey(genre)
-            val group = groups.getOrPut(key) { genre to mutableListOf() }
-            if (group.second.none { it.id == track.id }) {
-                group.second += track
+            val group = groups.getOrPut(key) { ArtistGenreCollectionBuilder(genre) }
+            if (group.trackIds.add(track.id)) {
+                group.tracks += track
             }
         }
     }
@@ -659,12 +687,11 @@ private fun buildArtistGenres(
     return groups.map { (key, value) ->
         ArtistGenreCollection(
             key = key,
-            title = value.first,
-            tracks = value.second.toList()
+            title = value.title,
+            tracks = value.tracks,
         )
-    }.sortedBy { it.title.lowercase(Locale.ROOT) }
+    }.sortedBy { it.title.lowercase() }
 }
 
 private fun normalizeArtistKey(value: String): String =
-    Normalizer.normalize(value.trim(), Normalizer.Form.NFC)
-        .lowercase(Locale.ROOT)
+    ArtistCreditParser.normalizeIdentity(value)

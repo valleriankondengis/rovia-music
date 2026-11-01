@@ -1,5 +1,6 @@
 package com.rovia.music.feature.album
 
+import com.rovia.music.util.KotlinDateTime
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,10 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
-import com.rovia.music.data.mediastore.AlbumParser
+import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.AlbumReleaseType
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.playback.queue.PlaybackOrigin
+import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
@@ -69,13 +72,11 @@ private val AlbumPageMiniPlayerHeight = 80.dp
 @Composable
 fun AlbumPage(
     releaseKey: String,
-    catalogTracks: List<LocalAudioTrack>,
+    release: AlbumRelease?,
     playbackController: PlaybackController,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
-    val release = remember(catalogTracks, releaseKey) {
-        AlbumParser.parse(catalogTracks).firstOrNull { it.key == releaseKey }
-    }
+    val artworkUri = remember(release) { release?.artworkUri }
     val pageTitle = release?.title ?: stringResource(R.string.library_category_albums)
     val pageTracks = release?.tracks.orEmpty()
     val releaseArtist = release?.albumArtist
@@ -94,15 +95,22 @@ fun AlbumPage(
             null -> R.string.artist_release_type_unknown
         }
     )
-    // Match ArtistPage: use the most frequent non-null MediaStore release year among this release's tracks.
     val releaseYear = remember(release) {
-        release?.tracks
-            .orEmpty()
-            .mapNotNull(LocalAudioTrack::releaseYear)
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
+        val releaseTracks = release?.tracks.orEmpty()
+        val bestMetadataTrack = releaseTracks
+            .filter { track -> track.releaseYear?.let { it in 1000..9999 } == true }
+            .maxWithOrNull(
+                compareBy<LocalAudioTrack> { it.releaseDatePriority() }
+                    .thenBy { it.metadataDateEpochMillis ?: it.inferredDateEpochMillis ?: 0L }
+            )
+
+        bestMetadataTrack?.releaseYear
+            ?: releaseTracks.maxOfOrNull { it.dateModifiedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
+            ?: releaseTracks.maxOfOrNull { it.dateAddedSeconds }
+                ?.takeIf { it > 0L }
+                ?.let(::epochSecondsYear)
     }
     val trackCountLabel = pluralStringResource(
         R.plurals.library_track_count,
@@ -177,7 +185,7 @@ fun AlbumPage(
 
         Box(modifier = Modifier.fillMaxSize()) {
             ArtworkBackdrop(
-                artworkUri = release?.artworkUri,
+                artworkUri = artworkUri,
                 foregroundArtworkHeight = 0.dp,
                 modifier = Modifier.fillMaxSize()
             )
@@ -219,7 +227,14 @@ fun AlbumPage(
                             } else {
                                 playbackController.playQueue(
                                     tracks = pageTracks,
-                                    startIndex = index
+                                    startIndex = index,
+                                    origin = PlaybackOrigin(
+                                        type = PlaybackOriginType.ALBUM,
+                                        entityKey = releaseKey,
+                                        title = pageTitle,
+                                        subtitle = releaseArtist,
+                                        artworkSourceUri = artworkUri,
+                                    ),
                                 )
                             }
                         }
@@ -244,7 +259,7 @@ fun AlbumPage(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 AlbumArtwork(
-                                    artworkUri = release?.artworkUri,
+                                    artworkUri = artworkUri,
                                     fallbackText = pageTitle,
                                     contentDescription = pageTitle,
                                     modifier = Modifier.size(artworkSize),
@@ -294,7 +309,14 @@ fun AlbumPage(
                                         if (mediaController != null) {
                                             playbackController.playQueue(
                                                 tracks = pageTracks,
-                                                startIndex = 0
+                                                startIndex = 0,
+                                                origin = PlaybackOrigin(
+                                                    type = PlaybackOriginType.ALBUM,
+                                                    entityKey = releaseKey,
+                                                    title = pageTitle,
+                                                    subtitle = releaseArtist,
+                                                    artworkSourceUri = artworkUri,
+                                                ),
                                             )
                                         }
                                     },
@@ -372,3 +394,19 @@ fun AlbumPage(
         }
     }
 }
+
+private fun LocalAudioTrack.releaseDatePriority(): Int = when (releaseDateSource) {
+    "EMBEDDED_DATE" -> when (releaseDatePrecision) {
+        "DAY" -> 500
+        "MONTH" -> 400
+        else -> 300
+    }
+    "EMBEDDED_YEAR" -> 250
+    "MEDIASTORE_ALBUM_FIRST_YEAR" -> 200
+    "MEDIASTORE_YEAR" -> 180
+    "MEDIASTORE_ALBUM_FIRST_LAST_YEAR", "MEDIASTORE_ALBUM_LAST_YEAR" -> 100
+    else -> 0
+}
+
+private fun epochSecondsYear(epochSeconds: Long): Int? =
+    KotlinDateTime.epochSecondsYear(epochSeconds)
