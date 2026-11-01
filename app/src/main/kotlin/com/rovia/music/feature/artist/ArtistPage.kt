@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,7 +79,7 @@ import com.rovia.music.ui.components.ArtworkBitmapLoader
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
-import com.rovia.music.util.KotlinDateTime
+import kotlinx.coroutines.CancellationException
 
 private val ArtistCarouselArtworkSize = 150.dp
 private val ArtistCarouselItemWidth = ArtistCarouselArtworkSize
@@ -106,6 +107,7 @@ fun ArtistPage(
     artistName: String,
     tracks: List<LocalAudioTrack>,
     releases: List<AlbumRelease>,
+    onLoadReleaseMetadata: suspend (LocalAudioTrack) -> LocalAudioTrack,
     playbackController: PlaybackController,
     onBack: () -> Unit,
     onOpenSingle: (String) -> Unit,
@@ -119,6 +121,25 @@ fun ArtistPage(
 
     val artistTracks = tracks
     val artistReleases = releases
+    val latestLoadReleaseMetadata = rememberUpdatedState(onLoadReleaseMetadata)
+    val releaseKeys = remember(artistReleases) {
+        artistReleases.map(AlbumRelease::key)
+    }
+
+    LaunchedEffect(artistKey, releaseKeys) {
+        artistReleases.forEach { release ->
+            val representativeTrack =
+                CatalogArtworkSelector.albumArtworkTrack(release.tracks)
+                    ?: return@forEach
+
+            try {
+                latestLoadReleaseMetadata.value(representativeTrack)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     val sortedArtistReleases = remember(artistReleases) {
         sortReleasesByRecency(artistReleases)
@@ -182,7 +203,12 @@ fun ArtistPage(
         if (currentTrackId != null) 80.dp else 0.dp
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val heroHeight = (maxHeight * 0.72f)
+        val heroHeightFraction = if (singlesAndEps.isNotEmpty() || albums.isNotEmpty()) {
+            0.68f
+        } else {
+            0.72f
+        }
+        val heroHeight = (maxHeight * heroHeightFraction)
             .coerceAtLeast(380.dp)
             .coerceAtMost(maxHeight)
         val playButtonWidth = (maxWidth * 0.66f)
@@ -483,7 +509,7 @@ private fun ArtistCarouselSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 22.dp, bottom = 10.dp),
+            .padding(top = 18.dp, bottom = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
@@ -512,15 +538,7 @@ private fun ArtistReleaseCarouselItem(
         }
     )
     val releaseYear = remember(release) {
-        bestReleaseMetadataTrack(release.tracks)
-            ?.releaseYear
-            ?.takeIf { it in 1000..9999 }
-            ?: release.tracks.maxOfOrNull { it.dateModifiedSeconds }
-                ?.takeIf { it > 0L }
-                ?.let(::epochSecondsYear)
-            ?: release.tracks.maxOfOrNull { it.dateAddedSeconds }
-                ?.takeIf { it > 0L }
-                ?.let(::epochSecondsYear)
+        CatalogArtworkSelector.releaseYearForDisplay(release.tracks)
     }
     val supportingText = if (releaseYear != null) {
         stringResource(
@@ -660,8 +678,6 @@ private fun sortReleasesByRecency(releases: List<AlbumRelease>): List<AlbumRelea
     }.map(ReleaseRecencyKey::release)
 }
 
-private fun epochSecondsYear(epochSeconds: Long): Int? =
-    KotlinDateTime.epochSecondsYear(epochSeconds)
 
 private fun LocalAudioTrack.releaseSortTimestamp(): Long? =
     CatalogArtworkSelector.releaseSortTimestamp(this)

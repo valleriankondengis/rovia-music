@@ -1,6 +1,5 @@
 package com.rovia.music.feature.album
 
-import com.rovia.music.util.KotlinDateTime
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,9 +30,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.AlbumReleaseType
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.queue.PlaybackOrigin
@@ -58,8 +60,11 @@ import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import kotlinx.coroutines.CancellationException
 
 private val AlbumPageNavigationBarHeight = 80.dp
 private val AlbumPageMiniPlayerHeight = 80.dp
@@ -73,9 +78,25 @@ private val AlbumPageMiniPlayerHeight = 80.dp
 fun AlbumPage(
     releaseKey: String,
     release: AlbumRelease?,
+    onLoadReleaseMetadata: suspend (LocalAudioTrack) -> LocalAudioTrack,
     playbackController: PlaybackController,
     onBack: () -> Unit,
 ) {
+    val latestLoadReleaseMetadata = rememberUpdatedState(onLoadReleaseMetadata)
+    val releaseArtworkTrack = remember(release) {
+        release?.let { CatalogArtworkSelector.albumArtworkTrack(it.tracks) }
+    }
+
+    LaunchedEffect(releaseKey, releaseArtworkTrack?.id) {
+        val track = releaseArtworkTrack ?: return@LaunchedEffect
+        try {
+            latestLoadReleaseMetadata.value(track)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+        }
+    }
+
     val artworkUri = remember(release) { release?.artworkUri }
     val pageTitle = release?.title ?: stringResource(R.string.library_category_albums)
     val pageTracks = release?.tracks.orEmpty()
@@ -96,21 +117,7 @@ fun AlbumPage(
         }
     )
     val releaseYear = remember(release) {
-        val releaseTracks = release?.tracks.orEmpty()
-        val bestMetadataTrack = releaseTracks
-            .filter { track -> track.releaseYear?.let { it in 1000..9999 } == true }
-            .maxWithOrNull(
-                compareBy<LocalAudioTrack> { it.releaseDatePriority() }
-                    .thenBy { it.metadataDateEpochMillis ?: it.inferredDateEpochMillis ?: 0L }
-            )
-
-        bestMetadataTrack?.releaseYear
-            ?: releaseTracks.maxOfOrNull { it.dateModifiedSeconds }
-                ?.takeIf { it > 0L }
-                ?.let(::epochSecondsYear)
-            ?: releaseTracks.maxOfOrNull { it.dateAddedSeconds }
-                ?.takeIf { it > 0L }
-                ?.let(::epochSecondsYear)
+        CatalogArtworkSelector.releaseYearForDisplay(release?.tracks.orEmpty())
     }
     val trackCountLabel = pluralStringResource(
         R.plurals.library_track_count,
@@ -130,6 +137,7 @@ fun AlbumPage(
     var currentMediaId by remember(mediaController) {
         mutableStateOf(mediaController?.currentMediaItem?.mediaId)
     }
+    val trackInfoState = rememberTrackInfoState()
 
     val statusBarTopInset = WindowInsets.statusBars
         .asPaddingValues()
@@ -250,6 +258,7 @@ fun AlbumPage(
                     verticalSpacing = 1.dp,
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
+                    onTrackInfoClick = trackInfoState::show,
                     headerContent = {
                         item(key = "album-hero-$releaseKey") {
                             Column(
@@ -393,20 +402,8 @@ fun AlbumPage(
             )
         }
     }
+
+    TrackInfoSheetHost(trackInfoState)
 }
 
-private fun LocalAudioTrack.releaseDatePriority(): Int = when (releaseDateSource) {
-    "EMBEDDED_DATE" -> when (releaseDatePrecision) {
-        "DAY" -> 500
-        "MONTH" -> 400
-        else -> 300
-    }
-    "EMBEDDED_YEAR" -> 250
-    "MEDIASTORE_ALBUM_FIRST_YEAR" -> 200
-    "MEDIASTORE_YEAR" -> 180
-    "MEDIASTORE_ALBUM_FIRST_LAST_YEAR", "MEDIASTORE_ALBUM_LAST_YEAR" -> 100
-    else -> 0
-}
 
-private fun epochSecondsYear(epochSeconds: Long): Int? =
-    KotlinDateTime.epochSecondsYear(epochSeconds)

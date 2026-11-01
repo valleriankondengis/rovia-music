@@ -3,6 +3,7 @@ package com.rovia.music.feature.search
 import com.rovia.music.data.mediastore.AlbumParser
 import com.rovia.music.data.mediastore.AlbumRelease
 import com.rovia.music.data.mediastore.ArtistCreditParser
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import java.text.Normalizer
 import kotlin.math.abs
@@ -319,9 +320,13 @@ object SearchEngine {
             )
 
             if (score > 0) {
-                val artworkTrack = artist.tracks.maxWithOrNull(
-                    compareBy<LocalAudioTrack> { it.dateAddedSeconds }
-                        .thenBy { it.dateModifiedSeconds }
+                // FIX: previously the artist cover in search was the
+                // most recently added track, while ArtistPage used the
+                // latest-release selector. Same artist, different cover
+                // per screen. Use the same selector as ArtistPage.
+                val artworkTrack = CatalogArtworkSelector.artistArtworkTrack(
+                    artistName = artist.name,
+                    tracks = artist.tracks,
                 )
 
                 artistResults += SearchArtistResult(

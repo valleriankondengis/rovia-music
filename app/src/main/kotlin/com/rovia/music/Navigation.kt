@@ -94,6 +94,8 @@ import com.rovia.music.feature.settings.AboutScreen
 import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
+import com.rovia.music.ui.components.TrackInfoSheetHost
+import com.rovia.music.ui.components.rememberTrackInfoState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -275,6 +277,7 @@ fun Navigation(appContainer: AppContainer) {
             )
             val historyState by historyViewModel.state.collectAsStateWithLifecycle()
             val coroutineScope = rememberCoroutineScope()
+            val trackInfoState = rememberTrackInfoState()
 
             val trackTypeLabel = stringResource(R.string.history_type_track)
             val artistTypeLabel = stringResource(R.string.history_type_artist)
@@ -440,7 +443,26 @@ fun Navigation(appContainer: AppContainer) {
                             }
                         }
                     },
+                    onTrackInfoClick = { item ->
+                        coroutineScope.launch {
+                            val audioRepository = appContainer.mediaStoreAudioRepository
+                            val catalogTrack = audioRepository.catalogState.value.tracks
+                                .firstOrNull { track ->
+                                    track.uri.toString() == item.artworkUri
+                                }
+
+                            val trackForInfo = catalogTrack ?: run {
+                                val sourceTrack = historyRepository.getPlayableTrackForActivity(
+                                    item.activityKey,
+                                ) ?: return@launch
+                                audioRepository.loadTrackMetadata(sourceTrack)
+                            }
+
+                            trackInfoState.show(trackForInfo)
+                        }
+                    },
                 )
+                TrackInfoSheetHost(trackInfoState)
             }
         }
 
@@ -538,6 +560,8 @@ fun Navigation(appContainer: AppContainer) {
                     artistName = destination.artistName,
                     tracks = artistDetail.tracks,
                     releases = artistDetail.releases,
+                    onLoadReleaseMetadata =
+                        appContainer.mediaStoreAudioRepository::loadReleaseMetadata,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -586,6 +610,8 @@ fun Navigation(appContainer: AppContainer) {
                 SinglePage(
                     releaseKey = destination.releaseKey,
                     releaseData = release,
+                    onLoadReleaseMetadata =
+                        appContainer.mediaStoreAudioRepository::loadReleaseMetadata,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -605,6 +631,8 @@ fun Navigation(appContainer: AppContainer) {
                 AlbumPage(
                     releaseKey = destination.releaseKey,
                     release = release,
+                    onLoadReleaseMetadata =
+                        appContainer.mediaStoreAudioRepository::loadReleaseMetadata,
                     playbackController = appContainer.playbackController,
                     onBack = {
                         navigationState.goBack(destination.owner)
@@ -865,6 +893,7 @@ fun Navigation(appContainer: AppContainer) {
             ) {
                 PlayerScreen(
                     playbackController = appContainer.playbackController,
+                    audioRepository = appContainer.mediaStoreAudioRepository,
                     onOpenArtist = { artistName ->
                         navigationState.navigateWithin(
                             owner = TopLevelSection.LIBRARY,

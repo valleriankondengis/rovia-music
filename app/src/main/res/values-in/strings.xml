@@ -112,4 +112,37 @@
         <item quantity="one">%1$d kali diputar</item>
         <item quantity="other">%1$d kali diputar</item>
     </plurals>
+    <string name="track_info_open">Informasi lagu</string>
+    <string name="track_menu_open">Opsi lagu lainnya</string>
+    <string name="track_info_album">Album</string>
+    <string name="track_info_album_artist">Artis album</string>
+    <string name="track_info_genre">Genre</string>
+    <string name="track_info_year">Tahun</string>
+    <string name="track_info_release_date">Tanggal rilis</string>
+    <string name="track_info_track">Nomor track</string>
+    <string name="track_info_disc">Disc</string>
+    <string name="track_info_cd_track">Nomor track CD</string>
+    <string name="track_info_compilation">Kompilasi</string>
+    <string name="track_info_release_type">Jenis rilisan</string>
+    <string name="track_info_label">Label</string>
+    <string name="track_info_copyright">Hak cipta</string>
+    <string name="track_info_composer">Komposer</string>
+    <string name="track_info_author">Penulis</string>
+    <string name="track_info_writer">Pencipta lirik</string>
+    <string name="track_info_duration">Durasi</string>
+    <string name="track_info_format">Format</string>
+    <string name="track_info_sample_rate">Sample rate</string>
+    <string name="track_info_bit_depth">Bit depth</string>
+    <string name="track_info_bitrate">Bitrate</string>
+    <string name="track_info_file_name">Nama file</string>
+    <string name="track_info_file_size">Ukuran file</string>
+    <string name="track_info_path">Lokasi</string>
+    <string name="track_info_volume">Volume penyimpanan</string>
+    <string name="track_info_added">Tanggal ditambahkan</string>
+    <string name="track_info_modified">Terakhir diubah</string>
+    <string name="track_info_created_inferred">Perkiraan tanggal dibuat</string>
+    <string name="track_info_metadata_date">Tanggal metadata</string>
+    <string name="track_info_lyrics">Lirik</string>
+    <string name="track_info_lyrics_loading">Membaca lirik tertanam…</string>
+    <string name="track_info_lyrics_unavailable">Lirik tertanam tidak tersedia untuk lagu ini.</string>
 </resources>

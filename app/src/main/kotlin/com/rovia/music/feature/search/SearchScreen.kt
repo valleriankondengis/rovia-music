@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.AlbumReleaseType
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.data.repository.DatabaseSearchRepository
@@ -528,11 +529,7 @@ private fun SearchResultsContent(
                             }
                         )
                         val releaseYear = remember(release) {
-                            release.tracks.mapNotNull(LocalAudioTrack::releaseYear)
-                                .groupingBy { it }
-                                .eachCount()
-                                .maxByOrNull { it.value }
-                                ?.key
+                            CatalogArtworkSelector.releaseYearForDisplay(release.tracks)
                         }
                         val trackCountLabel = pluralStringResource(
                             R.plurals.library_track_count,

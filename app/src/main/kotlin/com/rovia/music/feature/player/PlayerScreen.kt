@@ -70,21 +70,29 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
+import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.LyricLine
 import com.rovia.music.ui.components.LyricLinePreview
 import com.rovia.music.ui.components.SyncedLyrics
+import com.rovia.music.ui.components.TrackInfoBottomSheet
+import com.rovia.music.ui.components.TrackMenu
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 private val PlayerHorizontalContentInset = 18.dp
+private val PlayerLyricPreviewHeight = 56.dp
+private val PlayerSeekbarVerticalAdjustment = 20.dp
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlayerScreen(
     playbackController: PlaybackController,
+    audioRepository: MediaStoreAudioRepository,
     onOpenArtist: (String) -> Unit,
 ) {
     val controller by playbackController.mediaController
@@ -144,6 +152,45 @@ fun PlayerScreen(
         mutableStateOf(
             controller?.currentMediaItem?.localConfiguration?.uri?.toString(),
         )
+    }
+
+    val currentQueueTrack = remember(queueState, currentMediaItem) {
+        val activeMediaItem = currentMediaItem
+        val activeUri = activeMediaItem?.localConfiguration?.uri
+        val activeMediaId = activeMediaItem?.mediaId
+
+        queueState.items
+            .firstOrNull { item ->
+                item.index == queueState.currentIndex &&
+                    (item.mediaId == activeMediaId || item.track.uri == activeUri)
+            }
+            ?.track
+            ?: queueState.items
+                .firstOrNull { item ->
+                    item.mediaId == activeMediaId || item.track.uri == activeUri
+                }
+                ?.track
+    }
+
+    var selectedTrackInfo by remember {
+        mutableStateOf<LocalAudioTrack?>(null)
+    }
+    var showTrackInfoSheet by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(showTrackInfoSheet, selectedTrackInfo?.uri) {
+        val track = selectedTrackInfo
+            ?.takeIf { showTrackInfoSheet }
+            ?: return@LaunchedEffect
+
+        selectedTrackInfo = try {
+            audioRepository.loadTrackMetadata(track)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            track
+        }
     }
 
     var currentPosition by remember(controller) {
@@ -433,53 +480,71 @@ fun PlayerScreen(
                             }
                         }
 
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .offset(
-                                    y = groupTop + artworkSize + titleGap - 33.dp,
+                                    y = groupTop + artworkSize + titleGap - 13.dp,
                                 )
                                 .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = when {
-                                    controller == null -> stringResource(R.string.player_connecting)
-                                    !hasMedia -> stringResource(R.string.player_no_track)
-                                    else -> currentTitle
-                                        ?.takeIf(String::isNotBlank)
-                                        ?: stringResource(R.string.player_unknown_track)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .basicMarquee(),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Clip,
-                            )
-
-                            if (hasMedia) {
-                                Spacer(modifier = Modifier.height(4.dp))
-
+                            Column(
+                                modifier = Modifier.weight(1f),
+                            ) {
                                 Text(
-                                    text = if (artistNames.isNotEmpty()) {
-                                        clickableArtistCredit
-                                    } else {
-                                        buildAnnotatedString {
-                                            append(stringResource(R.string.player_unknown_artist))
-                                        }
+                                    text = when {
+                                        controller == null -> stringResource(R.string.player_connecting)
+                                        !hasMedia -> stringResource(R.string.player_no_track)
+                                        else -> currentTitle
+                                            ?.takeIf(String::isNotBlank)
+                                            ?: stringResource(R.string.player_unknown_track)
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .basicMarquee(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = TextOverflow.Clip,
                                 )
 
+                                if (hasMedia) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = if (artistNames.isNotEmpty()) {
+                                            clickableArtistCredit
+                                        } else {
+                                            buildAnnotatedString {
+                                                append(stringResource(R.string.player_unknown_artist))
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .basicMarquee(),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Clip,
+                                    )
+                                }
+                            }
+
+                            if (hasMedia) {
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                TrackMenu(
+                                    enabled = currentQueueTrack != null,
+                                    onTrackInfoClick = {
+                                        currentQueueTrack?.let { track ->
+                                            selectedTrackInfo = track
+                                            showTrackInfoSheet = true
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
@@ -499,10 +564,12 @@ fun PlayerScreen(
                             .offset(y = -controlsVerticalOffset),
                     ) {
                         if (hasMedia) {
+                            // A fixed two-line-capable slot keeps the lyric centered in the
+                            // Artist-to-seekbar gap without moving when the text wraps.
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(56.dp),
+                                    .height(PlayerLyricPreviewHeight),
                             ) {
                                 PlayerLyricPreview(
                                     target = currentLyricTarget,
@@ -514,60 +581,66 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        val sliderMaximum = durationMs
-                            .takeIf { it > 0L }
-                            ?.toFloat()
-                            ?: 1f
-                        val sliderValue = (
-                            dragPosition ?: currentPosition.toFloat()
-                        ).coerceIn(0f, sliderMaximum)
-                        val sliderState = key(currentTitle, durationMs) {
-                            rememberSliderState(
-                                value = sliderValue,
-                                trackRange = 0f..sliderMaximum,
-                            )
-                        }
-
-                        LaunchedEffect(sliderValue, sliderMaximum) {
-                            sliderState.value = sliderValue
-                        }
-
-                        Slider(
-                            state = sliderState,
-                            onValueChange = { value ->
-                                sliderState.value = value
-                                dragPosition = value
-                            },
-                            onValueChangeFinished = {
-                                dragPosition?.let { position ->
-                                    controller?.seekTo(position.toLong())
-                                    currentPosition = position.toLong()
-                                }
-                                dragPosition = null
-                            },
-                            enabled = controller != null && hasMedia && durationMs > 0L,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                        // Move only the seekbar and its timestamps. The lyric slot and
+                        // transport controls retain their own anchors and do not reflow.
+                        Column(
+                            modifier = Modifier.offset(y = -PlayerSeekbarVerticalAdjustment),
                         ) {
-                            Text(
-                                text = formatTime(
-                                    (dragPosition?.toLong() ?: currentPosition)
-                                        .coerceAtLeast(0L),
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White,
+                            val sliderMaximum = durationMs
+                                .takeIf { it > 0L }
+                                ?.toFloat()
+                                ?: 1f
+                            val sliderValue = (
+                                dragPosition ?: currentPosition.toFloat()
+                            ).coerceIn(0f, sliderMaximum)
+                            val sliderState = key(currentTitle, durationMs) {
+                                rememberSliderState(
+                                    value = sliderValue,
+                                    trackRange = 0f..sliderMaximum,
+                                )
+                            }
+
+                            LaunchedEffect(sliderValue, sliderMaximum) {
+                                sliderState.value = sliderValue
+                            }
+
+                            Slider(
+                                state = sliderState,
+                                onValueChange = { value ->
+                                    sliderState.value = value
+                                    dragPosition = value
+                                },
+                                onValueChangeFinished = {
+                                    dragPosition?.let { position ->
+                                        controller?.seekTo(position.toLong())
+                                        currentPosition = position.toLong()
+                                    }
+                                    dragPosition = null
+                                },
+                                enabled = controller != null && hasMedia && durationMs > 0L,
+                                modifier = Modifier.fillMaxWidth(),
                             )
 
-                            Text(
-                                text = formatTime(durationMs),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = formatTime(
+                                        (dragPosition?.toLong() ?: currentPosition)
+                                            .coerceAtLeast(0L),
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                )
+
+                                Text(
+                                    text = formatTime(durationMs),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -783,6 +856,18 @@ fun PlayerScreen(
                     },
                 )
             }
+
+            if (showTrackInfoSheet) {
+                selectedTrackInfo?.let { track ->
+                    TrackInfoBottomSheet(
+                        track = track,
+                        onDismissRequest = {
+                            showTrackInfoSheet = false
+                            selectedTrackInfo = null
+                        },
+                    )
+                }
+            }
         }
     }
 }
@@ -819,7 +904,7 @@ private fun PlayerLyricPreview(
                     },
             )
         },
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(PlayerLyricPreviewHeight),
         contentAlignment = Alignment.CenterStart,
         label = "player-current-lyric-preview",
     ) { preview ->

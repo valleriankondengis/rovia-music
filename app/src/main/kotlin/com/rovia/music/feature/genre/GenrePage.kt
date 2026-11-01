@@ -56,7 +56,9 @@ import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import java.text.Normalizer
 private val GenrePageNavigationBarHeight = 80.dp
@@ -96,6 +98,7 @@ fun GenrePage(
     var currentMediaId by remember(mediaController) {
         mutableStateOf(mediaController?.currentMediaItem?.mediaId)
     }
+    val trackInfoState = rememberTrackInfoState()
 
     val statusBarTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navigationBarBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -188,6 +191,7 @@ fun GenrePage(
                     verticalSpacing = 1.dp,
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
+                    onTrackInfoClick = trackInfoState::show,
                     headerContent = {
                         item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
                             Column(
@@ -320,6 +324,8 @@ fun GenrePage(
             )
         }
     }
+
+    TrackInfoSheetHost(trackInfoState)
 }
 
 private fun normalizeGenreKey(value: String): String =

@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,6 +57,8 @@ fun TrackList(
     showDuration: Boolean = true,
     footerContent: (LazyListScope.() -> Unit)? = null,
     supportingContentOverride: (@Composable (LocalAudioTrack) -> Unit)? = null,
+    onTrackInfoClick: ((LocalAudioTrack) -> Unit)? = null,
+    trackInfoEnabled: (LocalAudioTrack) -> Boolean = { true },
 ) {
     val layoutDirection = LocalLayoutDirection.current
 
@@ -131,6 +134,9 @@ fun TrackList(
                     } else {
                         null
                     },
+                    onTrackInfoClick = onTrackInfoClick
+                        ?.takeIf { trackInfoEnabled(track) }
+                        ?.let { callback -> { callback(track) } },
                 )
             }
         }
@@ -220,6 +226,7 @@ fun TrackListItem(
     showDuration: Boolean = true,
     supportingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
+    onTrackInfoClick: (() -> Unit)? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val trackColors = ListItemDefaults.segmentedColors(
@@ -255,7 +262,24 @@ fun TrackListItem(
                 )
             }
         }
-    val resolvedTrailingContent = trailingContent ?: defaultTrailingContent
+    val baseTrailingContent = trailingContent ?: defaultTrailingContent
+    val resolvedTrailingContent: (@Composable () -> Unit)? =
+        if (onTrackInfoClick == null) {
+            baseTrailingContent
+        } else {
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    baseTrailingContent?.invoke()
+
+                    TrackMenu(
+                        onTrackInfoClick = onTrackInfoClick,
+                    )
+                }
+            }
+        }
 
     SegmentedListItem(
         selected = selected,

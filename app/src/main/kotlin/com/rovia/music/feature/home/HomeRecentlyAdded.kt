@@ -45,7 +45,9 @@ import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 
@@ -79,6 +81,7 @@ fun HomeRecentlyAddedScreen(
             mediaController?.currentMediaItem?.mediaId
         )
     }
+    val trackInfoState = rememberTrackInfoState()
 
     val statusBarTopInset = WindowInsets.statusBars
         .asPaddingValues()
@@ -251,7 +254,8 @@ fun HomeRecentlyAddedScreen(
                     horizontalPadding = 18.dp,
                     verticalSpacing = 1.dp,
                     currentTrackId = currentMediaId,
-                    itemsEnabled = mediaController != null
+                    itemsEnabled = mediaController != null,
+                    onTrackInfoClick = trackInfoState::show,
                 )
             }
         }
@@ -307,6 +311,8 @@ fun HomeRecentlyAddedScreen(
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
     }
+
+    TrackInfoSheetHost(trackInfoState)
 }
 
 @Composable

@@ -112,4 +112,37 @@
         <item quantity="one">%1$d play</item>
         <item quantity="other">%1$d plays</item>
     </plurals>
+    <string name="track_info_open">Track information</string>
+    <string name="track_menu_open">More track actions</string>
+    <string name="track_info_album">Album</string>
+    <string name="track_info_album_artist">Album artist</string>
+    <string name="track_info_genre">Genre</string>
+    <string name="track_info_year">Year</string>
+    <string name="track_info_release_date">Release date</string>
+    <string name="track_info_track">Track</string>
+    <string name="track_info_disc">Disc</string>
+    <string name="track_info_cd_track">CD track</string>
+    <string name="track_info_compilation">Compilation</string>
+    <string name="track_info_release_type">Release type</string>
+    <string name="track_info_label">Label</string>
+    <string name="track_info_copyright">Copyright</string>
+    <string name="track_info_composer">Composer</string>
+    <string name="track_info_author">Author</string>
+    <string name="track_info_writer">Writer</string>
+    <string name="track_info_duration">Duration</string>
+    <string name="track_info_format">Format</string>
+    <string name="track_info_sample_rate">Sample rate</string>
+    <string name="track_info_bit_depth">Bit depth</string>
+    <string name="track_info_bitrate">Bitrate</string>
+    <string name="track_info_file_name">File name</string>
+    <string name="track_info_file_size">File size</string>
+    <string name="track_info_path">Path</string>
+    <string name="track_info_volume">Storage volume</string>
+    <string name="track_info_added">Date added</string>
+    <string name="track_info_modified">Date modified</string>
+    <string name="track_info_created_inferred">Inferred creation date</string>
+    <string name="track_info_metadata_date">Metadata date</string>
+    <string name="track_info_lyrics">Lyrics</string>
+    <string name="track_info_lyrics_loading">Reading embedded lyrics…</string>
+    <string name="track_info_lyrics_unavailable">Embedded lyrics are not available for this track.</string>
 </resources>

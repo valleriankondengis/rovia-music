@@ -126,6 +126,7 @@ fun HistoryScreen(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onActivityClick: (HistoryActivityUiModel) -> Unit,
+    onTrackInfoClick: (HistoryActivityUiModel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -337,6 +338,14 @@ fun HistoryScreen(
                     verticalSpacing = 1.dp,
                     currentTrackId = null,
                     itemsEnabled = true,
+                    onTrackInfoClick = { track ->
+                        displayItemsById[track.id]
+                            ?.takeIf { it.type == HistoryActivityType.TRACK }
+                            ?.let(onTrackInfoClick)
+                    },
+                    trackInfoEnabled = { track ->
+                        displayItemsById[track.id]?.type == HistoryActivityType.TRACK
+                    },
                     listState = listState,
                     sectionKey = sectionKey,
                     sectionHeaderContent = { dateLabel ->

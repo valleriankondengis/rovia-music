@@ -64,7 +64,9 @@ import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.FadeScrim
 import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.components.TrackListItem
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 
@@ -128,6 +130,7 @@ fun LibraryScreen(
     var currentMediaId by remember(mediaController) {
         mutableStateOf(mediaController?.currentMediaItem?.mediaId)
     }
+    val trackInfoState = rememberTrackInfoState()
 
     val statusBarTopInset = WindowInsets.statusBars
         .asPaddingValues()
@@ -316,7 +319,8 @@ fun LibraryScreen(
                     horizontalPadding = 18.dp,
                     verticalSpacing = 1.dp,
                     currentTrackId = currentMediaId,
-                    itemsEnabled = mediaController != null
+                    itemsEnabled = mediaController != null,
+                    onTrackInfoClick = trackInfoState::show,
                 )
             }
 
@@ -422,6 +426,7 @@ fun LibraryScreen(
                         currentTrackId = currentMediaId,
                         itemsEnabled = mediaController != null,
                         onFolderClick = { path -> selectedFolderPath = path },
+                        onTrackInfoClick = trackInfoState::show,
                         onTrackClick = { track, index ->
                             handleTrackClick(
                                 queueTracks = selectedFolderTracks,
@@ -554,6 +559,8 @@ fun LibraryScreen(
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
     }
+
+    TrackInfoSheetHost(trackInfoState)
 }
 
 @Composable
@@ -714,6 +721,7 @@ private fun LibraryFolderContentList(
     currentTrackId: String?,
     itemsEnabled: Boolean,
     onFolderClick: (String) -> Unit,
+    onTrackInfoClick: (LocalAudioTrack) -> Unit,
     onTrackClick: (LocalAudioTrack, Int) -> Unit
 ) {
     val totalItemCount = folderItems.size + tracks.size
@@ -817,6 +825,7 @@ private fun LibraryFolderContentList(
                 index = folderItems.size + index,
                 count = totalItemCount,
                 horizontalPadding = 0.dp,
+                onTrackInfoClick = { onTrackInfoClick(track) },
             )
         }
     }
