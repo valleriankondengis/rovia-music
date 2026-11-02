@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 
 object ArtworkBitmapLoader {
 
+    private const val ARTWORK_CACHE_VERSION = 1
     private const val DEFAULT_MAX_DIMENSION = 1024
     private const val FILE_SCHEME = "file"
     private const val CONTENT_SCHEME = "content"
