@@ -87,14 +87,6 @@ fun TrackInfoSheetHost(
     val selectedTrack = state.selectedTrack
     val context = LocalContext.current
 
-    // FIX: Track Info used to display the track exactly as it arrived
-    // The library can pass a MediaStore snapshot or a Room-mapped track
-    // that does not contain every per-file tag. Room intentionally does
-    // not persist all detail fields, so read the selected file on demand
-    // when this sheet opens. The read runs on IO; the base track is shown
-    // immediately and the enriched version replaces it when ready.
-    // This also fixes Track Info on existing installs without requiring
-    // a catalog resync or clearing app data.
     var enrichedTrack by remember(selectedTrack?.uri) {
         mutableStateOf<LocalAudioTrack?>(null)
     }
@@ -119,16 +111,6 @@ fun TrackInfoSheetHost(
     }
 }
 
-/**
- * Reads the embedded tags of [track] with MediaMetadataRetriever and
- * merges them over the incoming track. Incoming values are never
- * overwritten with null: an embedded value only wins when present.
- * Label/copyright deliberately stay as-is: neither MediaStore nor
- * MediaMetadataRetriever exposes a label/publisher or copyright tag
- * key, so those two rows can only be filled by a dedicated tag
- * parser (e.g. ID3 TPUB/TCOP, Vorbis LABEL/COPYRIGHT), which is out
- * of scope for this fix and must not be faked from other fields.
- */
 private suspend fun readEmbeddedTrackInfo(
     context: Context,
     track: LocalAudioTrack,
