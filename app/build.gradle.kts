@@ -1,9 +1,42 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.androidx.room3)
+}
+
+val keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.isFile) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val hasReleaseSigning = keystorePropertiesFile.isFile
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
+
+if (hasReleaseSigning) {
+    require(!releaseStoreFile.isNullOrBlank()) {
+        "Missing storeFile in keystore/keystore.properties"
+    }
+    require(!releaseStorePassword.isNullOrBlank()) {
+        "Missing storePassword in keystore/keystore.properties"
+    }
+    require(!releaseKeyAlias.isNullOrBlank()) {
+        "Missing keyAlias in keystore/keystore.properties"
+    }
+    require(!releaseKeyPassword.isNullOrBlank()) {
+        "Missing keyPassword in keystore/keystore.properties"
+    }
+    require(rootProject.file(requireNotNull(releaseStoreFile)).isFile) {
+        "Release keystore file does not exist: $releaseStoreFile"
+    }
 }
 
 room3 {
@@ -34,14 +67,27 @@ android {
         versionName = "0.0.1"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+                storeType = "JKS"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            optimization {
+                enable = true
+            }
 
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

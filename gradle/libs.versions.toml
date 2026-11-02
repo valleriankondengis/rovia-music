@@ -1,42 +1,40 @@
 [versions]
-androidGradlePlugin = "9.5.0"
-kotlin = "2.4.21"
+androidGradlePlugin = "9.6.0-alpha02"
+kotlin = "2.5.0-Beta2"
 
 androidxCore = "1.19.1"
-androidxActivity = "1.13.0"
-androidxLifecycle = "2.11.0"
+androidxActivity = "1.14.0-alpha03"
+androidxLifecycle = "2.12.0-alpha05"
 
-androidxComposeBom = "2026.09.00"
-androidxComposeUi = "1.13.0-beta02"
-androidxComposeMaterial3 = "1.5.0-beta02"
+androidxComposeBom = "2026.10.01"
 
-media3 = "1.11.1"
+media3 = "1.12.0-alpha02"
 
-androidxTest = "1.7.0"
-androidxTestExt = "1.3.0"
-androidxTestRunner = "1.7.0"
-androidxTestEspresso = "3.7.0"
+androidxTest = "1.8.0-alpha03"
+androidxTestExt = "1.4.0-alpha03"
+androidxTestRunner = "1.8.0-alpha03"
+androidxTestEspresso = "3.8.0-alpha03"
 
 coroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
 kotlincryptoSha2 = "0.8.0"
 junit = "4.13.2"
 
-room3 = "3.0.3"
-sqlite = "2.7.1"
-ksp = "2.3.12"
+room3 = "3.1.0-alpha03"
+sqlite = "2.8.0-alpha03"
+ksp = "2.3.13"
 
 nav3Core = "1.3.0-alpha03"
-lifecycleViewmodelNav3 = "2.11.0"
+lifecycleViewmodelNav3 = "2.12.0-alpha05"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom-alpha", version.ref = "androidxComposeBom" }
 androidx-compose-animation = { module = "androidx.compose.animation:animation" }
-androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "androidxComposeMaterial3" }
-androidx-compose-ui = { module = "androidx.compose.ui:ui", version.ref = "androidxComposeUi" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
