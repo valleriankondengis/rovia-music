@@ -9,6 +9,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -70,7 +72,13 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.playback.bitperfect.AudioOutputMode
+import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
+import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.playback.controller.PlaybackController
@@ -78,6 +86,7 @@ import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.LyricLine
 import com.rovia.music.ui.components.LyricLinePreview
 import com.rovia.music.ui.components.SyncedLyrics
+import com.rovia.music.ui.components.AudioPipelineBottomSheet
 import com.rovia.music.ui.components.TrackInfoBottomSheet
 import com.rovia.music.ui.components.TrackMenu
 import java.util.Locale
@@ -191,6 +200,49 @@ fun PlayerScreen(
         } catch (_: Exception) {
             track
         }
+    }
+
+    var showPipelineSheet by remember {
+        mutableStateOf(false)
+    }
+    var currentTrackDetail by remember {
+        mutableStateOf<LocalAudioTrack?>(null)
+    }
+
+    LaunchedEffect(currentQueueTrack?.uri) {
+        val track = currentQueueTrack ?: return@LaunchedEffect
+        currentTrackDetail = try {
+            audioRepository.loadTrackMetadata(track)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            track
+        }
+    }
+
+    val sourceTrack = currentTrackDetail
+        ?.takeIf { it.uri == currentQueueTrack?.uri }
+        ?: currentQueueTrack
+
+    val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
+    val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
+    var dacName by remember {
+        mutableStateOf(UsbAudioOutputPresence.usbAudioOutputDeviceName(context))
+    }
+
+    DisposableEffect(context) {
+        val audioManager = context.getSystemService(AudioManager::class.java)
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                dacName = UsbAudioOutputPresence.usbAudioOutputDeviceName(context)
+            }
+
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                dacName = UsbAudioOutputPresence.usbAudioOutputDeviceName(context)
+            }
+        }
+        audioManager?.registerAudioDeviceCallback(callback, null)
+        onDispose { audioManager?.unregisterAudioDeviceCallback(callback) }
     }
 
     var currentPosition by remember(controller) {
@@ -564,8 +616,8 @@ fun PlayerScreen(
                             .offset(y = -controlsVerticalOffset),
                     ) {
                         if (hasMedia) {
-                            // A fixed two-line-capable slot keeps the lyric centered in the
-                            // Artist-to-seekbar gap without moving when the text wraps.
+                            // Fixed two-line slot: the lyric stays centered and
+                            // does not move when the text wraps.
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -581,8 +633,8 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        // Move only the seekbar and its timestamps. The lyric slot and
-                        // transport controls retain their own anchors and do not reflow.
+                        // Only the seekbar moves here; the lyric slot and the
+                        // transport controls keep their own anchors.
                         Column(
                             modifier = Modifier.offset(y = -PlayerSeekbarVerticalAdjustment),
                         ) {
@@ -643,10 +695,40 @@ fun PlayerScreen(
                             }
                         }
 
+                        sourceTrack?.let { track ->
+                            val routeLabel = stringResource(
+                                if (outputMode != AudioOutputMode.OFF) {
+                                    R.string.pipeline_bit_perfect
+                                } else {
+                                    R.string.pipeline_system_mixer
+                                },
+                            )
+                            val sourceParts = buildList {
+                                if (dacName != null) add("DAC")
+                                track.bitsPerSample
+                                    ?.takeIf { it > 0 }
+                                    ?.let { add("$it-bit") }
+                                track.sampleRateHz
+                                    ?.takeIf { it > 0 }
+                                    ?.let { add(formatSourceSampleRate(it)) }
+                                formatSourceAudioType(track.mimeType)?.let(::add)
+                                add(routeLabel)
+                            }
+                            Text(
+                                text = sourceParts.joinToString(" • "),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showPipelineSheet = true }
+                                    .padding(vertical = 4.dp),
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Keep the transport row aligned with the slider and the secondary
-                        // controls row. The content column itself owns the 18.dp side inset.
+                        // The content column owns the 18.dp side inset.
                         val playbackButtonGroupWidth = controlsWidth
                         val playbackColorScheme = MaterialTheme.colorScheme
                         val idlePlaybackContainerColor =
@@ -731,7 +813,7 @@ fun PlayerScreen(
                                         FilledIconToggleButton(
                                             checked = showPauseIcon,
                                             onCheckedChange = {
-                                                togglePlayback()
+                                                togglePlayback().also {}
                                             },
                                             enabled = hasMedia,
                                             interactionSource = playPauseInteractionSource,
@@ -823,7 +905,9 @@ fun PlayerScreen(
 
                             AudioOutputIndicator(
                                 enabled = hasMedia,
-                                modifier = Modifier.align(Alignment.Center),
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(horizontal = 56.dp),
                             )
 
                             FilledIconButton(
@@ -865,6 +949,17 @@ fun PlayerScreen(
                             showTrackInfoSheet = false
                             selectedTrackInfo = null
                         },
+                    )
+                }
+            }
+
+            if (showPipelineSheet) {
+                sourceTrack?.let { track ->
+                    AudioPipelineBottomSheet(
+                        track = track,
+                        outputMode = outputMode,
+                        dacName = dacName,
+                        onDismissRequest = { showPipelineSheet = false },
                     )
                 }
             }
@@ -930,3 +1025,18 @@ private fun formatTime(timeMs: Long): String {
         totalSeconds % 60L,
     )
 }
+
+private fun formatSourceAudioType(mimeType: String?): String? = mimeType
+    ?.takeIf(String::isNotBlank)
+    ?.substringAfter(delimiter = "/", missingDelimiterValue = mimeType)
+    ?.removePrefix("x-")
+    ?.uppercase()
+    ?.takeIf(String::isNotBlank)
+
+private fun formatSourceSampleRate(sampleRateHz: Int): String =
+    if (sampleRateHz % 1_000 == 0) {
+        "${sampleRateHz / 1_000} kHz"
+    } else {
+        val tenths = (sampleRateHz * 10 + 500) / 1_000
+        "${tenths / 10}.${tenths % 10} kHz"
+    }
