@@ -58,12 +58,11 @@ import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
 import com.rovia.music.ui.components.rememberTrackInfoState
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import kotlinx.coroutines.CancellationException
 
 private val SinglePageNavigationBarHeight = 80.dp
@@ -77,6 +76,7 @@ fun SinglePage(
     onLoadReleaseMetadata: suspend (LocalAudioTrack) -> LocalAudioTrack,
     playbackController: PlaybackController,
     onBack: () -> Unit,
+    userLibraryMenu: UserLibraryMenuState? = null,
 ) {
     val release = releaseData?.takeIf { candidate ->
         candidate.type == AlbumReleaseType.SINGLE || candidate.type == AlbumReleaseType.EP
@@ -172,7 +172,6 @@ fun SinglePage(
             if (pageTracks.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(top = contentTopPadding, bottom = contentBottomPadding)
                         .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
@@ -215,8 +214,7 @@ fun SinglePage(
                         }
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(
                         top = contentTopPadding,
                         bottom = contentBottomPadding
@@ -226,6 +224,9 @@ fun SinglePage(
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
                     onTrackInfoClick = trackInfoState::show,
+                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                    onToggleLike = userLibraryMenu?.onToggleLike,
+                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
                     headerContent = {
                         item(key = "single-hero-$releaseKey") {
                             Column(
@@ -316,13 +317,6 @@ fun SinglePage(
                 )
             }
 
-            FadeScrim(edge = FadeScrimEdge.Top, modifier = Modifier.align(Alignment.TopCenter))
-            FadeScrim(
-                edge = FadeScrimEdge.Bottom,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                withMiniPlayer = currentMediaId != null
-            )
-
             TopAppBar(
                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
                 title = {},
@@ -352,6 +346,10 @@ fun SinglePage(
     }
 
     TrackInfoSheetHost(trackInfoState)
+
+    if (userLibraryMenu != null) {
+        UserLibraryMenuDialogHost(userLibraryMenu)
+    }
 }
 
 

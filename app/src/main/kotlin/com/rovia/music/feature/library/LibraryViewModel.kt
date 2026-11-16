@@ -3,8 +3,11 @@ package com.rovia.music.feature.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.LibraryCatalog
 import com.rovia.music.data.repository.LibraryRepository
+import com.rovia.music.data.repository.PlaylistSummary
+import com.rovia.music.data.repository.UserLibraryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,11 +22,58 @@ data class LibraryUiState(
     val isCatalogLoaded: Boolean = false,
     val isLoading: Boolean = true,
     val loadFailed: Boolean = false,
+    val playlists: List<PlaylistSummary> = emptyList(),
+    val likedCount: Int = 0,
+    val likedTrackKeys: Set<String> = emptySet(),
 )
 
 class LibraryViewModel(
     private val libraryRepository: LibraryRepository,
+    private val userLibraryRepository: UserLibraryRepository,
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch {
+            userLibraryRepository.observePlaylists().collect { playlists ->
+                mutableState.update { current -> current.copy(playlists = playlists) }
+            }
+        }
+        viewModelScope.launch {
+            userLibraryRepository.observeLikedCount().collect { count ->
+                mutableState.update { current -> current.copy(likedCount = count) }
+            }
+        }
+        viewModelScope.launch {
+            userLibraryRepository.observeLikedTrackKeys().collect { keys ->
+                mutableState.update { current -> current.copy(likedTrackKeys = keys) }
+            }
+        }
+    }
+
+    fun createPlaylist(name: String) {
+        viewModelScope.launch {
+            userLibraryRepository.createPlaylist(name)
+        }
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, track: LocalAudioTrack) {
+        viewModelScope.launch {
+            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+        }
+    }
+
+    fun createPlaylistAndAdd(name: String, track: LocalAudioTrack) {
+        viewModelScope.launch {
+            val playlistId = userLibraryRepository.createPlaylist(name)
+            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+        }
+    }
+
+    fun toggleLike(track: LocalAudioTrack) {
+        viewModelScope.launch {
+            userLibraryRepository.toggleLike(track)
+        }
+    }
 
     private val mutableState = MutableStateFlow(LibraryUiState())
     val state = mutableState.asStateFlow()
@@ -148,6 +198,7 @@ class LibraryViewModel(
 
 class LibraryViewModelFactory(
     private val libraryRepository: LibraryRepository,
+    private val userLibraryRepository: UserLibraryRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -156,6 +207,7 @@ class LibraryViewModelFactory(
         }
         return LibraryViewModel(
             libraryRepository = libraryRepository,
+            userLibraryRepository = userLibraryRepository,
         ) as T
     }
 }

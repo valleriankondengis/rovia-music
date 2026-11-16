@@ -3,6 +3,7 @@ package com.rovia.music.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.data.repository.UserLibraryRepository
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -45,8 +47,8 @@ fun TrackList(
         vertical = 1.dp,
     ),
     contentInsetPadding: PaddingValues = PaddingValues(),
-    horizontalPadding: Dp = 18.dp,
-    verticalSpacing: Dp = 1.dp,
+    horizontalPadding: Dp = 16.dp,
+    verticalSpacing: Dp = 2.dp,
     currentTrackId: String? = null,
     itemsEnabled: Boolean = true,
     userScrollEnabled: Boolean = true,
@@ -59,6 +61,11 @@ fun TrackList(
     supportingContentOverride: (@Composable (LocalAudioTrack) -> Unit)? = null,
     onTrackInfoClick: ((LocalAudioTrack) -> Unit)? = null,
     trackInfoEnabled: (LocalAudioTrack) -> Boolean = { true },
+    trackMenuContent: (@Composable ColumnScope.(track: LocalAudioTrack, dismissMenu: () -> Unit) -> Unit)? = null,
+    likedTrackKeys: Set<String> = emptySet(),
+    onToggleLike: ((LocalAudioTrack) -> Unit)? = null,
+    onAddToPlaylistClick: ((LocalAudioTrack) -> Unit)? = null,
+    artworkContentFor: ((LocalAudioTrack) -> (@Composable () -> Unit)?)? = null,
 ) {
     val layoutDirection = LocalLayoutDirection.current
 
@@ -137,6 +144,18 @@ fun TrackList(
                     onTrackInfoClick = onTrackInfoClick
                         ?.takeIf { trackInfoEnabled(track) }
                         ?.let { callback -> { callback(track) } },
+                    trackMenuContent = trackMenuContent?.let { content ->
+                        { dismiss -> content(track, dismiss) }
+                    },
+                    track = track,
+                    isLiked = UserLibraryRepository.likedTrackKey(track) in likedTrackKeys,
+                    onToggleLike = onToggleLike?.let { callback ->
+                        { callback(track) }
+                    },
+                    onAddToPlaylist = onAddToPlaylistClick?.let { callback ->
+                        { callback(track) }
+                    },
+                    artworkContent = artworkContentFor?.invoke(track),
                 )
             }
         }
@@ -219,14 +238,20 @@ fun TrackListItem(
     index: Int,
     count: Int,
     modifier: Modifier = Modifier,
-    horizontalPadding: Dp = 18.dp,
+    horizontalPadding: Dp = 16.dp,
     artworkSize: Dp = 56.dp,
     artworkShape: Shape = MaterialTheme.shapes.medium,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     showDuration: Boolean = true,
     supportingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     onTrackInfoClick: (() -> Unit)? = null,
+    trackMenuContent: (@Composable ColumnScope.(dismissMenu: () -> Unit) -> Unit)? = null,
+    track: LocalAudioTrack? = null,
+    isLiked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    artworkContent: (@Composable () -> Unit)? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val trackColors = ListItemDefaults.segmentedColors(
@@ -276,6 +301,15 @@ fun TrackListItem(
 
                     TrackMenu(
                         onTrackInfoClick = onTrackInfoClick,
+                        track = track,
+                        isLiked = isLiked,
+                        onToggleLike = onToggleLike?.let { callback ->
+                            { _: LocalAudioTrack -> callback() }
+                        },
+                        onAddToPlaylist = onAddToPlaylist?.let { callback ->
+                            { _: LocalAudioTrack -> callback() }
+                        },
+                        menuContent = trackMenuContent ?: {},
                     )
                 }
             }
@@ -294,14 +328,18 @@ fun TrackListItem(
         verticalAlignment = Alignment.CenterVertically,
         contentPadding = contentPadding,
         leadingContent = {
-            AlbumArtwork(
-                artworkUri = artworkUri,
-                fallbackText = artworkFallback,
-                contentDescription = title,
-                modifier = Modifier.size(artworkSize),
-                size = artworkSize,
-                shape = artworkShape,
-            )
+            if (artworkContent != null) {
+                artworkContent()
+            } else {
+                AlbumArtwork(
+                    artworkUri = artworkUri,
+                    fallbackText = artworkFallback,
+                    contentDescription = title,
+                    modifier = Modifier.size(artworkSize),
+                    size = artworkSize,
+                    shape = artworkShape,
+                )
+            }
         },
         content = {
             Text(

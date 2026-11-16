@@ -32,6 +32,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE trackId = :trackId LIMIT 1")
     suspend fun getById(trackId: Long): TrackEntity?
 
+    @Query("SELECT * FROM tracks WHERE trackId IN (:trackIds)")
+    suspend fun getByIds(trackIds: List<Long>): List<TrackEntity>
+
     @Query("SELECT * FROM tracks WHERE sourceKey = :sourceKey LIMIT 1")
     suspend fun getBySourceKey(sourceKey: String): TrackEntity?
 

@@ -33,19 +33,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
 
-private val AboutHorizontalPadding = 18.dp
-private val AboutSegmentSpacing = 1.dp
+private val AboutHorizontalPadding = 16.dp
+private val AboutSegmentSpacing = 2.dp
+private val AboutGroupCornerRadius = 24.dp
 private val AboutSegmentContentPadding = PaddingValues(
-    horizontal = 16.dp,
-    vertical = 14.dp,
+    horizontal = 18.dp,
+    vertical = 16.dp,
 )
 
 @Composable
@@ -105,7 +108,7 @@ fun AboutScreen(
                 .padding(contentPadding),
             contentPadding = PaddingValues(
                 start = AboutHorizontalPadding,
-                top = 20.dp,
+                top = 16.dp,
                 end = AboutHorizontalPadding,
                 bottom = 20.dp,
             ),
@@ -128,7 +131,7 @@ fun AboutScreen(
                                 vertical = 28.dp,
                             ),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         Image(
                             painter = painterResource(R.drawable.ic_launcher_foreground),
@@ -151,7 +154,9 @@ fun AboutScreen(
 
             item(key = "about_details") {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(AboutGroupCornerRadius)),
                     verticalArrangement = Arrangement.spacedBy(AboutSegmentSpacing),
                 ) {
                     SegmentedListItem(
@@ -163,9 +168,9 @@ fun AboutScreen(
                             count = 2,
                         ),
                         colors = ListItemDefaults.segmentedColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            containerColor = MaterialTheme.colorScheme.surfaceBright,
                             contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceBright,
                             disabledContentColor = MaterialTheme.colorScheme.onSurface,
                             disabledTrailingContentColor = MaterialTheme.colorScheme.onSurface,
                         ),
@@ -201,7 +206,7 @@ fun AboutScreen(
                             count = 2,
                         ),
                         colors = ListItemDefaults.segmentedColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            containerColor = MaterialTheme.colorScheme.surfaceBright,
                             contentColor = MaterialTheme.colorScheme.onSurface,
                         ),
                         contentPadding = AboutSegmentContentPadding,

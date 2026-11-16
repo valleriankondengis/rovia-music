@@ -9,16 +9,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -29,6 +33,7 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +42,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -54,8 +61,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val AudioScreenHorizontalPadding = 18.dp
-private val AudioScreenVerticalSpacing = 1.dp
+private val AudioScreenHorizontalPadding = 16.dp
+private val AudioScreenVerticalSpacing = 8.dp
+private val AudioSegmentSpacing = 2.dp
+private val AudioGroupCornerRadius = 24.dp
 private val AudioScreenContentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
 
 private data class BackendOption(
@@ -213,22 +222,44 @@ internal fun AudioScreen(
             }
 
             item(key = "audio_output_options") {
-                Column(verticalArrangement = Arrangement.spacedBy(AudioScreenVerticalSpacing)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(AudioGroupCornerRadius)),
+                    verticalArrangement = Arrangement.spacedBy(AudioSegmentSpacing),
+                ) {
                     backendOptions.forEachIndexed { index, option ->
                         SegmentedListItem(
                             selected = selectedBackend == option.backend,
                             onClick = { selectBackend(option.backend) },
                             modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                             shapes = ListItemDefaults.segmentedShapes(
                                 index = index,
                                 count = backendOptions.size,
                             ),
                             colors = ListItemDefaults.segmentedColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                containerColor = MaterialTheme.colorScheme.surfaceBright,
                                 contentColor = MaterialTheme.colorScheme.onSurface,
                             ),
                             contentPadding = AudioScreenContentPadding,
-                            leadingContent = { AudioLeadingIcon(option.icon) },
+                            leadingContent = {
+                                AudioLeadingIcon(
+                                    drawable = option.icon,
+                                    containerColor = when (index) {
+                                        0 -> MaterialTheme.colorScheme.primaryContainer
+                                        1 -> MaterialTheme.colorScheme.secondaryContainer
+                                        2 -> MaterialTheme.colorScheme.tertiaryContainer
+                                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                    },
+                                    contentColor = when (index) {
+                                        0 -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        1 -> MaterialTheme.colorScheme.onSecondaryContainer
+                                        2 -> MaterialTheme.colorScheme.onTertiaryContainer
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            },
                             supportingContent = { Text(stringResource(option.supporting)) },
                             trailingContent = {
                                 RadioButton(
@@ -239,7 +270,7 @@ internal fun AudioScreen(
                             content = {
                                 Text(
                                     stringResource(option.title),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                             },
                         )
@@ -248,33 +279,58 @@ internal fun AudioScreen(
             }
 
             item(key = "audio_output_fixed_volume") {
-                SegmentedListItem(
-                    selected = allowFixedVolume,
-                    onClick = { modeStore.setAllowFixedVolume(!allowFixedVolume) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
-                    colors = ListItemDefaults.segmentedColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    contentPadding = AudioScreenContentPadding,
-                    leadingContent = { AudioLeadingIcon(R.drawable.ic_usb) },
-                    supportingContent = {
-                        Text(stringResource(R.string.audio_settings_allow_fixed_volume_supporting))
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = allowFixedVolume,
-                            onCheckedChange = null,
-                        )
-                    },
-                    content = {
-                        Text(
-                            stringResource(R.string.audio_settings_allow_fixed_volume),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                    },
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .clip(RoundedCornerShape(AudioGroupCornerRadius)),
+                ) {
+                    SegmentedListItem(
+                        selected = allowFixedVolume,
+                        onClick = { modeStore.setAllowFixedVolume(!allowFixedVolume) },
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceBright,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        contentPadding = AudioScreenContentPadding,
+                        leadingContent = {
+                            AudioLeadingIcon(
+                                drawable = R.drawable.ic_usb,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.audio_settings_allow_fixed_volume_supporting))
+                        },
+                        trailingContent = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                VerticalDivider(
+                                    modifier = Modifier
+                                        .height(32.dp)
+                                        .width(1.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                )
+                                Switch(
+                                    checked = allowFixedVolume,
+                                    onCheckedChange = null,
+                                )
+                            }
+                        },
+                        content = {
+                            Text(
+                                stringResource(R.string.audio_settings_allow_fixed_volume),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        },
+                    )
+                }
             }
 
             statusText?.let { message ->
@@ -305,18 +361,22 @@ private fun SectionTitle(
 }
 
 @Composable
-private fun AudioLeadingIcon(drawable: Int) {
+private fun AudioLeadingIcon(
+    drawable: Int,
+    containerColor: Color,
+    contentColor: Color,
+) {
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .background(MaterialTheme.colorScheme.primary, CircleShape),
+            .size(40.dp)
+            .background(containerColor, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painter = painterResource(drawable),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(23.dp),
+            tint = contentColor,
+            modifier = Modifier.size(20.dp),
         )
     }
 }

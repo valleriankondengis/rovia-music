@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -30,17 +31,18 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
 
-private val SettingsHorizontalPadding = 18.dp
-private val SettingsVerticalSpacing = 1.dp
-
-private val SettingsMenuIconSize = 52.dp
-private val SettingsMenuIconContentSize = 24.dp
-
+private val SettingsHorizontalPadding = 16.dp
+private val SettingsGroupSpacing = 2.dp
+private val SettingsGroupCornerRadius = 24.dp
+private val SettingsMenuIconSize = 40.dp
+private val SettingsMenuIconContentSize = 21.dp
 private val SettingsMenuContentPadding = PaddingValues(
     horizontal = 16.dp,
     vertical = 14.dp,
@@ -79,17 +81,13 @@ fun SettingsScreen(
                     onClick = onBack,
                     shapes = IconButtonDefaults.shapes(),
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor =
-                            MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor =
-                            MaterialTheme.colorScheme.onSurface,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_arrow_back),
-                        contentDescription = stringResource(
-                            R.string.settings_back,
-                        ),
+                        contentDescription = stringResource(R.string.settings_back),
                     )
                 }
             },
@@ -100,9 +98,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(
-                SettingsVerticalSpacing,
-            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(
                 start = SettingsHorizontalPadding,
                 top = 8.dp,
@@ -110,34 +106,41 @@ fun SettingsScreen(
                 bottom = listBottomPadding,
             ),
         ) {
-            item(key = "settings_audio") {
-                SettingsMenuItem(
-                    onClick = onAudioClick,
-                    segmentIndex = 0,
-                    segmentCount = 3,
-                    icon = R.drawable.ic_smartphone,
-                    title = R.string.audio_menu_title,
-                )
-            }
-
-            item(key = "settings_folder_filter") {
-                SettingsMenuItem(
-                    onClick = onFolderFilterClick,
-                    segmentIndex = 1,
-                    segmentCount = 3,
-                    icon = R.drawable.ic_folder,
-                    title = R.string.folder_filter_title,
-                )
-            }
-
-            item(key = "settings_about") {
-                SettingsMenuItem(
-                    onClick = onAboutClick,
-                    segmentIndex = 2,
-                    segmentCount = 3,
-                    icon = R.drawable.ic_settings,
-                    title = R.string.about_menu_title,
-                )
+            item(key = "settings_group") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(SettingsGroupCornerRadius)),
+                    verticalArrangement = Arrangement.spacedBy(SettingsGroupSpacing),
+                ) {
+                    SettingsMenuItem(
+                        onClick = onAudioClick,
+                        segmentIndex = 0,
+                        segmentCount = 3,
+                        icon = R.drawable.ic_smartphone,
+                        title = R.string.audio_menu_title,
+                        iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    SettingsMenuItem(
+                        onClick = onFolderFilterClick,
+                        segmentIndex = 1,
+                        segmentCount = 3,
+                        icon = R.drawable.ic_folder,
+                        title = R.string.folder_filter_title,
+                        iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    SettingsMenuItem(
+                        onClick = onAboutClick,
+                        segmentIndex = 2,
+                        segmentCount = 3,
+                        icon = R.drawable.ic_settings,
+                        title = R.string.about_menu_title,
+                        iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
             }
         }
     }
@@ -150,6 +153,8 @@ private fun SettingsMenuItem(
     segmentCount: Int,
     icon: Int,
     title: Int,
+    iconContainerColor: Color,
+    iconContentColor: Color,
 ) {
     SegmentedListItem(
         onClick = onClick,
@@ -159,10 +164,8 @@ private fun SettingsMenuItem(
             count = segmentCount,
         ),
         colors = ListItemDefaults.segmentedColors(
-            containerColor =
-                MaterialTheme.colorScheme.surfaceContainerLow,
-            contentColor =
-                MaterialTheme.colorScheme.onSurface,
+            containerColor = MaterialTheme.colorScheme.surfaceBright,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         contentPadding = SettingsMenuContentPadding,
         leadingContent = {
@@ -170,7 +173,7 @@ private fun SettingsMenuItem(
                 modifier = Modifier
                     .size(SettingsMenuIconSize)
                     .background(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = iconContainerColor,
                         shape = CircleShape,
                     ),
                 contentAlignment = Alignment.Center,
@@ -178,10 +181,8 @@ private fun SettingsMenuItem(
                 Icon(
                     painter = painterResource(icon),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(
-                        SettingsMenuIconContentSize,
-                    ),
+                    tint = iconContentColor,
+                    modifier = Modifier.size(SettingsMenuIconContentSize),
                 )
             }
         },

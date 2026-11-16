@@ -58,12 +58,11 @@ import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
 import com.rovia.music.ui.components.rememberTrackInfoState
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import kotlinx.coroutines.CancellationException
 
 private val AlbumPageNavigationBarHeight = 80.dp
@@ -81,6 +80,7 @@ fun AlbumPage(
     onLoadReleaseMetadata: suspend (LocalAudioTrack) -> LocalAudioTrack,
     playbackController: PlaybackController,
     onBack: () -> Unit,
+    userLibraryMenu: UserLibraryMenuState? = null,
 ) {
     val latestLoadReleaseMetadata = rememberUpdatedState(onLoadReleaseMetadata)
     val releaseArtworkTrack = remember(release) {
@@ -202,7 +202,6 @@ fun AlbumPage(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -248,8 +247,7 @@ fun AlbumPage(
                         }
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(
                         top = contentTopPadding,
                         bottom = contentBottomPadding
@@ -259,6 +257,9 @@ fun AlbumPage(
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
                     onTrackInfoClick = trackInfoState::show,
+                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                    onToggleLike = userLibraryMenu?.onToggleLike,
+                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
                     headerContent = {
                         item(key = "album-hero-$releaseKey") {
                             Column(
@@ -360,17 +361,6 @@ fun AlbumPage(
                 )
             }
 
-            FadeScrim(
-                edge = FadeScrimEdge.Top,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-
-            FadeScrim(
-                edge = FadeScrimEdge.Bottom,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                withMiniPlayer = currentMediaId != null
-            )
-
             // Match ArtistPage's top bar spacing, back-button dimensions, and colors.
             TopAppBar(
                 modifier = Modifier
@@ -404,6 +394,10 @@ fun AlbumPage(
     }
 
     TrackInfoSheetHost(trackInfoState)
+
+    if (userLibraryMenu != null) {
+        UserLibraryMenuDialogHost(userLibraryMenu)
+    }
 }
 
 

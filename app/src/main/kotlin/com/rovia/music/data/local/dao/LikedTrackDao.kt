@@ -33,6 +33,9 @@ interface LikedTrackDao {
     @Query("SELECT * FROM liked_tracks WHERE trackId = :trackId LIMIT 1")
     suspend fun getLikeForTrack(trackId: Long): LikedTrackEntity?
 
+    @Query("SELECT * FROM liked_tracks WHERE sourceKeySnapshot = :sourceKey LIMIT 1")
+    suspend fun getLikeForSourceKey(sourceKey: String): LikedTrackEntity?
+
     @Query("SELECT EXISTS(SELECT 1 FROM liked_tracks WHERE trackId = :trackId)")
     fun observeIsLiked(trackId: Long): Flow<Boolean>
 

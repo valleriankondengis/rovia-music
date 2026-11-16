@@ -20,6 +20,14 @@ data class PlaylistSearchRow(
     val matchingTrackArtist: String?,
 )
 
+data class PlaylistSummaryRow(
+    val playlistId: Long,
+    val name: String,
+    val description: String?,
+    val trackCount: Long,
+    val updatedAtEpochMillis: Long,
+)
+
 @Dao
 interface PlaylistDao {
     @Insert
@@ -33,6 +41,27 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM playlists ORDER BY updatedAtEpochMillis DESC, playlistId DESC")
     fun observePlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query("SELECT * FROM playlists WHERE playlistId = :playlistId LIMIT 1")
+    fun observePlaylistById(playlistId: Long): Flow<PlaylistEntity?>
+
+    @Query(
+        """
+        SELECT
+            playlists.playlistId AS playlistId,
+            playlists.name AS name,
+            playlists.description AS description,
+            (
+                SELECT COUNT(*)
+                FROM playlist_tracks
+                WHERE playlist_tracks.playlistId = playlists.playlistId
+            ) AS trackCount,
+            playlists.updatedAtEpochMillis AS updatedAtEpochMillis
+        FROM playlists
+        ORDER BY playlists.updatedAtEpochMillis DESC, playlists.playlistId DESC
+        """
+    )
+    fun observePlaylistSummaries(): Flow<List<PlaylistSummaryRow>>
 
     @Query("SELECT * FROM playlists WHERE normalizedName LIKE '%' || :normalizedQuery || '%' ORDER BY normalizedName COLLATE NOCASE ASC LIMIT :limit")
     fun searchPlaylists(normalizedQuery: String, limit: Int): Flow<List<PlaylistEntity>>

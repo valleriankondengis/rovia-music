@@ -1,6 +1,7 @@
 package com.rovia.music.feature.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,10 +68,13 @@ import com.rovia.music.data.repository.DatabaseSearchRepository
 import com.rovia.music.data.repository.DatabaseSearchResults
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.ui.components.AlbumArtwork
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.PlaylistArtwork
+import com.rovia.music.data.repository.UserLibraryRepository
+import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackListItem
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
+import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -94,9 +98,12 @@ fun SearchScreen(
     playbackController: PlaybackController,
     onOpenSettings: () -> Unit,
     onOpenArtist: (String) -> Unit,
-    onOpenAlbum: (String) -> Unit
+    onOpenAlbum: (String) -> Unit,
+    onOpenPlaylist: (Long) -> Unit,
+    userLibraryMenu: UserLibraryMenuState? = null
 ) {
     val textFieldState = rememberTextFieldState()
+    val trackInfoState = rememberTrackInfoState()
     val searchBarState = rememberSearchBarState()
     val query = textFieldState.text.toString()
     val hasQuery = query.isNotBlank()
@@ -216,8 +223,7 @@ fun SearchScreen(
             currentMediaId = currentMediaId,
             itemsEnabled = mediaController != null,
             modifier = Modifier
-                .fillMaxSize()
-                .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                .fillMaxSize(),
             contentInsetPadding = PaddingValues(
                 top = contentTopPadding,
                 bottom = contentBottomPadding
@@ -248,18 +254,19 @@ fun SearchScreen(
                 }
             },
             onArtistClick = onOpenArtist,
-            onAlbumClick = onOpenAlbum
+            onAlbumClick = onOpenAlbum,
+            onPlaylistClick = onOpenPlaylist,
+            onTrackInfoClick = trackInfoState::show,
+            likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+            onToggleLike = userLibraryMenu?.onToggleLike,
+            onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker
         )
 
-        FadeScrim(
-            edge = FadeScrimEdge.Top,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-        FadeScrim(
-            edge = FadeScrimEdge.Bottom,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            withMiniPlayer = currentMediaId != null
-        )
+        TrackInfoSheetHost(trackInfoState)
+
+        if (userLibraryMenu != null) {
+            UserLibraryMenuDialogHost(userLibraryMenu)
+        }
 
         Box(
             modifier = Modifier
@@ -351,7 +358,12 @@ private fun SearchResultsContent(
     onRetry: () -> Unit,
     onTrackClick: (LocalAudioTrack) -> Unit,
     onArtistClick: (String) -> Unit,
-    onAlbumClick: (String) -> Unit
+    onAlbumClick: (String) -> Unit,
+    onPlaylistClick: (Long) -> Unit,
+    onTrackInfoClick: (LocalAudioTrack) -> Unit,
+    likedTrackKeys: Set<String>,
+    onToggleLike: ((LocalAudioTrack) -> Unit)?,
+    onAddToPlaylistClick: ((LocalAudioTrack) -> Unit)?
 ) {
     when {
         !hasAudioPermission -> SearchMessage(
@@ -437,6 +449,15 @@ private fun SearchResultsContent(
                             onClick = { onTrackClick(track) },
                             index = index,
                             count = results.songs.size,
+                            onTrackInfoClick = { onTrackInfoClick(track) },
+                            track = track,
+                            isLiked = UserLibraryRepository.likedTrackKey(track) in likedTrackKeys,
+                            onToggleLike = onToggleLike?.let { callback ->
+                                { callback(track) }
+                            },
+                            onAddToPlaylist = onAddToPlaylistClick?.let { callback ->
+                                { callback(track) }
+                            },
                         )
                     }
                 }
@@ -631,10 +652,6 @@ private fun SearchResultsContent(
                             result.description?.takeIf(String::isNotBlank)?.let(::add)
                             if (isEmpty()) add(playlistCountLabel)
                         }.joinToString(" • ")
-                        val artworkFallback = result.name.firstOrNull()
-                            ?.uppercaseChar()
-                            ?.toString()
-                            ?: "♫"
 
                         Row(
                             modifier = Modifier
@@ -642,14 +659,13 @@ private fun SearchResultsContent(
                                 .padding(horizontal = 18.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .clickable { onPlaylistClick(result.playlistId) }
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AlbumArtwork(
-                                artworkUri = result.artworkUri,
-                                fallbackText = artworkFallback,
-                                contentDescription = result.name,
+                            PlaylistArtwork(
+                                name = result.name,
                                 modifier = Modifier.size(56.dp),
                                 size = 56.dp,
                                 shape = RoundedCornerShape(14.dp)
@@ -702,6 +718,26 @@ private fun SearchResultsContent(
                             onClick = { track?.let(onTrackClick) },
                             index = index,
                             count = results.likedTracks.size,
+                            onTrackInfoClick = track?.let { resolved ->
+                                { onTrackInfoClick(resolved) }
+                            },
+                            track = track,
+                            isLiked = track != null &&
+                                UserLibraryRepository.likedTrackKey(track) in likedTrackKeys,
+                            onToggleLike = if (track != null) {
+                                onToggleLike?.let { callback ->
+                                    { callback(track) }
+                                }
+                            } else {
+                                null
+                            },
+                            onAddToPlaylist = if (track != null) {
+                                onAddToPlaylistClick?.let { callback ->
+                                    { callback(track) }
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }

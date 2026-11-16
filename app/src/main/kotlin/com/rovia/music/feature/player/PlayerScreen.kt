@@ -76,6 +76,8 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.data.repository.PlaylistSummary
+import com.rovia.music.data.repository.UserLibraryRepository
 import com.rovia.music.playback.bitperfect.AudioOutputMode
 import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
 import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
@@ -88,6 +90,7 @@ import com.rovia.music.ui.components.LyricLinePreview
 import com.rovia.music.ui.components.SyncedLyrics
 import com.rovia.music.ui.components.AudioPipelineBottomSheet
 import com.rovia.music.ui.components.TrackInfoBottomSheet
+import com.rovia.music.ui.components.AddToPlaylistDialog
 import com.rovia.music.ui.components.TrackMenu
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -103,6 +106,11 @@ fun PlayerScreen(
     playbackController: PlaybackController,
     audioRepository: MediaStoreAudioRepository,
     onOpenArtist: (String) -> Unit,
+    playlists: List<PlaylistSummary> = emptyList(),
+    likedTrackKeys: Set<String> = emptySet(),
+    onToggleLike: ((LocalAudioTrack) -> Unit)? = null,
+    onAddToPlaylist: ((Long, LocalAudioTrack) -> Unit)? = null,
+    onCreatePlaylist: ((String, LocalAudioTrack) -> Unit)? = null,
 ) {
     val controller by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -186,6 +194,10 @@ fun PlayerScreen(
     }
     var showTrackInfoSheet by remember {
         mutableStateOf(false)
+    }
+
+    var playlistPickerTrack by remember {
+        mutableStateOf<LocalAudioTrack?>(null)
     }
 
     LaunchedEffect(showTrackInfoSheet, selectedTrackInfo?.uri) {
@@ -596,6 +608,14 @@ fun PlayerScreen(
                                             showTrackInfoSheet = true
                                         }
                                     },
+                                    track = currentQueueTrack,
+                                    isLiked = currentQueueTrack?.let { track ->
+                                        UserLibraryRepository.likedTrackKey(track) in likedTrackKeys
+                                    } ?: false,
+                                    onToggleLike = onToggleLike,
+                                    onAddToPlaylist = { track ->
+                                        playlistPickerTrack = track
+                                    },
                                 )
                             }
                         }
@@ -951,6 +971,21 @@ fun PlayerScreen(
                         },
                     )
                 }
+            }
+
+            playlistPickerTrack?.let { track ->
+                AddToPlaylistDialog(
+                    playlists = playlists,
+                    onDismiss = { playlistPickerTrack = null },
+                    onSelectPlaylist = { playlistId ->
+                        playlistPickerTrack = null
+                        onAddToPlaylist?.invoke(playlistId, track)
+                    },
+                    onCreatePlaylist = { name ->
+                        playlistPickerTrack = null
+                        onCreatePlaylist?.invoke(name, track)
+                    },
+                )
             }
 
             if (showPipelineSheet) {

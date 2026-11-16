@@ -10,6 +10,7 @@ import com.rovia.music.data.repository.DatabaseSearchRepository
 import com.rovia.music.data.repository.FolderFilterRepository
 import com.rovia.music.data.repository.LibraryRepository
 import com.rovia.music.data.repository.PlaybackHistoryRepository
+import com.rovia.music.data.repository.UserLibraryRepository
 import com.rovia.music.data.repository.RoomLibraryRepository
 import com.rovia.music.data.repository.SharedPreferencesFolderFilterRepository
 import com.rovia.music.playback.controller.PlaybackController
@@ -62,6 +63,10 @@ class AppContainer(context: Context) {
             folderFilterRepository = folderFilterRepository,
             mediaStoreAudioRepository = mediaStoreAudioRepository,
         )
+    }
+
+    val userLibraryRepository: UserLibraryRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        UserLibraryRepository(database)
     }
 
     val playbackHistoryRepository: PlaybackHistoryRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {

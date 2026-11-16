@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,7 +54,7 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlin.math.roundToLong
 
 private val TRACK_INFO_HORIZONTAL_PADDING = 18.dp
-private val TRACK_INFO_VERTICAL_SPACING = 1.dp
+private val TRACK_INFO_VERTICAL_SPACING = 2.dp
 private val TRACK_INFO_CONTENT_PADDING = PaddingValues(
     horizontal = 16.dp,
     vertical = 14.dp,
@@ -493,30 +492,29 @@ fun TrackInfoBottomSheet(
                             count = trackInfoEntries.size,
                         ),
                         colors = ListItemDefaults.segmentedColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            containerColor = MaterialTheme.colorScheme.surfaceBright,
                             contentColor = MaterialTheme.colorScheme.onSurface,
                         ),
                         contentPadding = TRACK_INFO_CONTENT_PADDING,
                         verticalAlignment = Alignment.CenterVertically,
                         content = {
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
                                     text = entry.label,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(0.38f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
                                     text = entry.value,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
+                                    maxLines = 3,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(0.62f),
                                 )
                             }
                         },
@@ -544,7 +542,7 @@ fun TrackInfoBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.extraLarge)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .background(MaterialTheme.colorScheme.surfaceBright)
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {

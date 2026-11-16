@@ -88,6 +88,8 @@ import com.rovia.music.feature.history.HistoryViewModelFactory
 import com.rovia.music.feature.library.LibraryScreen
 import com.rovia.music.feature.library.LibraryViewModel
 import com.rovia.music.feature.library.LibraryViewModelFactory
+import com.rovia.music.feature.likes.LikedScreen
+import com.rovia.music.feature.playlist.PlaylistScreen
 import com.rovia.music.feature.player.PlayerScreen
 import com.rovia.music.feature.search.SearchScreen
 import com.rovia.music.feature.settings.AboutScreen
@@ -95,6 +97,7 @@ import com.rovia.music.feature.settings.AudioScreen
 import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
+import com.rovia.music.ui.components.rememberUserLibraryMenuState
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.rememberTrackInfoState
 import kotlin.math.roundToInt
@@ -131,6 +134,17 @@ private data class SingleDestination(
 @Serializable
 private data class AlbumDestination(
     val releaseKey: String,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
+
+@Serializable
+private data class PlaylistDestination(
+    val playlistId: Long,
+    val owner: TopLevelSection = TopLevelSection.LIBRARY,
+) : NavKey
+
+@Serializable
+private data class LikedDestination(
     val owner: TopLevelSection = TopLevelSection.LIBRARY,
 ) : NavKey
 
@@ -259,8 +273,11 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<HomeRecentlyAddedDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 HomeRecentlyAddedScreen(
+                    userLibraryMenu = userLibraryMenu,
                     audioRepository =
                         appContainer.mediaStoreAudioRepository,
                     playbackController =
@@ -367,8 +384,11 @@ fun Navigation(appContainer: AppContainer) {
                 }
             }
 
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 HistoryScreen(
+                    userLibraryMenu = userLibraryMenu,
                     items = historyItems,
                     title = stringResource(R.string.history_title),
                     emptyMessage = stringResource(R.string.history_empty),
@@ -471,8 +491,11 @@ fun Navigation(appContainer: AppContainer) {
         }
 
         entry<SearchDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 SearchScreen(
+                    userLibraryMenu = userLibraryMenu,
                     audioRepository =
                         appContainer.mediaStoreAudioRepository,
                     databaseSearchRepository =
@@ -503,16 +526,27 @@ fun Navigation(appContainer: AppContainer) {
                             ),
                         )
                     },
+                    onOpenPlaylist = { playlistId ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.SEARCH,
+                            destination = PlaylistDestination(
+                                playlistId = playlistId,
+                                owner = TopLevelSection.SEARCH,
+                            ),
+                        )
+                    },
                 )
             }
         }
 
         entry<LibraryDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
             val libraryRepository = appContainer.libraryRepository
+            val userLibraryRepository = appContainer.userLibraryRepository
             val libraryViewModel: LibraryViewModel = viewModel(
-                factory = remember(libraryRepository) {
+                factory = remember(libraryRepository, userLibraryRepository) {
                     LibraryViewModelFactory(
                         libraryRepository = libraryRepository,
+                        userLibraryRepository = userLibraryRepository,
                     )
                 },
             )
@@ -540,11 +574,134 @@ fun Navigation(appContainer: AppContainer) {
                             destination = GenreDestination(genreKey),
                         )
                     },
+                    onOpenPlaylist = { playlistId ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = PlaylistDestination(playlistId),
+                        )
+                    },
+                    onOpenLiked = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = LikedDestination(),
+                        )
+                    },
                     onOpenSettings = {
                         navigationState.navigateWithin(
                             owner = TopLevelSection.LIBRARY,
                             destination = SettingsDestination(TopLevelSection.LIBRARY),
                         )
+                    },
+                )
+            }
+        }
+
+        entry<PlaylistDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
+            val userLibraryRepository = appContainer.userLibraryRepository
+            val playlistDetailFlow = remember(userLibraryRepository, destination.playlistId) {
+                userLibraryRepository.observePlaylistDetail(destination.playlistId)
+            }
+            val playlistDetail by playlistDetailFlow.collectAsStateWithLifecycle(
+                initialValue = null,
+            )
+            val playlistsFlow = remember(userLibraryRepository) {
+                userLibraryRepository.observePlaylists()
+            }
+            val playlists by playlistsFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val likedKeysFlow = remember(userLibraryRepository) {
+                userLibraryRepository.observeLikedTrackKeys()
+            }
+            val likedKeys by likedKeysFlow.collectAsStateWithLifecycle(
+                initialValue = emptySet(),
+            )
+            val playlistScope = rememberCoroutineScope()
+
+            NavigationDestinationSurface {
+                PlaylistScreen(
+                    detail = playlistDetail,
+                    playlists = playlists,
+                    likedTrackKeys = likedKeys,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(destination.owner)
+                    },
+                    onRemoveTrack = { entryId ->
+                        playlistScope.launch {
+                            userLibraryRepository.removePlaylistTrack(entryId)
+                        }
+                    },
+                    onRenamePlaylist = { name ->
+                        playlistScope.launch {
+                            userLibraryRepository.renamePlaylist(destination.playlistId, name)
+                        }
+                    },
+                    onDeletePlaylist = {
+                        playlistScope.launch {
+                            userLibraryRepository.deletePlaylist(destination.playlistId)
+                        }
+                        navigationState.goBack(destination.owner)
+                    },
+                    onToggleLike = { track ->
+                        playlistScope.launch {
+                            userLibraryRepository.toggleLike(track)
+                        }
+                    },
+                    onAddToPlaylist = { targetPlaylistId, track ->
+                        playlistScope.launch {
+                            userLibraryRepository.addTrackToPlaylist(targetPlaylistId, track)
+                        }
+                    },
+                    onCreatePlaylistAndAdd = { name, track ->
+                        playlistScope.launch {
+                            val newPlaylistId = userLibraryRepository.createPlaylist(name)
+                            userLibraryRepository.addTrackToPlaylist(newPlaylistId, track)
+                        }
+                    },
+                )
+            }
+        }
+
+        entry<LikedDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
+            val userLibraryRepository = appContainer.userLibraryRepository
+            val likedTracksFlow = remember(userLibraryRepository) {
+                userLibraryRepository.observeLikedTracks()
+            }
+            val likedTracks by likedTracksFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val playlistsFlow = remember(userLibraryRepository) {
+                userLibraryRepository.observePlaylists()
+            }
+            val playlists by playlistsFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val likedScope = rememberCoroutineScope()
+
+            NavigationDestinationSurface {
+                LikedScreen(
+                    tracks = likedTracks,
+                    playbackController = appContainer.playbackController,
+                    onBack = {
+                        navigationState.goBack(destination.owner)
+                    },
+                    onToggleLike = { track ->
+                        likedScope.launch {
+                            userLibraryRepository.toggleLike(track)
+                        }
+                    },
+                    playlists = playlists,
+                    onAddToPlaylist = { playlistId, track ->
+                        likedScope.launch {
+                            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+                        }
+                    },
+                    onCreatePlaylist = { name, track ->
+                        likedScope.launch {
+                            val playlistId = userLibraryRepository.createPlaylist(name)
+                            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+                        }
                     },
                 )
             }
@@ -610,8 +767,11 @@ fun Navigation(appContainer: AppContainer) {
             }
             val release by releaseFlow.collectAsStateWithLifecycle(initialValue = null)
 
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 SinglePage(
+                    userLibraryMenu = userLibraryMenu,
                     releaseKey = destination.releaseKey,
                     releaseData = release,
                     onLoadReleaseMetadata =
@@ -631,8 +791,11 @@ fun Navigation(appContainer: AppContainer) {
             }
             val release by releaseFlow.collectAsStateWithLifecycle(initialValue = null)
 
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 AlbumPage(
+                    userLibraryMenu = userLibraryMenu,
                     releaseKey = destination.releaseKey,
                     release = release,
                     onLoadReleaseMetadata =
@@ -654,8 +817,11 @@ fun Navigation(appContainer: AppContainer) {
                 initialValue = GenreDetailCatalog(),
             )
 
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 GenrePage(
+                    userLibraryMenu = userLibraryMenu,
                     genreKey = destination.genreKey,
                     genreData = genreDetail,
                     playbackController = appContainer.playbackController,
@@ -682,8 +848,11 @@ fun Navigation(appContainer: AppContainer) {
                 initialValue = GenreDetailCatalog(),
             )
 
+            val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
+
             NavigationDestinationSurface {
                 GenrePage(
+                    userLibraryMenu = userLibraryMenu,
                     genreKey = destination.genreKey,
                     artistName = destination.artistName,
                     genreData = genreDetail,
@@ -899,6 +1068,21 @@ fun Navigation(appContainer: AppContainer) {
             )
         }
 
+        val userLibraryRepository = appContainer.userLibraryRepository
+        val playerLikedKeysFlow = remember(userLibraryRepository) {
+            userLibraryRepository.observeLikedTrackKeys()
+        }
+        val playerLikedKeys by playerLikedKeysFlow.collectAsStateWithLifecycle(
+            initialValue = emptySet(),
+        )
+        val playerPlaylistsFlow = remember(userLibraryRepository) {
+            userLibraryRepository.observePlaylists()
+        }
+        val playerPlaylists by playerPlaylistsFlow.collectAsStateWithLifecycle(
+            initialValue = emptyList(),
+        )
+        val playerScope = rememberCoroutineScope()
+
         if (showPlayerSheet) {
             ModalBottomSheet(
                 onDismissRequest = {
@@ -915,6 +1099,24 @@ fun Navigation(appContainer: AppContainer) {
                 PlayerScreen(
                     playbackController = appContainer.playbackController,
                     audioRepository = appContainer.mediaStoreAudioRepository,
+                    playlists = playerPlaylists,
+                    likedTrackKeys = playerLikedKeys,
+                    onToggleLike = { track ->
+                        playerScope.launch {
+                            userLibraryRepository.toggleLike(track)
+                        }
+                    },
+                    onAddToPlaylist = { playlistId, track ->
+                        playerScope.launch {
+                            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+                        }
+                    },
+                    onCreatePlaylist = { name, track ->
+                        playerScope.launch {
+                            val playlistId = userLibraryRepository.createPlaylist(name)
+                            userLibraryRepository.addTrackToPlaylist(playlistId, track)
+                        }
+                    },
                     onOpenArtist = { artistName ->
                         navigationState.navigateWithin(
                             owner = TopLevelSection.LIBRARY,

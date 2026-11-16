@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -58,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Constraints
@@ -81,7 +83,9 @@ private const val FOLDER_DELETE_ACTION_LAYOUT_ID = "folderDeleteAction"
 private const val FOLDER_ROW_LAYOUT_ID = "folderRow"
 
 private val FolderDeleteActionWidth = 104.dp
-private val FolderListHorizontalPadding = 18.dp
+private val FolderListHorizontalPadding = 16.dp
+private val FolderListSegmentSpacing = 2.dp
+private val FolderListCornerRadius = 24.dp
 
 @Composable
 fun FolderFilterScreen(
@@ -234,12 +238,13 @@ fun FolderFilterScreen(
                 .fillMaxWidth()
                 .weight(1f)
                 .padding(horizontal = FolderListHorizontalPadding)
-                .clip(MaterialTheme.shapes.extraLarge),
+                .clip(RoundedCornerShape(FolderListCornerRadius))
+                .background(Color.Transparent),
             contentPadding = PaddingValues(
-                top = 14.dp,
+                top = 8.dp,
                 bottom = listBottomPadding,
             ),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
+            verticalArrangement = Arrangement.spacedBy(FolderListSegmentSpacing),
         ) {
             if (saveFailed) {
                 item(key = "folder_filter_save_error") {
@@ -259,16 +264,49 @@ fun FolderFilterScreen(
 
             if (excludedFolders.isEmpty()) {
                 item(key = "folder_filter_empty") {
-                    Text(
-                        text = stringResource(
-                            R.string.folder_filter_empty_exclusions,
+                    SegmentedListItem(
+                        onClick = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = false,
+                        shapes = ListItemDefaults.segmentedShapes(
+                            index = 0,
+                            count = 1,
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(
-                            horizontal = 12.dp,
-                            vertical = 20.dp,
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceBright,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceBright,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface,
                         ),
+                        contentPadding = PaddingValues(
+                            horizontal = 16.dp,
+                            vertical = 18.dp,
+                        ),
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        CircleShape,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_folder),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        },
+                        content = {
+                            Text(
+                                text = stringResource(R.string.folder_filter_empty_exclusions),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        },
                     )
                 }
             } else {
@@ -538,13 +576,13 @@ private fun SwipeToDeleteFolderItem(
                     shapes = itemShapes,
                     colors = ListItemDefaults.segmentedColors(
                         containerColor =
-                            MaterialTheme.colorScheme.surfaceContainerLow,
+                            MaterialTheme.colorScheme.surfaceBright,
                         contentColor =
                             MaterialTheme.colorScheme.onSurface,
                     ),
                     contentPadding = PaddingValues(
                         horizontal = 16.dp,
-                        vertical = 12.dp,
+                        vertical = 14.dp,
                     ),
                     leadingContent = {
                         Box(

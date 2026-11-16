@@ -76,9 +76,6 @@ import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.ArtworkBitmapLoader
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import kotlinx.coroutines.CancellationException
 
 private val ArtistCarouselArtworkSize = 150.dp
@@ -226,8 +223,7 @@ fun ArtistPage(
 
             LazyColumn(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .fadeScrimProgressiveBlur(withMiniPlayer = currentTrackId != null),
+                    .fillMaxSize(),
                 contentPadding = PaddingValues(bottom = reservedBottomSpace),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
@@ -335,17 +331,6 @@ fun ArtistPage(
                     }
                 }
             }
-
-            FadeScrim(
-                edge = FadeScrimEdge.Top,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-
-            FadeScrim(
-                edge = FadeScrimEdge.Bottom,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                withMiniPlayer = currentTrackId != null
-            )
 
             TopAppBar(
                 modifier = Modifier

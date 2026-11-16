@@ -1,12 +1,15 @@
 package com.rovia.music.feature.library
 
 import androidx.annotation.StringRes
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +38,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,7 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -58,12 +61,15 @@ import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.LibraryCollection
+import com.rovia.music.data.repository.PlaylistSummary
 import com.rovia.music.data.repository.LibraryFolder
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.data.repository.UserLibraryRepository
+import com.rovia.music.ui.components.AddToPlaylistDialog
 import com.rovia.music.ui.components.AlbumArtwork
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.CreatePlaylistDialog
+import com.rovia.music.ui.components.LikedArtwork
+import com.rovia.music.ui.components.PlaylistArtwork
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
 import com.rovia.music.ui.components.rememberTrackInfoState
@@ -72,11 +78,9 @@ import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 
 private val LibraryNavigationBarHeight = 80.dp
 private val MiniPlayerReservedHeight = 80.dp
-private val LibraryCategorySelectorHeight = 56.dp
 private val LibraryFolderHeaderHeight = 48.dp
+private val LibraryHorizontalContentPadding = 18.dp
 private val LibraryHeaderControlsTopSpacing = 4.dp
-private val LibraryCategoryContentSpacing = 12.dp
-private val LibraryCategoryBreadcrumbSpacing = 4.dp
 private val LibraryBreadcrumbContentSpacing = 12.dp
 
 private enum class LibraryCategory(
@@ -86,6 +90,8 @@ private enum class LibraryCategory(
     ARTISTS(R.string.library_category_artists),
     ALBUMS(R.string.library_category_albums),
     GENRES(R.string.library_category_genres),
+    PLAYLISTS(R.string.library_category_playlists),
+    LIKED(R.string.library_category_liked),
     FOLDERS(R.string.library_category_folders)
 }
 
@@ -103,6 +109,8 @@ fun LibraryScreen(
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenGenre: (String) -> Unit,
+    onOpenPlaylist: (Long) -> Unit,
+    onOpenLiked: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val hasAudioPermission = rememberAudioPermissionGranted()
@@ -127,10 +135,28 @@ fun LibraryScreen(
         mutableStateOf("")
     }
 
+    BackHandler(
+        enabled = selectedCategory == LibraryCategory.FOLDERS &&
+            selectedFolderPath.isNotBlank()
+    ) {
+        selectedFolderPath = selectedFolderPath
+            .trim('/')
+            .substringBeforeLast('/', "")
+    }
+
+    val categoryScrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) {
+        categoryScrollState.scrollTo(0)
+    }
+
     var currentMediaId by remember(mediaController) {
         mutableStateOf(mediaController?.currentMediaItem?.mediaId)
     }
     val trackInfoState = rememberTrackInfoState()
+
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var playlistPickerTrack by remember { mutableStateOf<LocalAudioTrack?>(null) }
 
     val statusBarTopInset = WindowInsets.statusBars
         .asPaddingValues()
@@ -145,15 +171,9 @@ fun LibraryScreen(
             TopAppBarDefaults.TopAppBarExpandedHeight +
             LibraryHeaderControlsTopSpacing
 
-    val categoryContentTopPadding =
-        contentTopPadding +
-            LibraryCategorySelectorHeight +
-            LibraryCategoryContentSpacing
+    val categoryContentTopPadding = contentTopPadding
 
-    val folderBreadcrumbTopPadding =
-        contentTopPadding +
-            LibraryCategorySelectorHeight +
-            LibraryCategoryBreadcrumbSpacing
+    val folderBreadcrumbTopPadding = contentTopPadding
 
     val folderContentTopPadding =
         folderBreadcrumbTopPadding +
@@ -235,6 +255,8 @@ fun LibraryScreen(
     val artistsCategoryLabel = stringResource(LibraryCategory.ARTISTS.labelResource)
     val albumsCategoryLabel = stringResource(LibraryCategory.ALBUMS.labelResource)
     val genresCategoryLabel = stringResource(LibraryCategory.GENRES.labelResource)
+    val playlistsCategoryLabel = stringResource(LibraryCategory.PLAYLISTS.labelResource)
+    val likedCategoryLabel = stringResource(LibraryCategory.LIKED.labelResource)
     val foldersCategoryLabel = stringResource(LibraryCategory.FOLDERS.labelResource)
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -244,7 +266,6 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_no_tracks),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = categoryContentTopPadding,
                             bottom = contentBottomPadding
@@ -256,7 +277,6 @@ fun LibraryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = categoryContentTopPadding,
                             bottom = contentBottomPadding
@@ -272,7 +292,6 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_load_error),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = categoryContentTopPadding,
                             bottom = contentBottomPadding
@@ -287,7 +306,6 @@ fun LibraryScreen(
                     message = stringResource(R.string.library_no_tracks),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = categoryContentTopPadding,
                             bottom = contentBottomPadding
@@ -306,8 +324,7 @@ fun LibraryScreen(
                         )
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(
                         horizontal = 0.dp,
                         vertical = 1.dp
@@ -321,6 +338,9 @@ fun LibraryScreen(
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
                     onTrackInfoClick = trackInfoState::show,
+                    likedTrackKeys = libraryState.likedTrackKeys,
+                    onToggleLike = libraryViewModel::toggleLike,
+                    onAddToPlaylistClick = { track -> playlistPickerTrack = track },
                 )
             }
 
@@ -330,7 +350,6 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_artists_empty),
                         modifier = Modifier
                             .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
                                 top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
@@ -341,8 +360,7 @@ fun LibraryScreen(
                         items = artistItems,
                         kind = LibraryRowKind.ARTIST,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                            .fillMaxSize(),
                         contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenArtist
@@ -356,7 +374,6 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_albums_empty),
                         modifier = Modifier
                             .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
                                 top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
@@ -367,8 +384,7 @@ fun LibraryScreen(
                         items = albumItems,
                         kind = LibraryRowKind.ALBUM,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                            .fillMaxSize(),
                         contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenAlbum
@@ -382,7 +398,6 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_genres_empty),
                         modifier = Modifier
                             .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
                                 top = categoryContentTopPadding,
                                 bottom = contentBottomPadding
@@ -393,13 +408,35 @@ fun LibraryScreen(
                         items = genreItems,
                         kind = LibraryRowKind.GENRE,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                            .fillMaxSize(),
                         contentTopPadding = categoryContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         onItemClick = onOpenGenre
                     )
                 }
+            }
+
+            selectedCategory == LibraryCategory.PLAYLISTS -> {
+                LibraryPlaylistList(
+                    playlists = libraryState.playlists,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentTopPadding = categoryContentTopPadding,
+                    contentBottomPadding = contentBottomPadding,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onCreatePlaylistClick = { showCreatePlaylistDialog = true }
+                )
+            }
+
+            selectedCategory == LibraryCategory.LIKED -> {
+                LibraryLikedList(
+                    likedCount = libraryState.likedCount,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentTopPadding = categoryContentTopPadding,
+                    contentBottomPadding = contentBottomPadding,
+                    onOpenLiked = onOpenLiked
+                )
             }
 
             selectedCategory == LibraryCategory.FOLDERS -> {
@@ -408,7 +445,6 @@ fun LibraryScreen(
                         message = stringResource(R.string.library_folders_empty),
                         modifier = Modifier
                             .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                             .padding(
                                 top = folderContentTopPadding,
                                 bottom = contentBottomPadding
@@ -419,8 +455,7 @@ fun LibraryScreen(
                         folderItems = folderItems,
                         tracks = selectedFolderTracks,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                            .fillMaxSize(),
                         contentTopPadding = folderContentTopPadding,
                         contentBottomPadding = contentBottomPadding,
                         currentTrackId = currentMediaId,
@@ -433,69 +468,14 @@ fun LibraryScreen(
                                 track = track,
                                 index = index
                             )
-                        }
+                        },
+                        likedTrackKeys = libraryState.likedTrackKeys,
+                        onToggleLike = libraryViewModel::toggleLike,
+                        onAddToPlaylistClick = { track -> playlistPickerTrack = track }
                     )
                 }
             }
 
-        }
-
-        FadeScrim(
-            edge = FadeScrimEdge.Top,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-
-        FadeScrim(
-            edge = FadeScrimEdge.Bottom,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            withMiniPlayer = currentMediaId != null
-        )
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = contentTopPadding)
-                .fillMaxWidth()
-                .height(LibraryCategorySelectorHeight)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val buttonGroupColorScheme = MaterialTheme.colorScheme.copy(
-                surfaceContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
-            )
-
-            MaterialTheme(colorScheme = buttonGroupColorScheme) {
-                ButtonGroup(
-                    overflowIndicator = { menuState ->
-                        ButtonGroupDefaults.OverflowIndicator(
-                            menuState = menuState,
-                        )
-                    },
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    LibraryCategory.values().forEach { category ->
-                        val categoryLabel = when (category) {
-                            LibraryCategory.ALL_SONGS -> allSongsCategoryLabel
-                            LibraryCategory.ARTISTS -> artistsCategoryLabel
-                            LibraryCategory.ALBUMS -> albumsCategoryLabel
-                            LibraryCategory.GENRES -> genresCategoryLabel
-                            LibraryCategory.FOLDERS -> foldersCategoryLabel
-                        }
-
-                        toggleableItem(
-                            checked = selectedCategory == category,
-                            label = categoryLabel,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    selectedCategory = category
-                                    selectedFolderPath = ""
-                                }
-                            },
-                        )
-                    }
-                }
-            }
         }
 
         if (hasAudioPermission && libraryState.isCatalogLoaded && !loadFailed) {
@@ -528,35 +508,104 @@ fun LibraryScreen(
             }
         }
 
-        TopAppBar(
-            title = {
-                Text(stringResource(R.string.library_title))
-            },
-            actions = {
-                FilledIconButton(
-                    onClick = onOpenSettings,
-                    shapes = IconButtonDefaults.shapes(),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_settings),
-                        contentDescription = stringResource(R.string.settings_title)
-                    )
-                }
-            },
+        Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .statusBarsPadding(),
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent
-            ),
-            contentPadding = PaddingValues(horizontal = 10.dp),
+                .statusBarsPadding()
+                .height(TopAppBarDefaults.TopAppBarExpandedHeight)
+                .padding(
+                    start = LibraryHorizontalContentPadding,
+                    end = LibraryHorizontalContentPadding - 4.dp,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(categoryScrollState),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val buttonGroupColorScheme = MaterialTheme.colorScheme.copy(
+                    surfaceContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
+                )
+
+                MaterialTheme(colorScheme = buttonGroupColorScheme) {
+                    ButtonGroup(
+                        overflowIndicator = { menuState ->
+                            ButtonGroupDefaults.OverflowIndicator(
+                                menuState = menuState,
+                            )
+                        },
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        LibraryCategory.values().forEach { category ->
+                            val categoryLabel = when (category) {
+                                LibraryCategory.ALL_SONGS -> allSongsCategoryLabel
+                                LibraryCategory.ARTISTS -> artistsCategoryLabel
+                                LibraryCategory.ALBUMS -> albumsCategoryLabel
+                                LibraryCategory.GENRES -> genresCategoryLabel
+                                LibraryCategory.PLAYLISTS -> playlistsCategoryLabel
+                                LibraryCategory.LIKED -> likedCategoryLabel
+                                LibraryCategory.FOLDERS -> foldersCategoryLabel
+                            }
+
+                            toggleableItem(
+                                checked = selectedCategory == category,
+                                label = categoryLabel,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        selectedCategory = category
+                                        selectedFolderPath = ""
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(LibraryHorizontalContentPadding))
+            }
+
+            FilledIconButton(
+                onClick = onOpenSettings,
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings),
+                    contentDescription = stringResource(R.string.settings_title),
+                )
+            }
+        }
+    }
+
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onCreate = { name ->
+                showCreatePlaylistDialog = false
+                libraryViewModel.createPlaylist(name)
+            }
+        )
+    }
+
+    playlistPickerTrack?.let { track ->
+        AddToPlaylistDialog(
+            playlists = libraryState.playlists,
+            onDismiss = { playlistPickerTrack = null },
+            onSelectPlaylist = { playlistId ->
+                playlistPickerTrack = null
+                libraryViewModel.addTrackToPlaylist(playlistId, track)
+            },
+            onCreatePlaylist = { name ->
+                playlistPickerTrack = null
+                libraryViewModel.createPlaylistAndAdd(name, track)
+            }
         )
     }
 
@@ -722,7 +771,10 @@ private fun LibraryFolderContentList(
     itemsEnabled: Boolean,
     onFolderClick: (String) -> Unit,
     onTrackInfoClick: (LocalAudioTrack) -> Unit,
-    onTrackClick: (LocalAudioTrack, Int) -> Unit
+    onTrackClick: (LocalAudioTrack, Int) -> Unit,
+    likedTrackKeys: Set<String> = emptySet(),
+    onToggleLike: ((LocalAudioTrack) -> Unit)? = null,
+    onAddToPlaylistClick: ((LocalAudioTrack) -> Unit)? = null
 ) {
     val totalItemCount = folderItems.size + tracks.size
     val trackColors = ListItemDefaults.segmentedColors(
@@ -826,6 +878,14 @@ private fun LibraryFolderContentList(
                 count = totalItemCount,
                 horizontalPadding = 0.dp,
                 onTrackInfoClick = { onTrackInfoClick(track) },
+                track = track,
+                isLiked = UserLibraryRepository.likedTrackKey(track) in likedTrackKeys,
+                onToggleLike = onToggleLike?.let { callback ->
+                    { callback(track) }
+                },
+                onAddToPlaylist = onAddToPlaylistClick?.let { callback ->
+                    { callback(track) }
+                },
             )
         }
     }
@@ -856,3 +916,179 @@ private fun LibraryMessage(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LibraryPlaylistList(
+    playlists: List<PlaylistSummary>,
+    modifier: Modifier = Modifier,
+    contentTopPadding: Dp,
+    contentBottomPadding: Dp,
+    onOpenPlaylist: (Long) -> Unit,
+    onCreatePlaylistClick: () -> Unit,
+) {
+    val totalCount = playlists.size + 1
+
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(
+            start = 18.dp,
+            top = contentTopPadding,
+            end = 18.dp,
+            bottom = contentBottomPadding,
+        ),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        item(key = "library-playlists-create") {
+            SegmentedListItem(
+                selected = false,
+                onClick = onCreatePlaylistClick,
+                shapes = ListItemDefaults.segmentedShapes(
+                    index = 0,
+                    count = totalCount,
+                ),
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                content = {
+                    Text(
+                        text = stringResource(R.string.playlist_create),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+
+        if (playlists.isEmpty()) {
+            item(key = "library-playlists-empty") {
+                Text(
+                    text = stringResource(R.string.playlist_empty),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 24.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        itemsIndexed(
+            items = playlists,
+            key = { _, playlist -> "library-playlist-${playlist.id}" },
+        ) { index, playlist ->
+            val supportingText = buildList {
+                add(
+                    pluralStringResource(
+                        R.plurals.library_track_count,
+                        playlist.trackCount,
+                        playlist.trackCount,
+                    )
+                )
+                playlist.description
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::add)
+            }.joinToString(" • ")
+
+            SegmentedListItem(
+                selected = false,
+                onClick = { onOpenPlaylist(playlist.id) },
+                shapes = ListItemDefaults.segmentedShapes(
+                    index = index + 1,
+                    count = totalCount,
+                ),
+                leadingContent = {
+                    PlaylistArtwork(
+                        name = playlist.name,
+                        modifier = Modifier.size(52.dp),
+                        size = 52.dp,
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supportingText,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                content = {
+                    Text(
+                        text = playlist.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LibraryLikedList(
+    likedCount: Int,
+    modifier: Modifier = Modifier,
+    contentTopPadding: Dp,
+    contentBottomPadding: Dp,
+    onOpenLiked: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(
+            start = 18.dp,
+            top = contentTopPadding,
+            end = 18.dp,
+            bottom = contentBottomPadding,
+        ),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        item(key = "library-liked-entry") {
+            SegmentedListItem(
+                selected = false,
+                onClick = onOpenLiked,
+                shapes = ListItemDefaults.segmentedShapes(
+                    index = 0,
+                    count = 1,
+                ),
+                leadingContent = {
+                    LikedArtwork(
+                        modifier = Modifier.size(52.dp),
+                        size = 52.dp,
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.library_track_count,
+                            likedCount,
+                            likedCount,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                content = {
+                    Text(
+                        text = stringResource(R.string.liked_songs_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+    }
+}

@@ -42,11 +42,10 @@ import com.rovia.music.R
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.playback.controller.PlaybackController
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
 import com.rovia.music.ui.components.rememberTrackInfoState
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
@@ -59,7 +58,8 @@ private val RecentlyAddedMiniPlayerHeight = 80.dp
 fun HomeRecentlyAddedScreen(
     audioRepository: MediaStoreAudioRepository,
     playbackController: PlaybackController,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    userLibraryMenu: UserLibraryMenuState? = null,
 ) {
     val backContentDescription = stringResource(R.string.player_back)
     val hasAudioPermission = rememberAudioPermissionGranted()
@@ -153,7 +153,6 @@ fun HomeRecentlyAddedScreen(
                     message = stringResource(R.string.home_recently_added_empty),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -165,7 +164,6 @@ fun HomeRecentlyAddedScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -183,7 +181,6 @@ fun HomeRecentlyAddedScreen(
                     ),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -204,7 +201,6 @@ fun HomeRecentlyAddedScreen(
                     ),
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding
@@ -241,8 +237,7 @@ fun HomeRecentlyAddedScreen(
                         }
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(
                         horizontal = 0.dp,
                         vertical = 1.dp
@@ -256,20 +251,12 @@ fun HomeRecentlyAddedScreen(
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
                     onTrackInfoClick = trackInfoState::show,
+                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                    onToggleLike = userLibraryMenu?.onToggleLike,
+                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
                 )
             }
         }
-
-        FadeScrim(
-            edge = FadeScrimEdge.Top,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-
-        FadeScrim(
-            edge = FadeScrimEdge.Bottom,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            withMiniPlayer = currentMediaId != null
-        )
 
         TopAppBar(
             modifier = Modifier
@@ -313,6 +300,10 @@ fun HomeRecentlyAddedScreen(
     }
 
     TrackInfoSheetHost(trackInfoState)
+
+    if (userLibraryMenu != null) {
+        UserLibraryMenuDialogHost(userLibraryMenu)
+    }
 }
 
 @Composable

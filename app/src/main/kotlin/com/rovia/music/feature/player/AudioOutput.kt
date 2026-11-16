@@ -270,7 +270,7 @@ internal fun AudioOutputIndicator(
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
                     .padding(horizontal = 18.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Text(
                     text = sheetTitle,
@@ -281,7 +281,7 @@ internal fun AudioOutputIndicator(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = colorScheme.surfaceContainerHigh,
+                    color = colorScheme.surfaceBright,
                     contentColor = colorScheme.onSurface,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
@@ -313,7 +313,7 @@ internal fun AudioOutputIndicator(
                             sheetDeviceSubtitle?.let { subtitle ->
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -328,7 +328,7 @@ internal fun AudioOutputIndicator(
                         } else {
                             mediaVolumeLabel
                         },
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = colorScheme.onSurface,
                     )
 
@@ -358,7 +358,7 @@ internal fun AudioOutputIndicator(
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.extraLarge,
-                                color = colorScheme.surfaceContainerHigh,
+                                color = colorScheme.surfaceBright,
                                 contentColor = colorScheme.onSurface,
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp,
@@ -439,7 +439,7 @@ internal fun AudioOutputIndicator(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.extraLarge,
-                        color = colorScheme.surfaceContainerHigh,
+                        color = colorScheme.surfaceBright,
                         contentColor = colorScheme.onSurface,
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,

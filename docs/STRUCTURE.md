@@ -78,7 +78,8 @@ rovia/
 │   │       │               │       ├── LibraryRepository.kt
 │   │       │               │       ├── PlaybackHistoryRepository.kt
 │   │       │               │       ├── RoomLibraryRepository.kt
-│   │       │               │       └── SharedPreferencesFolderFilterRepository.kt
+│   │       │               │       ├── SharedPreferencesFolderFilterRepository.kt
+│   │       │               │       └── UserLibraryRepository.kt
 │   │       │               ├── feature/
 │   │       │               │   ├── album/
 │   │       │               │   │   └── AlbumPage.kt
@@ -94,6 +95,10 @@ rovia/
 │   │       │               │   ├── library/
 │   │       │               │   │   ├── LibraryScreen.kt
 │   │       │               │   │   └── LibraryViewModel.kt
+│   │       │               │   ├── likes/
+│   │       │               │   │   └── LikedScreen.kt
+│   │       │               │   ├── playlist/
+│   │       │               │   │   └── PlaylistScreen.kt
 │   │       │               │   ├── player/
 │   │       │               │   │   ├── AudioOutput.kt
 │   │       │               │   │   ├── PlayerLyric.kt
@@ -145,9 +150,10 @@ rovia/
 │   │       │               │   │   ├── ArtworkBackdrop.kt
 │   │       │               │   │   ├── ArtworkBitmapLoader.kt
 │   │       │               │   │   ├── ArtworkDiskCache.kt
-│   │       │               │   │   ├── FadeScrim.kt
 │   │       │               │   │   ├── Lyric.kt
 │   │       │               │   │   ├── MiniPlayer.kt
+│   │       │               │   │   ├── PlaylistArtwork.kt
+│   │       │               │   │   ├── PlaylistDialogs.kt
 │   │       │               │   │   ├── AudioPipeline.kt
 │   │       │               │   │   ├── TrackInfo.kt
 │   │       │               │   │   ├── TrackList.kt

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,10 +50,11 @@ import com.rovia.music.R
 import com.rovia.music.data.local.entity.PlaybackActivityEntity
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.PlaybackHistoryRepository
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
+import com.rovia.music.ui.components.PlaylistArtwork
+import com.rovia.music.ui.components.LikedArtwork
 import com.rovia.music.ui.components.TrackList
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
 
 import java.time.Instant
 import java.time.LocalDate
@@ -128,6 +130,7 @@ fun HistoryScreen(
     onActivityClick: (HistoryActivityUiModel) -> Unit,
     onTrackInfoClick: (HistoryActivityUiModel) -> Unit,
     modifier: Modifier = Modifier,
+    userLibraryMenu: UserLibraryMenuState? = null,
 ) {
     val listState = rememberLazyListState()
     val latestOnLoadMore by rememberUpdatedState(onLoadMore)
@@ -281,7 +284,6 @@ fun HistoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = miniPlayerVisible)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding,
@@ -297,7 +299,6 @@ fun HistoryScreen(
                     message = errorMessage,
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = miniPlayerVisible)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding,
@@ -312,7 +313,6 @@ fun HistoryScreen(
                     message = emptyMessage,
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = miniPlayerVisible)
                         .padding(
                             top = contentTopPadding,
                             bottom = contentBottomPadding,
@@ -327,8 +327,7 @@ fun HistoryScreen(
                         displayItems.getOrNull(index)?.let(onActivityClick)
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = miniPlayerVisible),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(horizontal = 0.dp, vertical = 1.dp),
                     contentInsetPadding = PaddingValues(
                         top = contentTopPadding,
@@ -343,6 +342,9 @@ fun HistoryScreen(
                             ?.takeIf { it.type == HistoryActivityType.TRACK }
                             ?.let(onTrackInfoClick)
                     },
+                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                    onToggleLike = userLibraryMenu?.onToggleLike,
+                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
                     trackInfoEnabled = { track ->
                         displayItemsById[track.id]?.type == HistoryActivityType.TRACK
                     },
@@ -364,6 +366,30 @@ fun HistoryScreen(
                         )
                     },
                     showDuration = false,
+                    artworkContentFor = { track ->
+                        when (displayItemsById[track.id]?.type) {
+                            HistoryActivityType.PLAYLIST -> {
+                                {
+                                    PlaylistArtwork(
+                                        name = track.title.orEmpty(),
+                                        modifier = Modifier.size(56.dp),
+                                        size = 56.dp,
+                                        shape = MaterialTheme.shapes.medium,
+                                    )
+                                }
+                            }
+                            HistoryActivityType.LIKES -> {
+                                {
+                                    LikedArtwork(
+                                        modifier = Modifier.size(56.dp),
+                                        size = 56.dp,
+                                        shape = MaterialTheme.shapes.medium,
+                                    )
+                                }
+                            }
+                            else -> null
+                        }
+                    },
                     supportingContentOverride = { track ->
                         val historyItem = displayItemsById[track.id]
                         Column(
@@ -425,17 +451,6 @@ fun HistoryScreen(
             }
         }
 
-        FadeScrim(
-            edge = FadeScrimEdge.Top,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
-
-        FadeScrim(
-            edge = FadeScrimEdge.Bottom,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            withMiniPlayer = miniPlayerVisible,
-        )
-
         TopAppBar(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -470,6 +485,10 @@ fun HistoryScreen(
             ),
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
+    }
+
+    if (userLibraryMenu != null) {
+        UserLibraryMenuDialogHost(userLibraryMenu)
     }
 }
 

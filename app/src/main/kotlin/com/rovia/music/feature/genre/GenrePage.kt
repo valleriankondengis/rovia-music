@@ -54,12 +54,11 @@ import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
-import com.rovia.music.ui.components.FadeScrim
-import com.rovia.music.ui.components.FadeScrimEdge
 import com.rovia.music.ui.components.TrackInfoSheetHost
 import com.rovia.music.ui.components.TrackList
+import com.rovia.music.ui.components.UserLibraryMenuDialogHost
+import com.rovia.music.ui.components.UserLibraryMenuState
 import com.rovia.music.ui.components.rememberTrackInfoState
-import com.rovia.music.ui.components.fadeScrimProgressiveBlur
 import java.text.Normalizer
 private val GenrePageNavigationBarHeight = 80.dp
 private val GenrePageMiniPlayerHeight = 80.dp
@@ -72,7 +71,8 @@ fun GenrePage(
     genreData: GenreDetailCatalog,
     playbackController: PlaybackController,
     onBack: () -> Unit,
-    artistName: String? = null
+    artistName: String? = null,
+    userLibraryMenu: UserLibraryMenuState? = null,
 ) {
     val normalizedArtistKey = remember(artistName) {
         artistName
@@ -138,7 +138,6 @@ fun GenrePage(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null)
                         .padding(top = contentTopPadding, bottom = contentBottomPadding)
                         .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
@@ -181,8 +180,7 @@ fun GenrePage(
                         }
                     },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .fadeScrimProgressiveBlur(withMiniPlayer = currentMediaId != null),
+                        .fillMaxSize(),
                     outerPadding = PaddingValues(
                         top = contentTopPadding,
                         bottom = contentBottomPadding
@@ -192,6 +190,9 @@ fun GenrePage(
                     currentTrackId = currentMediaId,
                     itemsEnabled = mediaController != null,
                     onTrackInfoClick = trackInfoState::show,
+                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                    onToggleLike = userLibraryMenu?.onToggleLike,
+                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
                     headerContent = {
                         item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
                             Column(
@@ -290,13 +291,6 @@ fun GenrePage(
                 )
             }
 
-            FadeScrim(edge = FadeScrimEdge.Top, modifier = Modifier.align(Alignment.TopCenter))
-            FadeScrim(
-                edge = FadeScrimEdge.Bottom,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                withMiniPlayer = currentMediaId != null
-            )
-
             TopAppBar(
                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
                 title = {},
@@ -326,6 +320,10 @@ fun GenrePage(
     }
 
     TrackInfoSheetHost(trackInfoState)
+
+    if (userLibraryMenu != null) {
+        UserLibraryMenuDialogHost(userLibraryMenu)
+    }
 }
 
 private fun normalizeGenreKey(value: String): String =
