@@ -91,6 +91,7 @@ import com.rovia.music.feature.library.LibraryViewModelFactory
 import com.rovia.music.feature.player.PlayerScreen
 import com.rovia.music.feature.search.SearchScreen
 import com.rovia.music.feature.settings.AboutScreen
+import com.rovia.music.feature.settings.AudioScreen
 import com.rovia.music.feature.settings.FolderFilterScreen
 import com.rovia.music.feature.settings.SettingsScreen
 import com.rovia.music.ui.components.MiniPlayer
@@ -155,6 +156,9 @@ private enum class TopLevelSection {
 
 @Serializable
 private data class SettingsDestination(val owner: TopLevelSection) : NavKey
+
+@Serializable
+private data class AudioDestination(val owner: TopLevelSection) : NavKey
 
 @Serializable
 private data class FolderFilterDestination(val owner: TopLevelSection) : NavKey
@@ -697,6 +701,12 @@ fun Navigation(appContainer: AppContainer) {
                     onBack = {
                         navigationState.goBack(destination.owner)
                     },
+                    onAudioClick = {
+                        navigationState.navigateWithin(
+                            owner = destination.owner,
+                            destination = AudioDestination(destination.owner),
+                        )
+                    },
                     onFolderFilterClick = {
                         navigationState.navigateWithin(
                             owner = destination.owner,
@@ -708,6 +718,16 @@ fun Navigation(appContainer: AppContainer) {
                             owner = destination.owner,
                             destination = AboutDestination(destination.owner),
                         )
+                    },
+                )
+            }
+        }
+
+        entry<AudioDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
+            NavigationDestinationSurface {
+                AudioScreen(
+                    onBack = {
+                        navigationState.goBack(destination.owner)
                     },
                 )
             }
@@ -736,6 +756,7 @@ fun Navigation(appContainer: AppContainer) {
                 )
             }
         }
+
     }
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -1001,6 +1022,7 @@ private fun navigationContentKey(key: NavKey): String =
         is ArtistGenreDestination ->
             "${key.owner.contentKeyPrefix()}:artist-genre:${key.artistName}:${key.genreKey}"
         is SettingsDestination -> "${key.owner.contentKeyPrefix()}:settings"
+        is AudioDestination -> "${key.owner.contentKeyPrefix()}:audio"
         is FolderFilterDestination -> "${key.owner.contentKeyPrefix()}:folder-filter"
         is AboutDestination -> "${key.owner.contentKeyPrefix()}:about"
         else -> "unknown:${key::class.qualifiedName}:${key}"
@@ -1016,6 +1038,7 @@ private fun TopLevelSection.contentKeyPrefix(): String =
 private fun NavKey?.isSettingsFlowDestination(): Boolean =
     when (this) {
         is SettingsDestination,
+        is AudioDestination,
         is FolderFilterDestination,
         is AboutDestination -> true
         else -> false

@@ -84,6 +84,7 @@ android {
             optimization {
                 enable = true
             }
+            proguardFiles("proguard-rules.pro")
 
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
@@ -104,6 +105,13 @@ android {
     }
 
     packaging {
+        jniLibs {
+            keepDebugSymbols += listOf(
+                "**/libandroidx.graphics.path.so",
+                "**/libjnidispatch.so",
+                "**/librovia_uniffi.so",
+            )
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -148,6 +156,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlincrypto.sha2)
+    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     ksp(libs.androidx.room3.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

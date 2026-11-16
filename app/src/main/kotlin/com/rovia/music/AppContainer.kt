@@ -74,6 +74,8 @@ class AppContainer(context: Context) {
         PlaybackStatisticsRepository(database)
     }
 
+    fun close() = Unit
+
     val playbackController: PlaybackController by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         PlaybackController(
             context = applicationContext,

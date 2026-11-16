@@ -2,6 +2,8 @@ package com.rovia.music.feature.player
 
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
@@ -19,12 +21,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -38,6 +39,7 @@ import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,15 +64,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rovia.music.playback.bitperfect.AudioOutputMode
+import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
+import com.rovia.music.playback.bitperfect.direct.DirectUsbControllerProvider
+import com.rovia.music.uniffi.DacVolumeDto
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private const val MEDIA_STREAM = AudioManager.STREAM_MUSIC
-private val AUDIO_OUTPUT_BUTTON_WIDTH = 128.dp
+private val AUDIO_OUTPUT_BUTTON_MAX_WIDTH = 280.dp
 
 private data class AudioOutputSnapshot(
+    val usbDacName: String?,
+    val usbDacUacLabel: String?,
     val isBluetoothConnected: Boolean,
     val bluetoothDeviceName: String?,
+    val isWiredConnected: Boolean,
+    val wiredDeviceName: String?,
     val volume: Int,
     val maxVolume: Int,
     val isVolumeFixed: Boolean,
@@ -88,15 +101,24 @@ internal fun AudioOutputIndicator(
     val audioManager = remember(context) {
         context.getSystemService(AudioManager::class.java)
     }
-    var outputState by remember(audioManager) {
-        mutableStateOf(readAudioOutputSnapshot(audioManager))
+    val usbManager = remember(context) {
+        context.getSystemService(UsbManager::class.java)
+    }
+    var outputState by remember(audioManager, usbManager) {
+        mutableStateOf(readAudioOutputSnapshot(audioManager, usbManager))
     }
     var isBottomSheetVisible by remember {
         mutableStateOf(false)
     }
+    val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
+    val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
+    val directUsbController = remember(context) { DirectUsbControllerProvider.get(context) }
+    var dacVolume by remember { mutableStateOf<DacVolumeDto?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     val colorScheme = MaterialTheme.colorScheme
     val buttonBluetoothIcon = painterResource(R.drawable.ic_bluetooth)
+    val buttonUsbIcon = painterResource(R.drawable.ic_usb)
     val buttonLocalDeviceIcon = painterResource(R.drawable.ic_smartphone)
     val buttonContentDescription = stringResource(R.string.audio_output_button_content_description)
     val localDeviceLabel = stringResource(R.string.audio_output_local_device)
@@ -105,29 +127,42 @@ internal fun AudioOutputIndicator(
     val mediaVolumeLabel = stringResource(R.string.audio_output_media_volume)
     val sliderDescription = stringResource(R.string.audio_output_volume_slider_description)
     val fixedVolumeMessage = stringResource(R.string.audio_output_volume_fixed)
+    val dacVolumeLabel = stringResource(R.string.audio_output_dac_volume)
+    val dacVolumeUnavailableMessage = stringResource(R.string.audio_output_dac_volume_unavailable)
 
-    val outputLabel = if (!outputState.isBluetoothConnected) {
-        localDeviceLabel
-    } else {
-        outputState.bluetoothDeviceName
-            ?.trim()
-            ?.takeIf(String::isNotEmpty)
-            ?: bluetoothAudioLabel
+    val wiredAudioLabel = stringResource(R.string.audio_output_wired_audio)
+    val outputLabel = outputState.usbDacName
+        ?: if (outputState.isBluetoothConnected) {
+            outputState.bluetoothDeviceName
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?: bluetoothAudioLabel
+        } else if (outputState.isWiredConnected) {
+            outputState.wiredDeviceName
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?: wiredAudioLabel
+        } else {
+            localDeviceLabel
+        }
+    val outputIcon = when {
+        outputState.usbDacName != null || outputState.isWiredConnected -> buttonUsbIcon
+        outputState.isBluetoothConnected -> buttonBluetoothIcon
+        else -> buttonLocalDeviceIcon
     }
     val buttonDescription = "$buttonContentDescription, $outputLabel"
-    val buttonContainerColor = colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
     val buttonContentColor = colorScheme.onSurface
     val sheetIconColor = colorScheme.onSurfaceVariant
     val volumeAccentColor = colorScheme.primary
 
-    DisposableEffect(audioManager) {
+    DisposableEffect(audioManager, usbManager) {
         val callback = object : AudioDeviceCallback() {
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
-                outputState = readAudioOutputSnapshot(audioManager)
+                outputState = readAudioOutputSnapshot(audioManager, usbManager)
             }
 
             override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
-                outputState = readAudioOutputSnapshot(audioManager)
+                outputState = readAudioOutputSnapshot(audioManager, usbManager)
             }
         }
         audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
@@ -136,12 +171,18 @@ internal fun AudioOutputIndicator(
         }
     }
 
-    LaunchedEffect(isBottomSheetVisible, audioManager) {
-        outputState = readAudioOutputSnapshot(audioManager)
+    LaunchedEffect(isBottomSheetVisible, audioManager, usbManager, outputMode) {
+        outputState = readAudioOutputSnapshot(audioManager, usbManager)
+        if (outputMode == AudioOutputMode.DIRECT_USB) {
+            dacVolume = directUsbController.playbackDacVolume()
+        }
         if (isBottomSheetVisible) {
             while (true) {
                 delay(200)
-                outputState = readAudioOutputSnapshot(audioManager)
+                outputState = readAudioOutputSnapshot(audioManager, usbManager)
+                if (outputMode == AudioOutputMode.DIRECT_USB) {
+                    dacVolume = directUsbController.playbackDacVolume()
+                }
             }
         }
     }
@@ -158,36 +199,33 @@ internal fun AudioOutputIndicator(
     if (!enabled) return
 
     Box(modifier = modifier) {
-        FilledTonalButton(
+        TextButton(
             onClick = { isBottomSheetVisible = true },
             modifier = Modifier
-                .width(AUDIO_OUTPUT_BUTTON_WIDTH)
+                .widthIn(max = AUDIO_OUTPUT_BUTTON_MAX_WIDTH)
                 .height(40.dp)
                 .semantics {
                     contentDescription = buttonDescription
                 },
             enabled = enabled,
-            shape = CircleShape,
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = buttonContainerColor,
+            shape = RectangleShape,
+            colors = ButtonDefaults.textButtonColors(
                 contentColor = buttonContentColor,
             ),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Icon(
-                    painter = if (outputState.isBluetoothConnected) buttonBluetoothIcon else buttonLocalDeviceIcon,
+                    painter = outputIcon,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
                     text = outputLabel,
                     modifier = Modifier
-                        .weight(1f)
                         .basicMarquee(
                             iterations = Int.MAX_VALUE,
                             initialDelayMillis = 900,
@@ -206,7 +244,19 @@ internal fun AudioOutputIndicator(
 
     if (isBottomSheetVisible) {
         val sheetBluetoothIcon = painterResource(R.drawable.ic_bluetooth)
+        val sheetUsbIcon = painterResource(R.drawable.ic_usb)
         val sheetLocalDeviceIcon = painterResource(R.drawable.ic_smartphone)
+        val sheetDeviceIcon = when {
+            outputState.usbDacName != null || outputState.isWiredConnected -> sheetUsbIcon
+            outputState.isBluetoothConnected -> sheetBluetoothIcon
+            else -> sheetLocalDeviceIcon
+        }
+        val sheetDeviceSubtitle = when {
+            outputState.usbDacName != null -> outputState.usbDacUacLabel
+            outputState.isBluetoothConnected -> bluetoothAudioLabel
+            outputState.isWiredConnected -> wiredAudioLabel
+            else -> null
+        }
 
         ModalBottomSheet(
             modifier = Modifier.fillMaxHeight(),
@@ -244,7 +294,7 @@ internal fun AudioOutputIndicator(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Icon(
-                            painter = if (outputState.isBluetoothConnected) sheetBluetoothIcon else sheetLocalDeviceIcon,
+                            painter = sheetDeviceIcon,
                             contentDescription = null,
                             modifier = Modifier.size(32.dp),
                             tint = sheetIconColor,
@@ -260,9 +310,9 @@ internal fun AudioOutputIndicator(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (outputState.isBluetoothConnected) {
+                            sheetDeviceSubtitle?.let { subtitle ->
                                 Text(
-                                    text = bluetoothAudioLabel,
+                                    text = subtitle,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = colorScheme.onSurfaceVariant,
                                 )
@@ -273,11 +323,104 @@ internal fun AudioOutputIndicator(
 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = mediaVolumeLabel,
+                        text = if (outputMode == AudioOutputMode.DIRECT_USB) {
+                            dacVolumeLabel
+                        } else {
+                            mediaVolumeLabel
+                        },
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = colorScheme.onSurface,
                     )
 
+                    if (outputMode == AudioOutputMode.DIRECT_USB) {
+                        val volume = dacVolume
+                        if (volume != null && volume.available) {
+                            val dacRangeDb = volume.maxDb - volume.minDb
+                            val dacFraction = if (dacRangeDb > 0.0) {
+                                ((volume.currentDb - volume.minDb) / dacRangeDb)
+                                    .toFloat()
+                                    .coerceIn(0f, 1f)
+                            } else {
+                                0f
+                            }
+                            val dacSliderState = key(volume.minDb, volume.maxDb) {
+                                rememberSliderState(
+                                    value = dacFraction,
+                                    steps = (dacRangeDb.toInt() - 1).coerceAtLeast(0),
+                                    trackRange = 0f..1f,
+                                )
+                            }
+                            LaunchedEffect(volume.currentDb, dacSliderState.isDragging) {
+                                if (!dacSliderState.isDragging) {
+                                    dacSliderState.value = dacFraction
+                                }
+                            }
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                color = colorScheme.surfaceContainerHigh,
+                                contentColor = colorScheme.onSurface,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    AudioVolumeIcon(
+                                        isLoud = false,
+                                        tint = sheetIconColor,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Slider(
+                                        state = dacSliderState,
+                                        onValueChange = { value ->
+                                            dacSliderState.value = value
+                                            val db = volume.minDb + value * dacRangeDb
+                                            coroutineScope.launch {
+                                                runCatching {
+                                                    directUsbController.playbackSetDacVolume(db)
+                                                }.onSuccess { updated -> dacVolume = updated }
+                                                    .onFailure { }
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .semantics {
+                                                contentDescription = sliderDescription
+                                            },
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = volumeAccentColor,
+                                            activeTrackColor = volumeAccentColor,
+                                        ),
+                                    )
+                                    AudioVolumeIcon(
+                                        isLoud = true,
+                                        tint = sheetIconColor,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+                            Text(
+                                text = stringResource(R.string.audio_output_dac_db, volume.currentDb),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            Text(
+                                text = dacVolumeUnavailableMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    if (outputMode != AudioOutputMode.DIRECT_USB) {
                     val sliderSteps = (outputState.maxVolume - 1).coerceAtLeast(0)
                     val sliderState = key(outputState.maxVolume) {
                         rememberSliderState(
@@ -323,7 +466,7 @@ internal fun AudioOutputIndicator(
                                             .coerceIn(0, outputState.maxVolume)
                                         runCatching {
                                             audioManager.setStreamVolume(MEDIA_STREAM, volume, 0)
-                                        }
+                                        }.onFailure { }
                                         outputState = outputState.copy(
                                             volume = runCatching {
                                                 audioManager.getStreamVolume(MEDIA_STREAM)
@@ -368,19 +511,50 @@ internal fun AudioOutputIndicator(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                    }
                 }
             }
         }
     }
 }
 
-private fun readAudioOutputSnapshot(audioManager: AudioManager): AudioOutputSnapshot {
-    val bluetoothOutputs = runCatching {
+private fun readAudioOutputSnapshot(
+    audioManager: AudioManager,
+    usbManager: UsbManager?,
+): AudioOutputSnapshot {
+    val outputDevices = runCatching {
         audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .filter { it.isBluetoothAudioOutput() }
-    }.getOrDefault(emptyList())
+    }.getOrDefault(emptyArray())
 
+    val bluetoothOutputs = outputDevices.filter { it.isBluetoothAudioOutput() }
     val bluetoothName = bluetoothOutputs.firstNotNullOfOrNull { device ->
+        runCatching {
+            device.productName?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        }.getOrNull()
+    }
+
+    val usbOutputs = outputDevices.filter { device ->
+        device.isSink &&
+            (device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                device.type == AudioDeviceInfo.TYPE_USB_HEADSET)
+    }
+    val usbDacName = usbOutputs.firstNotNullOfOrNull { device ->
+        runCatching {
+            device.productName?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        }.getOrNull()
+    } ?: detectUsbAudioDeviceName(usbManager)
+    val usbDacUacLabel = if (usbOutputs.isNotEmpty() || usbDacName != null) {
+        detectUsbAudioClassLabel(usbManager, usbDacName)
+    } else {
+        null
+    }
+
+    val wiredOutputs = outputDevices.filter { device ->
+        device.isSink &&
+            (device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                device.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+    }
+    val wiredName = wiredOutputs.firstNotNullOfOrNull { device ->
         runCatching {
             device.productName?.toString()?.trim()?.takeIf(String::isNotEmpty)
         }.getOrNull()
@@ -393,12 +567,66 @@ private fun readAudioOutputSnapshot(audioManager: AudioManager): AudioOutputSnap
     }.getOrDefault(0)
 
     return AudioOutputSnapshot(
+        usbDacName = usbDacName,
+        usbDacUacLabel = usbDacUacLabel,
         isBluetoothConnected = bluetoothOutputs.isNotEmpty(),
         bluetoothDeviceName = bluetoothName,
+        isWiredConnected = wiredOutputs.isNotEmpty(),
+        wiredDeviceName = wiredName,
         volume = volume,
         maxVolume = maxVolume,
         isVolumeFixed = runCatching { audioManager.isVolumeFixed }.getOrDefault(false),
     )
+}
+
+private fun detectUsbAudioDeviceName(usbManager: UsbManager?): String? {
+    val manager = usbManager ?: return null
+    return runCatching {
+        manager.deviceList.values.firstNotNullOfOrNull { device ->
+            val hasAudioControl = (0 until device.configurationCount).any { configIndex ->
+                val configuration = device.getConfiguration(configIndex)
+                (0 until configuration.interfaceCount).any { interfaceIndex ->
+                    val usbInterface = configuration.getInterface(interfaceIndex)
+                    usbInterface.interfaceClass == UsbConstants.USB_CLASS_AUDIO &&
+                        usbInterface.interfaceSubclass == 1
+                }
+            }
+            if (hasAudioControl) {
+                device.productName?.trim()?.takeIf(String::isNotEmpty)
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+}
+
+private fun detectUsbAudioClassLabel(usbManager: UsbManager?, preferredName: String?): String? {
+    val manager = usbManager ?: return null
+    return runCatching {
+        val devices = manager.deviceList.values.toList()
+        val ordered = devices.sortedBy { device ->
+            if (preferredName != null && device.productName == preferredName) 0 else 1
+        }
+        ordered.firstNotNullOfOrNull { device ->
+            var label: String? = null
+            for (configIndex in 0 until device.configurationCount) {
+                val configuration = device.getConfiguration(configIndex)
+                for (interfaceIndex in 0 until configuration.interfaceCount) {
+                    val usbInterface = configuration.getInterface(interfaceIndex)
+                    if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_AUDIO &&
+                        usbInterface.interfaceSubclass == 1
+                    ) {
+                        label = when (usbInterface.interfaceProtocol) {
+                            0x20 -> "UAC2"
+                            0x30 -> "UAC3"
+                            else -> "UAC1"
+                        }
+                    }
+                }
+            }
+            label
+        }
+    }.getOrNull()
 }
 
 private fun AudioDeviceInfo.isBluetoothAudioOutput(): Boolean =

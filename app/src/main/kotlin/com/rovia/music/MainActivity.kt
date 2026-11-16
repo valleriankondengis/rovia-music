@@ -47,4 +47,11 @@ class MainActivity : ComponentActivity() {
         appContainer.playbackController.disconnect()
         super.onStop()
     }
+
+    override fun onDestroy() {
+        if (::appContainer.isInitialized) {
+            appContainer.close()
+        }
+        super.onDestroy()
+    }
 }

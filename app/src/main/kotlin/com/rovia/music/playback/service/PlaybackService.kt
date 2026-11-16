@@ -6,7 +6,6 @@ import kotlin.uuid.Uuid
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.SystemClock
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
@@ -14,6 +13,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -25,6 +25,20 @@ import com.rovia.music.data.local.entity.ListeningSegmentEntity
 import com.rovia.music.data.local.entity.PlaybackActivityEntity
 import com.rovia.music.data.local.entity.PlaybackSessionEntity
 import com.rovia.music.data.local.entity.PlaybackTrackEventEntity
+import com.rovia.music.playback.bitperfect.AudioOutputMode
+import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.bitperfect.AudioOutputModeStore
+import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
+import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
+import com.rovia.music.playback.bitperfect.UsbDetachModeReverter
+import com.rovia.music.playback.bitperfect.a14.NativeA14PlaybackCoordinator
+import com.rovia.music.playback.bitperfect.a14.NativeA14Renderer
+import com.rovia.music.playback.bitperfect.dap.DapPlaybackCoordinator
+import com.rovia.music.playback.bitperfect.dap.DapRenderer
+import com.rovia.music.playback.bitperfect.direct.DirectUsbController
+import com.rovia.music.playback.bitperfect.direct.DirectUsbControllerProvider
+import com.rovia.music.playback.bitperfect.direct.DirectUsbPlaybackCoordinator
+import com.rovia.music.playback.bitperfect.direct.DirectUsbRenderer
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import com.rovia.music.playback.queue.PlaybackOriginType
 import kotlinx.coroutines.CancellationException
@@ -37,8 +51,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-private const val TAG = "PlaybackService"
 private const val LISTENING_CHECKPOINT_INTERVAL_MS = 15_000L
 private const val QUALIFIED_PLAY_THRESHOLD_MS = 30_000L
 
@@ -56,6 +70,26 @@ class PlaybackService : MediaSessionService() {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var checkpointJob: Job? = null
     private var playerListener: Player.Listener? = null
+    private val analyticsListener = object : AnalyticsListener {
+        override fun onAudioDecoderInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            decoderName: String,
+            initializedTimestampMs: Long,
+            initializationDurationMs: Long,
+        ) {
+            PlaybackDecoderStore.setDecoderName(decoderName)
+        }
+    }
+
+    private var outputMode: AudioOutputMode = AudioOutputMode.OFF
+    private var directUsbController: DirectUsbController? = null
+    private var directCoordinator: DirectUsbPlaybackCoordinator? = null
+    private var dapCoordinator: DapPlaybackCoordinator? = null
+    private var a14Coordinator: NativeA14PlaybackCoordinator? = null
+    private var modeObserverJob: Job? = null
+    private var directSessionJob: Job? = null
+    private var detachReverter: UsbDetachModeReverter? = null
+    private var modeStore: AudioOutputModeStore? = null
 
     private var activePlayback: ActivePlayback? = null
     private var activeSessionKey: String? = null
@@ -74,7 +108,7 @@ class PlaybackService : MediaSessionService() {
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (exception: Exception) {
-                    Log.e(TAG, "Unable to persist playback statistics", exception)
+
                 }
             }
         }
@@ -85,18 +119,26 @@ class PlaybackService : MediaSessionService() {
             },
         )
 
-        val exoPlayer = ExoPlayer.Builder(this)
-            .setHandleAudioBecomingNoisy(true)
-            .build()
-
-        player = exoPlayer
-        exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, true)
+        val modeStore = AudioOutputModeStoreProvider.get(this)
+        this.modeStore = modeStore
+        outputMode = modeStore.mode.value
+        detachReverter = UsbDetachModeReverter(this).also { reverter -> reverter.register() }
+        val usbController = DirectUsbControllerProvider.get(this)
+        directUsbController = usbController
+        val coordinator = DirectUsbPlaybackCoordinator(this, usbController)
+        directCoordinator = coordinator
+        dapCoordinator = DapPlaybackCoordinator(this)
+        a14Coordinator = NativeA14PlaybackCoordinator(this)
 
         val listener = object : Player.Listener {
             override fun onMediaItemTransition(
                 mediaItem: MediaItem?,
                 reason: Int,
             ) {
+                val exoPlayer = player ?: return
+                directCoordinator?.onCurrentItemChanged(mediaItem)
+                dapCoordinator?.onCurrentItemChanged(mediaItem)
+                a14Coordinator?.onCurrentItemChanged(mediaItem)
                 val oldSessionKey = activePlayback?.sessionKey ?: activeSessionKey
                 val nextSessionKey = mediaItem?.let {
                     resolveSessionKey(it, oldSessionKey)
@@ -116,6 +158,7 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val exoPlayer = player ?: return
                 if (isPlaying) {
                     val currentItem = exoPlayer.currentMediaItem
                     val current = activePlayback
@@ -138,6 +181,7 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val exoPlayer = player ?: return
                 if (playbackState == Player.STATE_ENDED) {
                     finishCurrentPlayback(
                         player = exoPlayer,
@@ -165,6 +209,19 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val exoPlayer = player ?: return
+                if (outputMode != AudioOutputMode.OFF &&
+                    !bitPerfectRouteAvailable(outputMode)
+                ) {
+
+                    modeStore.setMode(AudioOutputMode.OFF)
+                    return
+                }
+                if (outputMode == AudioOutputMode.DAP && isDapRouteFailure(error)) {
+
+                    modeStore.setMode(AudioOutputMode.OFF)
+                    return
+                }
                 val failedIndex = exoPlayer.currentMediaItemIndex
 
                 if (failedIndex in 0 until exoPlayer.mediaItemCount) {
@@ -191,8 +248,24 @@ class PlaybackService : MediaSessionService() {
         }
 
         playerListener = listener
-        exoPlayer.addListener(listener)
+        if (outputMode != AudioOutputMode.OFF && !bitPerfectRouteAvailable(outputMode)) {
+
+            modeStore.setMode(AudioOutputMode.OFF)
+            outputMode = AudioOutputMode.OFF
+        }
+        val exoPlayer = buildPlayer(outputMode)
+        player = exoPlayer
         startListeningCheckpointLoop(exoPlayer)
+        if (outputMode == AudioOutputMode.DIRECT_USB) {
+            ensureDirectSession()
+        }
+        modeObserverJob = mainScope.launch {
+            modeStore.mode.collect { newMode ->
+                if (newMode != outputMode) {
+                    rebuildPlayerForMode(newMode)
+                }
+            }
+        }
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -217,8 +290,20 @@ class PlaybackService : MediaSessionService() {
     ): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        detachReverter?.unregister()
+        detachReverter = null
         checkpointJob?.cancel()
         checkpointJob = null
+        modeObserverJob?.cancel()
+        modeObserverJob = null
+        directSessionJob?.cancel()
+        directSessionJob = null
+        directCoordinator?.close()
+        directCoordinator = null
+        dapCoordinator?.close()
+        dapCoordinator = null
+        a14Coordinator?.close()
+        a14Coordinator = null
 
         val currentPlayer = player
         finishCurrentPlayback(
@@ -242,6 +327,167 @@ class PlaybackService : MediaSessionService() {
         mediaSession = null
         player = null
         super.onDestroy()
+    }
+
+    private fun buildPlayer(mode: AudioOutputMode): ExoPlayer {
+        val exclusiveRenderer = when (mode) {
+            AudioOutputMode.DIRECT_USB -> directCoordinator?.let { coordinator ->
+                DirectUsbRenderer(coordinator)
+            }
+            AudioOutputMode.DAP -> dapCoordinator?.let { coordinator ->
+                DapRenderer(coordinator)
+            }
+            AudioOutputMode.NATIVE_A14 -> a14Coordinator?.let { coordinator ->
+                NativeA14Renderer(coordinator)
+            }
+            AudioOutputMode.OFF -> null
+        }
+        val factory = RoviaRenderersFactory(
+            this,
+            exclusiveAudioRenderer = exclusiveRenderer,
+        )
+        val playerBuilder = ExoPlayer.Builder(this)
+            .setRenderersFactory(factory)
+            .setHandleAudioBecomingNoisy(true)
+        val built = playerBuilder.build()
+        built.setAudioAttributes(AudioAttributes.DEFAULT, true)
+        playerListener?.let { built.addListener(it) }
+        built.addAnalyticsListener(analyticsListener)
+        return built
+    }
+
+    private suspend fun rebuildPlayerForMode(newMode: AudioOutputMode) {
+        if (newMode != AudioOutputMode.OFF && !bitPerfectRouteAvailable(newMode)) {
+
+            modeStore?.setMode(AudioOutputMode.OFF)
+            return
+        }
+        if (newMode == AudioOutputMode.DIRECT_USB) {
+            connectDirectSession()
+            if (directUsbController?.hasRetainedSession() != true) {
+                modeStore?.setMode(AudioOutputMode.OFF)
+                return
+            }
+        }
+        val oldPlayer = player
+        if (oldPlayer == null) {
+            outputMode = newMode
+            return
+        }
+        val previousMode = outputMode
+        outputMode = newMode
+        val enteringBitPerfect = newMode != AudioOutputMode.OFF
+
+        val items = (0 until oldPlayer.mediaItemCount).map { index ->
+            oldPlayer.getMediaItemAt(index)
+        }
+        val currentIndex = oldPlayer.currentMediaItemIndex.coerceAtLeast(0)
+        val currentPositionMs = oldPlayer.currentPosition.coerceAtLeast(0L)
+        val playWhenReady = oldPlayer.playWhenReady
+        val repeatMode = oldPlayer.repeatMode
+        val shuffleModeEnabled = oldPlayer.shuffleModeEnabled
+        val playbackParameters = oldPlayer.playbackParameters
+
+        oldPlayer.pause()
+        if (previousMode == AudioOutputMode.DIRECT_USB) {
+            directCoordinator?.shutdownEngineAndWait()
+            directSessionJob?.cancel()
+            directSessionJob = null
+            withContext(Dispatchers.IO) {
+                runCatching { directUsbController?.disconnect() }.onFailure { }
+            }
+        }
+        if (previousMode == AudioOutputMode.DAP) {
+            dapCoordinator?.shutdownEngineAndWait()
+        }
+        if (previousMode == AudioOutputMode.NATIVE_A14) {
+            a14Coordinator?.shutdownEngineAndWait()
+        }
+        playerListener?.let { listener -> oldPlayer.removeListener(listener) }
+        oldPlayer.release()
+
+        val newPlayer = buildPlayer(newMode)
+        player = newPlayer
+        startListeningCheckpointLoop(newPlayer)
+        mediaSession?.setPlayer(newPlayer)
+
+        if (items.isNotEmpty()) {
+            newPlayer.setMediaItems(
+                items,
+                currentIndex.coerceIn(0, items.lastIndex),
+                if (enteringBitPerfect) 0L else currentPositionMs,
+            )
+            newPlayer.prepare()
+            directCoordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
+            dapCoordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
+            a14Coordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
+        }
+        newPlayer.repeatMode = repeatMode
+        newPlayer.shuffleModeEnabled = shuffleModeEnabled
+        newPlayer.playbackParameters = playbackParameters
+        newPlayer.playWhenReady = if (enteringBitPerfect) false else playWhenReady
+
+        if (newMode == AudioOutputMode.DIRECT_USB) {
+            ensureDirectSession()
+        }
+
+    }
+
+    private fun isDapRouteFailure(error: Throwable): Boolean {
+        var cause: Throwable? = error
+        while (cause != null) {
+            val message = cause.message.orEmpty()
+            if (message.contains("AAudio") || message.contains("DAP output")) {
+                return true
+            }
+            cause = cause.cause
+        }
+        return false
+    }
+
+    private fun bitPerfectRouteAvailable(mode: AudioOutputMode): Boolean {
+        return when (mode) {
+            AudioOutputMode.OFF -> true
+            AudioOutputMode.DIRECT_USB -> {
+                val controller = directUsbController ?: return false
+                controller.hasRetainedSession() || controller.refresh().isNotEmpty()
+            }
+            AudioOutputMode.NATIVE_A14, AudioOutputMode.DAP ->
+                UsbAudioOutputPresence.hasUsbAudioOutput(this)
+        }
+    }
+
+    private suspend fun connectDirectSession() {
+        val controller = directUsbController ?: return
+        if (controller.hasRetainedSession()) return
+        directSessionJob?.cancel()
+        directSessionJob = null
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val devices = controller.refresh()
+                if (devices.size == 1) {
+                    controller.inspect(devices.single().deviceId)
+                }
+            }.onFailure { }
+        }
+    }
+
+    private fun ensureDirectSession() {
+        val controller = directUsbController ?: return
+        if (controller.hasRetainedSession()) return
+        if (directSessionJob?.isActive == true) return
+        directSessionJob = mainScope.launch {
+            runCatching {
+                val devices = controller.refresh()
+                if (devices.size == 1) {
+                    controller.inspect(devices.single().deviceId)
+                } else {
+
+                }
+            }.onFailure { failure ->
+
+            }
+        }
     }
 
     private fun startListeningCheckpointLoop(player: Player) {
@@ -644,7 +890,7 @@ class PlaybackService : MediaSessionService() {
     private fun enqueueRecorder(command: suspend () -> Unit) {
         val result = recorderCommands.trySend(command)
         if (result.isFailure) {
-            Log.w(TAG, "Playback statistics command was rejected")
+
         }
     }
 

@@ -1,0 +1,3 @@
+-keep class com.sun.jna.** { *; }
+-keep class com.rovia.music.playback.bitperfect.direct.uniffi.** { *; }
+-dontwarn java.awt.**

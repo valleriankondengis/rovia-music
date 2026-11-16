@@ -88,7 +88,7 @@ class PlaybackController(
     }
 
     fun disconnect() {
-        queueRequestId.incrementAndFetch()
+        queueRequestId.incrementAndFetch().also {}
         detachQueueListener()
         _mediaController.value = null
         val releaseAction = releaseControllerFuture

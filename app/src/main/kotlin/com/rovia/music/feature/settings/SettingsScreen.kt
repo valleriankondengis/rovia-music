@@ -49,6 +49,7 @@ private val SettingsMenuContentPadding = PaddingValues(
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onAudioClick: () -> Unit,
     onFolderFilterClick: () -> Unit,
     onAboutClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -109,11 +110,21 @@ fun SettingsScreen(
                 bottom = listBottomPadding,
             ),
         ) {
+            item(key = "settings_audio") {
+                SettingsMenuItem(
+                    onClick = onAudioClick,
+                    segmentIndex = 0,
+                    segmentCount = 3,
+                    icon = R.drawable.ic_smartphone,
+                    title = R.string.audio_menu_title,
+                )
+            }
+
             item(key = "settings_folder_filter") {
                 SettingsMenuItem(
                     onClick = onFolderFilterClick,
-                    segmentIndex = 0,
-                    segmentCount = 2,
+                    segmentIndex = 1,
+                    segmentCount = 3,
                     icon = R.drawable.ic_folder,
                     title = R.string.folder_filter_title,
                 )
@@ -122,8 +133,8 @@ fun SettingsScreen(
             item(key = "settings_about") {
                 SettingsMenuItem(
                     onClick = onAboutClick,
-                    segmentIndex = 1,
-                    segmentCount = 2,
+                    segmentIndex = 2,
+                    segmentCount = 3,
                     icon = R.drawable.ic_settings,
                     title = R.string.about_menu_title,
                 )
