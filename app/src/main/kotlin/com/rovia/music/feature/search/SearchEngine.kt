@@ -320,10 +320,8 @@ object SearchEngine {
             )
 
             if (score > 0) {
-                // FIX: previously the artist cover in search was the
-                // most recently added track, while ArtistPage used the
-                // latest-release selector. Same artist, different cover
-                // per screen. Use the same selector as ArtistPage.
+                // Use the same latest-release selector as ArtistPage, so an
+                // artist's cover is identical in search and on the artist page.
                 val artworkTrack = CatalogArtworkSelector.artistArtworkTrack(
                     artistName = artist.name,
                     tracks = artist.tracks,

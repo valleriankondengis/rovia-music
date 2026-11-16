@@ -313,10 +313,8 @@ class DatabaseSearchRepository(
                 ?.let(Uri::parse)
                 ?: Uri.EMPTY
             val releaseYear = row.releaseYear ?: album?.releaseYear ?: row.mediaStoreYear
-            // Same fixes as RoomLibraryRepository: never surface an old
-            // album year-range as a release date, and derive the inferred
-            // date from the resolved year so search results match the
-            // library instead of showing blank date rows.
+            // Match RoomLibraryRepository: never surface an album year-range
+            // as a release date, and derive the date from the resolved year.
             val sanitizedReleaseDate = (row.releaseDateRaw ?: album?.releaseDateRaw)
                 ?.trim()
                 ?.let { raw ->

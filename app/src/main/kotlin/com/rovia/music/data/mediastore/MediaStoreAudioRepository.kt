@@ -12,7 +12,6 @@ import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
-import android.util.Log
 import androidx.room3.withWriteTransaction
 import com.rovia.music.data.local.database.RoviaDatabase
 import com.rovia.music.data.local.entity.TrackEntity
@@ -133,19 +132,12 @@ class MediaStoreAudioRepository(
                             initialSnapshot = request.initialSnapshot,
                         )
                         if (report.didWork) {
-                            Log.d(
-                                TAG,
-                                "Room catalog sync: full=${report.fullSyncVolumeCount}, " +
-                                    "incremental=${report.incrementalSyncVolumeCount}, " +
-                                    "inserted=${report.insertedTrackCount}, " +
-                                    "updated=${report.updatedTrackCount}, " +
-                                    "unavailable=${report.unavailableTrackCount}",
-                            )
+
                         }
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
-                        Log.w(TAG, "Unable to synchronize the Room catalog", exception)
+
                     }
                 }
             }
@@ -194,7 +186,7 @@ class MediaStoreAudioRepository(
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    Log.w(TAG, "Unable to capture MediaStore generation snapshot", exception)
+
                     null
                 }
                 val freshRawTracks = queryRawTracks()
@@ -237,7 +229,7 @@ class MediaStoreAudioRepository(
                         ),
                     )
                     if (enqueueResult.isFailure) {
-                        Log.w(TAG, "Unable to enqueue Room catalog synchronization")
+
                     }
                 }
             } catch (exception: CancellationException) {
@@ -333,7 +325,7 @@ class MediaStoreAudioRepository(
                 )
                 observerRegistered = true
             } catch (exception: Exception) {
-                Log.w(TAG, "Unable to register MediaStore observer", exception)
+
             }
         }
     }
@@ -352,7 +344,7 @@ class MediaStoreAudioRepository(
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    Log.w(TAG, "Unable to refresh MediaStore catalog", exception)
+
                 }
             }
         }
@@ -411,7 +403,7 @@ class MediaStoreAudioRepository(
                 sortOrder,
             )
         } catch (exception: Exception) {
-            Log.w(TAG, "Extended MediaStore projection failed; using basic columns", exception)
+
             null
         }
 
@@ -494,11 +486,9 @@ class MediaStoreAudioRepository(
                             albumId = albumId,
                             albumArtist = albumArtist,
                             releaseYear = releaseYear,
-                            // MediaStore has no full release-date column, only YEAR.
-                            // Expose the year as the release date instead of leaving
-                            // it null, so Track Info never shows a blank date when
-                            // only the year is known. The embedded reader (below)
-                            // replaces this with the full DATE tag when available.
+                            // MediaStore exposes only YEAR, so the year stands in
+                            // as the release date; the embedded reader below
+                            // replaces it with the full DATE tag when available.
                             releaseDate = releaseYear?.toString(),
                             releaseDatePrecision = if (releaseYear != null) "YEAR" else null,
                             releaseDateSource = if (releaseYear != null) "MEDIASTORE_YEAR" else null,
@@ -701,11 +691,8 @@ class MediaStoreAudioRepository(
         return track.copy(
             albumArtist = track.albumArtist ?: metadata.albumArtist,
             releaseYear = releaseYear,
-            // Previously only EMBEDDED_DATE set releaseDate, so a file tagged
-            // with YEAR only (very common) kept a blank release date even
-            // after a successful embedded read. A year-only tag now yields
-            // the year as the release date, and an old album year-range
-            // string (e.g. "2019-2023") is never passed through as a date.
+            // A year-only tag yields the year as the release date. A year
+            // range (e.g. "2019-2023") is never passed through as a date.
             releaseDate = when (metadata.releaseDateSource) {
                 "EMBEDDED_DATE" -> metadata.releaseDate
                 "EMBEDDED_YEAR" -> metadata.releaseYear?.toString()
@@ -802,7 +789,7 @@ class MediaStoreAudioRepository(
                 )
             } ?: EmbeddedTrackMetadata()
         } catch (exception: Exception) {
-            Log.w(TAG, "Unable to read embedded metadata for $uri", exception)
+
             EmbeddedTrackMetadata()
         } finally {
             try {
@@ -866,11 +853,9 @@ class MediaStoreAudioRepository(
     }
 
     /**
-     * The old album sync stored a year range ("2019-2023") in the same
-     * column used for a single release date. That string is not a date,
-     * it breaks date parsing (month "20" is invalid), and it used to leak
-     * into Track Info. Collapse it to the first year; any other value
-     * passes through unchanged.
+     * A year range ("2019-2023") is not a release date: it breaks date
+     * parsing and leaks into Track Info. Collapse it to the first year;
+     * any other value passes through unchanged.
      */
     private fun sanitizeReleaseDate(raw: String?, year: Int?): String? {
         if (raw.isNullOrBlank()) return raw
@@ -903,7 +888,7 @@ class MediaStoreAudioRepository(
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            Log.w(TAG, "Unable to query MediaStore genres", exception)
+
             return emptyMap()
         }
 
@@ -954,11 +939,7 @@ class MediaStoreAudioRepository(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                Log.w(
-                    TAG,
-                    "Unable to query members for genre ${genre.name}",
-                    exception,
-                )
+
             }
         }
 
@@ -1049,7 +1030,6 @@ class MediaStoreAudioRepository(
     }
 
     private companion object {
-        const val TAG = "MediaStoreAudioRepo"
         const val CONTENT_CHANGE_DEBOUNCE_MS = 600L
         const val EMBEDDED_METADATA_EXTRACTION_VERSION = 1
         val METADATA_DATE_PATTERN = Regex("""^(\d{4})(?:[-/.](\d{1,2}))?(?:[-/.](\d{1,2}))?.*$""")

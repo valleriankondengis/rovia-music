@@ -449,17 +449,12 @@ class RoomLibraryRepository(
             ?.let(Uri::parse)
             ?: Uri.EMPTY
 
-        // FIX: previously this mapping dropped metadataDateEpochMillis
-        // and inferredDateEpochMillis entirely (both always null for Room
-        // tracks), and it passed an old album year-range string
-        // ("2019-2023") through as the track's release date. Resolve the
-        // year first, sanitise the date against it, and derive the two
-        // date fields from the resolved year/month/day so Track Info's
-        // "Metadata date" / "Created (inferred)" rows are not blank.
-        // Note: composer/author/writer/sample-rate/bit-depth/bitrate/
-        // label/copyright have no Room column at all, so they cannot be
-        // recovered here; Track Info now reads them on demand from the
-        // embedded tags instead (see TrackInfo.kt).
+        // Resolve the year first, sanitise the date against it, and derive
+        // the metadata/inferred date fields from the resolved year/month/day
+        // so Track Info's date rows are not blank. An album year-range
+        // ("2019-2023") is never a release date. Fields with no Room column
+        // (composer, label, sample rate and similar) are read from the
+        // embedded tags on demand instead (see TrackInfo.kt).
         val resolvedYear = releaseYear ?: album?.releaseYear ?: mediaStoreYear
         val resolvedReleaseDate = sanitizeReleaseDate(
             raw = releaseDateRaw ?: album?.releaseDateRaw,

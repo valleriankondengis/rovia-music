@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.provider.MediaStore
-import android.util.Log
 import androidx.room3.withWriteTransaction
 import com.rovia.music.data.local.database.RoviaDatabase
 import com.rovia.music.data.local.entity.AlbumArtistCrossRef
@@ -75,7 +74,7 @@ class MediaStoreCatalogSynchronizer(
             val presentVolumes = try {
                 MediaStore.getExternalVolumeNames(applicationContext).toSet()
             } catch (exception: Exception) {
-                Log.w(TAG, "Unable to list MediaStore volumes", exception)
+
                 return@withContext null
             }
 
@@ -92,7 +91,7 @@ class MediaStoreCatalogSynchronizer(
                             )
                         )
                     } catch (exception: Exception) {
-                        Log.w(TAG, "Unable to read MediaStore checkpoint for $volumeName", exception)
+
                     }
                 }
             }
@@ -159,7 +158,7 @@ class MediaStoreCatalogSynchronizer(
                 TrackInVolume(volumeName, track)
             }
             if (trackVolumes.size != tracks.size) {
-                Log.w(TAG, "Catalog synchronization skipped because some tracks have no reliable volume mapping")
+
                 return@withLock CatalogSyncReport()
             }
 
@@ -430,13 +429,10 @@ class MediaStoreCatalogSynchronizer(
                             albumReleaseId = prepared.albumReleaseId,
                             durationMs = prepared.track.durationMs,
                             mediaStoreYear = prepared.track.releaseYear,
-                            // FIX: previously a non-current embedded cache wiped
-                            // every release field to null, on the assumption that
-                            // embedded metadata would refill them. Nothing ever
-                            // refills them during sync, so the database ended up
-                            // with no year/date at all. Fall back to the
-                            // MediaStore year instead; embedded data, when it is
-                            // current, still wins via the branches below.
+                            // A non-current embedded cache does not clear the
+                            // release fields: fall back to the MediaStore year.
+                            // Current embedded data still wins via the branches
+                            // below.
                             releaseDateRaw = if (embeddedMetadataIsCurrent) {
                                 existing.releaseDateRaw
                             } else {
@@ -972,7 +968,7 @@ class MediaStoreCatalogSynchronizer(
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            Log.w(TAG, "Unable to query item generations for $volumeName", exception)
+
             null
         }
     }
@@ -1014,7 +1010,7 @@ class MediaStoreCatalogSynchronizer(
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            Log.w(TAG, "Unable to query album release years for $volumeName", exception)
+
             emptyMap()
         }
     }
@@ -1178,13 +1174,10 @@ class MediaStoreCatalogSynchronizer(
     private fun resolveReleaseDate(years: AlbumYearRange?): ReleaseDateValues {
         val first = years?.firstYear
         val last = years?.lastYear
-        // FIX: previously a multi-year album stored raw = "2019-2023"
-        // with year = null. That range is not a release date, it broke
-        // date parsing downstream, and it leaked into Track Info as the
-        // track's release date. The first/last years are still kept in
-        // firstMediaStoreReleaseYear / lastMediaStoreReleaseYear on the
-        // album row; releaseDateRaw now always holds a single year, and
-        // releaseYear is never null when any year is known.
+        // A multi-year album ("2019-2023") is not a release date. The first
+        // and last years are kept in firstMediaStoreReleaseYear /
+        // lastMediaStoreReleaseYear on the album row; releaseDateRaw holds a
+        // single year, and releaseYear is set whenever any year is known.
         return when {
             first != null && (last == null || first == last) -> ReleaseDateValues(
                 raw = first.toString(),
@@ -1330,7 +1323,6 @@ class MediaStoreCatalogSynchronizer(
     )
 
     private companion object {
-        const val TAG = "MediaStoreCatalogSync"
         val WHITESPACE = Regex("\\s+")
         val RELEASE_TYPE_MARKERS = setOf(
             "single",
