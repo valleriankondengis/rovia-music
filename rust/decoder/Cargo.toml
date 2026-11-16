@@ -1,0 +1,13 @@
+[package]
+name = "rovia-decoder"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "rovia_decoder"
+crate-type = ["lib"]
+
+[dependencies]
+symphonia = { git = "https://github.com/pdeljanov/Symphonia", rev = "5f879df0bf309246a48d57caae457fd8c0e2a5cb", default-features = false, features = ["opt-simd", "adpcm", "flac", "pcm", "vorbis", "aac", "alac", "mpa", "wav", "aiff", "caf", "isomp4", "ogg", "mkv", "ape", "id3v1", "id3v2"] }
+thiserror.workspace = true

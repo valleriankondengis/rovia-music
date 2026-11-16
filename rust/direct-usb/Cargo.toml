@@ -1,0 +1,20 @@
+[package]
+name = "rovia-uniffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "rovia_uniffi"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+uniffi.workspace = true
+thiserror.workspace = true
+rovia-decoder = { path = "../decoder" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+libusb1-sys = { version = "=0.7.0", features = ["vendored"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"

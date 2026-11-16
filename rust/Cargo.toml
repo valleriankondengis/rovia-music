@@ -1,0 +1,12 @@
+[workspace]
+members = ["decoder", "direct-usb", "uniffi"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+uniffi = { version = "=0.32.2", default-features = false }
+thiserror = "2.0"

@@ -1,0 +1,6 @@
+[bindings.kotlin]
+package_name = "com.rovia.music.uniffi"
+cdylib_name = "rovia_uniffi"
+android = true
+android_cleaner = true
+generate_immutable_records = true

@@ -18,3 +18,7 @@ local.properties
 
 # Release keystore and credentials
 /keystore/
+
+/rust/target
+
+/app/src/main/jniLibs
