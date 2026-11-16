@@ -326,7 +326,7 @@ object ArtworkBitmapLoader {
         } catch (_: Exception) {
             null
         } finally {
-            runCatching { retriever.release() }
+            runCatching { retriever.release() }.onFailure { }
         } ?: return null
 
         return decodeBytes(

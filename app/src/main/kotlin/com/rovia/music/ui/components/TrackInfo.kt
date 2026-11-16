@@ -221,7 +221,7 @@ private suspend fun readEmbeddedTrackInfo(
     } catch (_: Exception) {
         track
     } finally {
-        runCatching { retriever.release() }
+        runCatching { retriever.release() }.onFailure { }
     }
 }
 

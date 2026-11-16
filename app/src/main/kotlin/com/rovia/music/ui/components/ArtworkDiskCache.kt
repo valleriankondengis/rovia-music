@@ -209,7 +209,7 @@ internal object ArtworkDiskCache {
         } finally {
             temporaryFile?.let {
                 if (it.exists()) {
-                    runCatching { it.delete() }
+                    runCatching { it.delete() }.onFailure { }
                 }
             }
 

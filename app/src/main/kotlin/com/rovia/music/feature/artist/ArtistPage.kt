@@ -133,7 +133,7 @@ fun ArtistPage(
                     ?: return@forEach
 
             try {
-                latestLoadReleaseMetadata.value(representativeTrack)
+                latestLoadReleaseMetadata.value(representativeTrack).also {}
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {

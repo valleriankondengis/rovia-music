@@ -89,7 +89,7 @@ fun SinglePage(
     LaunchedEffect(releaseKey, releaseArtworkTrack?.id) {
         val track = releaseArtworkTrack ?: return@LaunchedEffect
         try {
-            latestLoadReleaseMetadata.value(track)
+            latestLoadReleaseMetadata.value(track).also {}
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
