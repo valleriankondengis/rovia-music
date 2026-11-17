@@ -8,6 +8,7 @@ import com.rovia.music.data.local.dao.ArtworkAssetDao
 import com.rovia.music.data.local.dao.CatalogRelationDao
 import com.rovia.music.data.local.dao.ExcludedFolderDao
 import com.rovia.music.data.local.dao.GenreDao
+import com.rovia.music.data.local.dao.LikedEntityDao
 import com.rovia.music.data.local.dao.LikedTrackDao
 import com.rovia.music.data.local.dao.ListeningSegmentDao
 import com.rovia.music.data.local.dao.MediaStoreSyncStateDao
@@ -23,6 +24,7 @@ import com.rovia.music.data.local.entity.ArtistEntity
 import com.rovia.music.data.local.entity.ArtworkAssetEntity
 import com.rovia.music.data.local.entity.ExcludedFolderEntity
 import com.rovia.music.data.local.entity.GenreEntity
+import com.rovia.music.data.local.entity.LikedEntity
 import com.rovia.music.data.local.entity.LikedTrackEntity
 import com.rovia.music.data.local.entity.ListeningSegmentEntity
 import com.rovia.music.data.local.entity.MediaStoreSyncStateEntity
@@ -49,6 +51,7 @@ import com.rovia.music.data.local.entity.UserActionEventEntity
         PlaylistEntity::class,
         PlaylistTrackEntity::class,
         LikedTrackEntity::class,
+        LikedEntity::class,
         PlaybackActivityEntity::class,
         PlaybackSessionEntity::class,
         PlaybackTrackEventEntity::class,
@@ -68,6 +71,7 @@ abstract class RoviaDatabase : RoomDatabase() {
     abstract fun catalogRelationDao(): CatalogRelationDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun likedTrackDao(): LikedTrackDao
+    abstract fun likedEntityDao(): LikedEntityDao
     abstract fun playbackActivityDao(): PlaybackActivityDao
     abstract fun playbackSessionDao(): PlaybackSessionDao
     abstract fun playbackTrackEventDao(): PlaybackTrackEventDao

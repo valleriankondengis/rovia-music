@@ -3,10 +3,12 @@ package com.rovia.music.data.repository
 import android.net.Uri
 import com.rovia.music.data.local.database.RoviaDatabase
 import com.rovia.music.data.local.entity.AlbumEntity
+import com.rovia.music.data.local.entity.LikedEntity
 import com.rovia.music.data.local.entity.LikedTrackEntity
 import com.rovia.music.data.local.entity.PlaylistEntity
 import com.rovia.music.data.local.entity.PlaylistTrackEntity
 import com.rovia.music.data.local.entity.TrackEntity
+import com.rovia.music.data.mediastore.AlbumReleaseType
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import java.text.Normalizer
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +32,29 @@ data class PlaylistTrackItem(
     val track: LocalAudioTrack,
 )
 
+fun AlbumReleaseType.toLikedEntityType(): LikedEntityType = when (this) {
+    AlbumReleaseType.SINGLE -> LikedEntityType.SINGLE
+    AlbumReleaseType.EP -> LikedEntityType.EP
+    AlbumReleaseType.ALBUM,
+    AlbumReleaseType.UNKNOWN -> LikedEntityType.ALBUM
+}
+
+enum class LikedEntityType {
+    ARTIST,
+    ALBUM,
+    SINGLE,
+    EP
+}
+
+data class LikedEntityItem(
+    val type: LikedEntityType,
+    val key: String,
+    val title: String,
+    val subtitle: String?,
+    val artworkUri: String?,
+    val likedAtEpochMillis: Long,
+)
+
 data class PlaylistDetail(
     val id: Long,
     val name: String,
@@ -43,17 +68,17 @@ data class PlaylistDetail(
 }
 
 /**
- * User-owned library data: playlists and liked tracks. The Room schema for both
- * already exists (playlists, playlist_tracks, liked_tracks); this repository is
- * the bridge between those tables and the [LocalAudioTrack] model the UI uses.
- * Playlist and like rows keep metadata snapshots, so they stay meaningful even
- * when the underlying track disappears from the catalog.
+ * User-owned library data: playlists and liked tracks, bridged between the
+ * Room tables (playlists, playlist_tracks, liked_tracks) and the
+ * [LocalAudioTrack] model the UI uses. Playlist and like rows keep metadata
+ * snapshots, so they stay meaningful when a track leaves the catalog.
  */
 class UserLibraryRepository(
     private val database: RoviaDatabase,
 ) {
     private val playlistDao get() = database.playlistDao()
     private val likedTrackDao get() = database.likedTrackDao()
+    private val likedEntityDao get() = database.likedEntityDao()
     private val trackDao get() = database.trackDao()
     private val albumDao get() = database.albumDao()
 
@@ -305,12 +330,60 @@ class UserLibraryRepository(
         )
     }
 
+
+    fun observeLikedEntities(): Flow<List<LikedEntityItem>> =
+        likedEntityDao.observeAll().map { rows ->
+            rows.mapNotNull { row ->
+                val type = runCatching {
+                    LikedEntityType.valueOf(row.entityType)
+                }.getOrNull() ?: return@mapNotNull null
+                LikedEntityItem(
+                    type = type,
+                    key = row.entityKey,
+                    title = row.titleSnapshot,
+                    subtitle = row.subtitleSnapshot,
+                    artworkUri = row.artworkSourceUriSnapshot,
+                    likedAtEpochMillis = row.likedAtEpochMillis,
+                )
+            }
+        }
+
+    suspend fun toggleLikedEntity(
+        type: LikedEntityType,
+        key: String,
+        title: String,
+        subtitle: String?,
+        artworkUri: String?,
+    ) = withContext(Dispatchers.IO) {
+        val existing = likedEntityDao.getByTypeAndKey(type.name, key)
+        if (existing != null) {
+            likedEntityDao.deleteByTypeAndKey(type.name, key)
+        } else {
+            likedEntityDao.insert(
+                LikedEntity(
+                    entityType = type.name,
+                    entityKey = key,
+                    titleSnapshot = title,
+                    subtitleSnapshot = subtitle,
+                    artworkSourceUriSnapshot = artworkUri,
+                    likedAtEpochMillis = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
     companion object {
         fun likedTrackKey(track: LocalAudioTrack): String =
             "${track.volumeName.orEmpty()}:${track.id}"
 
         fun likedTrackKey(entity: TrackEntity): String =
             "${entity.volumeName.orEmpty()}:${entity.mediaStoreId ?: entity.trackId}"
+
+        fun isEntityLiked(
+            entities: List<LikedEntityItem>,
+            type: LikedEntityType,
+            key: String,
+        ): Boolean = entities.any { item -> item.type == type && item.key == key }
     }
 }
 

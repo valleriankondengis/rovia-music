@@ -178,6 +178,35 @@ interface PlaybackTrackEventDao {
                 AS totalListenedDurationMs,
             MAX(e.startedAtEpochMillis) AS lastPlayedAtEpochMillis
         FROM playback_track_events AS e
+        INNER JOIN track_artist_cross_ref AS ta ON ta.trackId = e.trackId
+        INNER JOIN artists AS a ON a.artistId = ta.artistId
+        LEFT JOIN tracks AS t ON t.trackId = e.trackId
+        WHERE a.identityKey = :artistIdentityKey
+        GROUP BY e.trackId
+        ORDER BY
+            qualifiedPlayCount DESC,
+            totalListenedDurationMs DESC,
+            lastPlayedAtEpochMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getTopTracksForArtist(
+        artistIdentityKey: String,
+        limit: Int
+    ): List<TrackPlaybackAggregate>
+
+    @Query(
+        """
+        SELECT
+            MAX(e.trackId) AS trackId,
+            MAX(COALESCE(t.title, e.trackTitleSnapshot)) AS displayTitle,
+            COUNT(*) AS eventCount,
+            SUM(CASE WHEN e.qualifiedPlay = 1 THEN 1 ELSE 0 END)
+                AS qualifiedPlayCount,
+            COALESCE(SUM(e.heardDurationMs), 0)
+                AS totalListenedDurationMs,
+            MAX(e.startedAtEpochMillis) AS lastPlayedAtEpochMillis
+        FROM playback_track_events AS e
         LEFT JOIN tracks AS t ON t.trackId = e.trackId
         WHERE e.startedAtEpochMillis >= :startEpochMillis
           AND e.startedAtEpochMillis < :endEpochMillis

@@ -431,8 +431,7 @@ class MediaStoreCatalogSynchronizer(
                             mediaStoreYear = prepared.track.releaseYear,
                             // A non-current embedded cache does not clear the
                             // release fields: fall back to the MediaStore year.
-                            // Current embedded data still wins via the branches
-                            // below.
+                            // Current embedded data wins via the branches below.
                             releaseDateRaw = if (embeddedMetadataIsCurrent) {
                                 existing.releaseDateRaw
                             } else {
@@ -1174,10 +1173,10 @@ class MediaStoreCatalogSynchronizer(
     private fun resolveReleaseDate(years: AlbumYearRange?): ReleaseDateValues {
         val first = years?.firstYear
         val last = years?.lastYear
-        // A multi-year album ("2019-2023") is not a release date. The first
-        // and last years are kept in firstMediaStoreReleaseYear /
-        // lastMediaStoreReleaseYear on the album row; releaseDateRaw holds a
-        // single year, and releaseYear is set whenever any year is known.
+        // A multi-year album ("2019-2023") is not a release date. The first and
+        // last years are kept in firstMediaStoreReleaseYear and
+        // lastMediaStoreReleaseYear; releaseDateRaw holds a single year, and
+        // releaseYear is set whenever any year is known.
         return when {
             first != null && (last == null || first == last) -> ReleaseDateValues(
                 raw = first.toString(),

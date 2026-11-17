@@ -159,6 +159,15 @@ class PlaybackStatisticsRepository(
     suspend fun getTopTracks(limit: Int = 20): List<TrackPlaybackAggregate> =
         playbackEventDao.getTopTracks(limit.coerceAtLeast(1))
 
+    suspend fun getTopTracksForArtist(
+        artistIdentityKey: String,
+        limit: Int = 5,
+    ): List<TrackPlaybackAggregate> =
+        playbackEventDao.getTopTracksForArtist(
+            artistIdentityKey = artistIdentityKey,
+            limit = limit.coerceAtLeast(1),
+        )
+
     suspend fun getTopTracks(
         startDate: LocalDate,
         endDateExclusive: LocalDate,

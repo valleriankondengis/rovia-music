@@ -235,6 +235,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE isAvailable = 1 AND trackId IN (SELECT trackId FROM track_genre_cross_ref WHERE genreId = :genreId) ORDER BY title COLLATE NOCASE ASC")
     fun observeTracksForGenre(genreId: Long): Flow<List<TrackEntity>>
 
+    @Query("SELECT * FROM tracks WHERE isAvailable = 1 AND trackId IN (SELECT trackId FROM track_genre_cross_ref WHERE genreId = :genreId) ORDER BY title COLLATE NOCASE ASC")
+    suspend fun getAvailableTracksForGenre(genreId: Long): List<TrackEntity>
+
     @Query(
         """
         SELECT DISTINCT tracks.*

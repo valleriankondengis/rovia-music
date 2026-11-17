@@ -449,12 +449,11 @@ class RoomLibraryRepository(
             ?.let(Uri::parse)
             ?: Uri.EMPTY
 
-        // Resolve the year first, sanitise the date against it, and derive
-        // the metadata/inferred date fields from the resolved year/month/day
-        // so Track Info's date rows are not blank. An album year-range
-        // ("2019-2023") is never a release date. Fields with no Room column
-        // (composer, label, sample rate and similar) are read from the
-        // embedded tags on demand instead (see TrackInfo.kt).
+        // Resolve the year first, sanitise the date against it, and derive the
+        // date fields from the resolved year/month/day so Track Info's date
+        // rows are not blank. An album year-range ("2019-2023") is never a
+        // release date. Fields with no Room column (composer, label, sample
+        // rate) are read from the embedded tags on demand (see TrackInfo.kt).
         val resolvedYear = releaseYear ?: album?.releaseYear ?: mediaStoreYear
         val resolvedReleaseDate = sanitizeReleaseDate(
             raw = releaseDateRaw ?: album?.releaseDateRaw,

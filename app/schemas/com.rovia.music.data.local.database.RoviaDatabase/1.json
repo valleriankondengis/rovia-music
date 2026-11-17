@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "acc5698f1192430be2aab8b4749879f2",
+    "identityHash": "d901a4432413ccff76de6f12d2d2fcc8",
     "entities": [
       {
         "tableName": "artwork_assets",
@@ -1345,6 +1345,79 @@
         ]
       },
       {
+        "tableName": "liked_entities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`likedEntityId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `entityType` TEXT NOT NULL, `entityKey` TEXT NOT NULL, `titleSnapshot` TEXT NOT NULL, `subtitleSnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, `likedAtEpochMillis` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "likedEntityId",
+            "columnName": "likedEntityId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityType",
+            "columnName": "entityType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityKey",
+            "columnName": "entityKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleSnapshot",
+            "columnName": "titleSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitleSnapshot",
+            "columnName": "subtitleSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkSourceUriSnapshot",
+            "columnName": "artworkSourceUriSnapshot",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "likedAtEpochMillis",
+            "columnName": "likedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "likedEntityId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_liked_entities_entityType_entityKey",
+            "unique": true,
+            "columnNames": [
+              "entityType",
+              "entityKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_liked_entities_entityType_entityKey` ON `${TABLE_NAME}` (`entityType`, `entityKey`)"
+          },
+          {
+            "name": "index_liked_entities_likedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "likedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_liked_entities_likedAtEpochMillis` ON `${TABLE_NAME}` (`likedAtEpochMillis`)"
+          }
+        ]
+      },
+      {
         "tableName": "playback_activities",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`activityId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `activityKey` TEXT NOT NULL, `entityType` TEXT NOT NULL, `entityKey` TEXT NOT NULL, `timestampEpochMillis` INTEGER NOT NULL, `timeZoneIdAtEvent` TEXT NOT NULL, `triggerTrackId` INTEGER, `titleSnapshot` TEXT NOT NULL, `subtitleSnapshot` TEXT, `artworkAssetKeySnapshot` TEXT, `artworkSourceUriSnapshot` TEXT, FOREIGN KEY(`triggerTrackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`artworkAssetKeySnapshot`) REFERENCES `artwork_assets`(`assetKey`) ON UPDATE NO ACTION ON DELETE SET NULL )",
         "fields": [
@@ -2267,7 +2340,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'acc5698f1192430be2aab8b4749879f2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd901a4432413ccff76de6f12d2d2fcc8')"
     ]
   }
 }

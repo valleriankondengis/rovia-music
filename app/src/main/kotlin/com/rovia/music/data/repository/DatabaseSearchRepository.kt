@@ -7,6 +7,7 @@ import com.rovia.music.data.local.dao.LikedTrackSearchRow
 import com.rovia.music.data.local.dao.PlaylistSearchRow
 import com.rovia.music.data.local.database.RoviaDatabase
 import com.rovia.music.data.local.entity.AlbumEntity
+import com.rovia.music.data.local.entity.GenreEntity
 import com.rovia.music.data.local.entity.TrackEntity
 import com.rovia.music.data.mediastore.AlbumParser
 import com.rovia.music.data.mediastore.ArtistCreditParser
@@ -45,6 +46,14 @@ private const val DATABASE_SEARCH_RESULT_LIMIT = 30
 private val DatabaseSearchWhitespace = Regex("\\s+")
 private val DATABASE_SEARCH_RELEASE_YEAR_RANGE_PATTERN = Regex("""^\d{4}-\d{4}$""")
 
+data class SearchGenreResult(
+    val name: String,
+    val genreKey: String,
+    val artworkUri: String?,
+    val trackCount: Int,
+    val score: Int,
+)
+
 data class SearchPlaylistResult(
     val playlistId: Long,
     val name: String,
@@ -74,10 +83,11 @@ data class DatabaseSearchResults(
     val albums: List<SearchAlbumResult> = emptyList(),
     val likedTracks: List<SearchLikedTrackResult> = emptyList(),
     val playlists: List<SearchPlaylistResult> = emptyList(),
+    val genres: List<SearchGenreResult> = emptyList(),
 ) {
     val isEmpty: Boolean
         get() = songs.isEmpty() && artists.isEmpty() && albums.isEmpty() &&
-            likedTracks.isEmpty() && playlists.isEmpty()
+            likedTracks.isEmpty() && playlists.isEmpty() && genres.isEmpty()
 }
 
 class DatabaseSearchRepository(
@@ -95,7 +105,7 @@ class DatabaseSearchRepository(
         val resultLimit = limit.coerceIn(1, 100)
         val trackDao = database.trackDao()
 
-        return combine(
+        val entityResults = combine(
             trackDao.searchAvailableTracks(normalizedQuery, resultLimit),
             database.artistDao().searchForDatabaseSearch(normalizedQuery, resultLimit),
             database.albumDao().search(normalizedQuery, resultLimit),
@@ -117,6 +127,13 @@ class DatabaseSearchRepository(
                 likedTracks = likedTracks,
                 playlists = playlists,
             )
+        }
+
+        return combine(
+            entityResults,
+            database.genreDao().search(normalizedQuery, resultLimit),
+        ) { rows, genres ->
+            rows.copy(genres = genres)
         }.map { rows ->
             withContext(Dispatchers.Default) {
                 buildResults(rows, resultLimit)
@@ -276,12 +293,30 @@ class DatabaseSearchRepository(
             )
         }
 
+        val genres = queryRows.genres.mapIndexed { index, genre ->
+            val genreTrackRows = trackDao.getAvailableTracksForGenre(genre.genreId)
+            val genreTracks = genreTrackRows.zip(
+                mapTrackRows(genreTrackRows, includeGenres = false),
+            ).map { (_, track) -> track }
+            SearchGenreResult(
+                name = genre.name,
+                genreKey = genre.identityKey.removePrefix("genre:"),
+                artworkUri = CatalogArtworkSelector
+                    .latestReleaseTrack(genreTracks)
+                    ?.uri
+                    ?.toString(),
+                trackCount = genreTracks.size,
+                score = queryRows.genres.size - index,
+            )
+        }
+
         return DatabaseSearchResults(
             songs = songs,
             artists = artists,
             albums = albumResults,
             likedTracks = likedResults,
             playlists = playlists,
+            genres = genres,
         )
     }
 
@@ -394,6 +429,7 @@ private data class SearchQueryRows(
     val albums: List<AlbumEntity>,
     val likedTracks: List<LikedTrackSearchRow>,
     val playlists: List<PlaylistSearchRow>,
+    val genres: List<GenreEntity> = emptyList(),
 )
 
 private fun normalizeDatabaseQuery(value: String): String = Normalizer
