@@ -15,7 +15,10 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -79,7 +83,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.yield
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.PI
 import kotlin.math.max
+import kotlin.math.sin
 import kotlin.math.min
 
 data class LyricSyllable(
@@ -135,6 +141,8 @@ private const val LYRIC_LINE_HEIGHT_SP = 41
 private const val STATIC_LYRIC_FONT_SIZE_SP = 30
 private const val STATIC_LYRIC_LINE_HEIGHT_SP = 38
 private const val LYRIC_TOP_PADDING_DP = 32
+private const val LYRIC_EDGE_FADE_DP = 28
+private const val LYRIC_VIEWER_TOP_PADDING_DP = 56
 private const val LYRIC_BOTTOM_PADDING_FRACTION = 0.8f
 
 private const val WORD_RISE_DP = 2f
@@ -145,14 +153,59 @@ private const val WORD_LIFT_QUICK_MS = 150f
 private const val WORD_LIFT_HELD_MS = 900f
 private const val WORD_LIFT_FLOOR = 0.25f
 
-private const val LYRIC_GLOW_MAX_ALPHA = 0.68f
+private const val LYRIC_GLOW_MAX_ALPHA = 0.62f
 private const val LYRIC_BACKGROUND_GLOW_FACTOR = 0.54f
-private const val LYRIC_GLOW_RADIUS_DP = 13f
+private const val LYRIC_GLOW_RADIUS_DP = 6f
 private const val LYRIC_GLOW_TAIL_MS = 300L
-private const val LYRIC_REVEAL_FEATHER_DP = 16f
+private const val LYRIC_REVEAL_FEATHER_DP = 30f
 private const val LYRIC_CHARACTER_SCALE = 1.035f
 private const val LYRIC_CHARACTER_RISE_DP = 1.25f
 private const val LYRIC_CHARACTER_TAIL_MS = 150L
+
+private const val LYRIC_CLOCK_SNAP_MS = 600L
+private const val LYRIC_CLOCK_CORRECTION_MS = 350f
+
+private const val GROW_MAX_CHARS = 7
+private const val GROW_MIN_SOLO_MS = 1_100L
+private const val GROW_MIN_SHORT_MS = 1_360L
+private const val GROW_SHORT_STEP_MS = 140L
+private const val GROW_MIN_FOUR_MS = 1_050L
+private const val GROW_MIN_LONG_MS = 900L
+private const val GROW_MS_PER_CHAR = 200L
+private const val GROW_STAGGER = 0.09f
+private const val GROW_SPAN = 1.5f
+private const val GROW_IN = 0.25f
+private const val GROW_HOLD = 0.30f
+private const val GROW_OUT = 0.75f
+private const val GROW_REST = 1f
+private const val GROW_HEADROOM = 3f
+private const val GROW_RAMP_MIN_MS = 400f
+private const val GROW_RAMP_MAX_MS = 3_000f
+private const val GROW_BASE_SHORT = 0.05f
+private const val GROW_BASE_LONG = 0.04f
+private const val GROW_SCALE_RANGE = 0.08f
+private const val GROW_SCALE_CEILING = 0.1f
+private const val GROW_SCALE_TRIM = 0.98f
+private const val GROW_SHIFT_EM = 25f / 34f
+private const val GROW_BLOOM_FLOOR = 0.35f
+private const val GROW_BLOOM_RANGE = 0.45f
+private const val GROW_BLOOM_PACE_MS = 1_500f
+private const val GROW_BLOOM_PACE_MAX = 1.1f
+private const val GROW_BLOOM_SHORT = 0.85f
+private const val GROW_BLOOM_LONG = 1.1f
+private const val GROW_LIFT_PACE_MS = 2_000f
+private const val GROW_LIFT_FLOOR = 0.3f
+private const val GROW_DECAY_LONG_CHARS = 5
+private const val GROW_DECAY_QUICK_MS = 1_200f
+private const val GROW_DECAY_QUICK_FLOOR_MS = 800f
+private const val GROW_DECAY_LONG = 0.4f
+private const val GROW_DECAY_QUICK = 0.3f
+private const val GROW_DECAY_QUICK_TINY = 0.1f
+private const val GROW_DECAY_MAX = 0.7f
+
+private const val GAP_WAVE_PERIOD_MS = 3_000L
+private const val GAP_WAVE_PHASE_STEP = 0.18f
+private const val GAP_WAVE_AMPLITUDE_DP = 2.5f
 
 private const val GAP_DOT_COUNT = 3
 private const val GAP_ROW_HEIGHT_DP = 36
@@ -272,6 +325,34 @@ private data class LyricVisualLineGeometry(
     val wordsByHorizontalPosition: List<FloatingWordGeometry>,
 )
 
+private fun Modifier.lyricFadingEdges(): Modifier = this
+    .graphicsLayer {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+    .drawWithContent {
+        drawContent()
+
+        val fade = LYRIC_EDGE_FADE_DP.dp.toPx()
+
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Transparent, Color.Black),
+                startY = 0f,
+                endY = fade,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Black, Color.Transparent),
+                startY = size.height - fade,
+                endY = size.height,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LyricViewer(
     lyrics: SyncedLyrics,
@@ -280,6 +361,10 @@ fun LyricViewer(
     modifier: Modifier = Modifier,
     isPlaying: Boolean = true,
     animationStyle: LyricAnimationStyle = LyricAnimationStyle.Luminous,
+    picking: Boolean = false,
+    pickedSourceIndices: Set<Int> = emptySet(),
+    onPickLine: ((Int) -> Unit)? = null,
+    onToggleLine: (Int) -> Unit = {},
 ) {
     val singerOrder =
         remember(lyrics) {
@@ -328,6 +413,14 @@ fun LyricViewer(
         mutableLongStateOf(0L)
     }
 
+    var clockCorrectionMs by remember(lyrics) {
+        mutableLongStateOf(0L)
+    }
+
+    var clockCorrectionStartNanos by remember(lyrics) {
+        mutableLongStateOf(0L)
+    }
+
     var hasClockAnchor by remember(lyrics) {
         mutableStateOf(false)
     }
@@ -340,17 +433,56 @@ fun LyricViewer(
         val frameTimeNanos =
             withFrameNanos { it }
 
-        clockAnchorPositionMs =
+        val reported =
             positionMs.coerceAtLeast(0L)
 
-        clockAnchorFrameTimeNanos =
-            frameTimeNanos
+        if (!isPlaying || !hasClockAnchor) {
+            clockAnchorPositionMs = reported
+            clockAnchorFrameTimeNanos = frameTimeNanos
+            clockCorrectionMs = 0L
+            clockCorrectionStartNanos = frameTimeNanos
+            hasClockAnchor = true
 
-        hasClockAnchor = true
+            if (!isPlaying) {
+                lyricClock.longValue = reported
+            }
+        } else {
+            val elapsedMs =
+                (
+                    frameTimeNanos -
+                        clockAnchorFrameTimeNanos
+                    ).coerceAtLeast(0L) / 1_000_000L
 
-        if (!isPlaying) {
-            lyricClock.longValue =
-                positionMs.coerceAtLeast(0L)
+            val correctionAgeMs =
+                (
+                    frameTimeNanos -
+                        clockCorrectionStartNanos
+                    ).coerceAtLeast(0L) / 1_000_000L
+
+            val liveCorrection =
+                (
+                    clockCorrectionMs *
+                        (
+                            1f -
+                                (
+                                    correctionAgeMs.toFloat() /
+                                        LYRIC_CLOCK_CORRECTION_MS
+                                    ).coerceIn(0f, 1f)
+                            )
+                    ).toLong()
+
+            val predicted =
+                clockAnchorPositionMs +
+                    elapsedMs +
+                    liveCorrection
+
+            val error = reported - predicted
+
+            clockAnchorPositionMs = reported
+            clockAnchorFrameTimeNanos = frameTimeNanos
+            clockCorrectionMs =
+                if (abs(error) > LYRIC_CLOCK_SNAP_MS) 0L else -error
+            clockCorrectionStartNanos = frameTimeNanos
         }
     }
 
@@ -380,10 +512,29 @@ fun LyricViewer(
                     val elapsedMs =
                         elapsedNanos / 1_000_000L
 
+                    val correctionAgeMs =
+                        (
+                            frameTimeNanos -
+                                clockCorrectionStartNanos
+                            ).coerceAtLeast(0L) / 1_000_000L
+
+                    val correction =
+                        (
+                            clockCorrectionMs *
+                                (
+                                    1f -
+                                        (
+                                            correctionAgeMs.toFloat() /
+                                                LYRIC_CLOCK_CORRECTION_MS
+                                            ).coerceIn(0f, 1f)
+                                    )
+                            ).toLong()
+
                     lyricClock.longValue =
                         (
                             clockAnchorPositionMs +
-                                elapsedMs
+                                elapsedMs +
+                                correction
                             ).coerceAtLeast(0L)
                 }
             }
@@ -468,10 +619,14 @@ fun LyricViewer(
     ) {
         val density = LocalDensity.current
         val activeTopOffsetPx = with(density) {
-            LYRIC_TOP_PADDING_DP.dp.toPx()
+            LYRIC_VIEWER_TOP_PADDING_DP.dp.toPx()
         }
 
-        LaunchedEffect(lyrics, scrollPlan.targetDisplayIndex) {
+        LaunchedEffect(lyrics, scrollPlan.targetDisplayIndex, picking) {
+            if (picking) {
+                return@LaunchedEffect
+            }
+
             val targetIndex = scrollPlan.targetDisplayIndex
 
             if (targetIndex !in displayItems.indices) {
@@ -560,11 +715,13 @@ fun LyricViewer(
 
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .lyricFadingEdges(),
             horizontalAlignment = AbsoluteAlignment.Left,
             verticalArrangement = Arrangement.spacedBy(0.dp),
             contentPadding = PaddingValues(
-                top = LYRIC_TOP_PADDING_DP.dp,
+                top = LYRIC_VIEWER_TOP_PADDING_DP.dp,
                 bottom = maxHeight * LYRIC_BOTTOM_PADDING_FRACTION,
             ),
         ) {
@@ -748,9 +905,43 @@ fun LyricViewer(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .clickable {
-                                            onSeek(item.line.startTimeMs)
-                                        }
+                                        .clip(MaterialTheme.shapes.medium)
+                                        .background(
+                                            color =
+                                                when {
+                                                    !picking ->
+                                                        Color.Transparent
+
+                                                    item.sourceIndex in pickedSourceIndices ->
+                                                        MaterialTheme.colorScheme.onSurface
+                                                            .copy(alpha = 0.16f)
+
+                                                    else ->
+                                                        MaterialTheme.colorScheme.onSurface
+                                                            .copy(alpha = 0.05f)
+                                                },
+                                            shape = MaterialTheme.shapes.medium,
+                                        )
+                                        .then(
+                                            if (onPickLine != null) {
+                                                Modifier.combinedClickable(
+                                                    onClick = {
+                                                        if (picking) {
+                                                            onToggleLine(item.sourceIndex)
+                                                        } else {
+                                                            onSeek(item.line.startTimeMs)
+                                                        }
+                                                    },
+                                                    onLongClick = {
+                                                        onPickLine(item.sourceIndex)
+                                                    },
+                                                )
+                                            } else {
+                                                Modifier.clickable {
+                                                    onSeek(item.line.startTimeMs)
+                                                }
+                                            },
+                                        )
                                         .padding(
                                             vertical =
                                                 LYRIC_LINE_SPACING_DP.dp / 2,
@@ -937,7 +1128,9 @@ private fun StaticLyricViewer(
 
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .lyricFadingEdges(),
         horizontalAlignment = AbsoluteAlignment.Left,
         verticalArrangement = Arrangement.spacedBy(0.dp),
         contentPadding = PaddingValues(
@@ -1056,6 +1249,11 @@ private fun LyricLineContent(
     val isWordSynced =
         remember(line) {
             isWordSyncedLine(line)
+        }
+
+    val growingWords =
+        remember(line) {
+            buildGrowingLyricWords(line)
         }
 
     var textWidthPx by remember(line) {
@@ -1256,6 +1454,7 @@ private fun LyricLineContent(
                             wordOffsets = wordOffsets,
                             positionMs = lyricClock.longValue,
                             animateTimedCharacters = animationStyle == LyricAnimationStyle.Luminous,
+                            growingWords = growingWords,
                         )
                     }
                 }
@@ -1275,6 +1474,7 @@ private fun LyricLineContent(
                                 positionMs = lyricClock.longValue,
                                 isWordSynced = isWordSynced,
                                 lineEndTimeMs = lineEndTimeMs,
+                                growingWords = growingWords,
                             )
                         }
                     } else {
@@ -1312,6 +1512,7 @@ private fun LyricLineContent(
                                                 startCharacter = luminousCue.startCharacter,
                                                 endCharacter = luminousCue.endCharacter,
                                                 positionMs = lyricClock.longValue,
+                                                growingWords = growingWords,
                                             )
                                         }
                                     }
@@ -1442,7 +1643,7 @@ private fun LyricGapContent(
                     .padding(start = 8.dp)
                     .size(
                         width = 48.dp,
-                        height = 12.dp,
+                        height = 24.dp,
                     )
                     .graphicsLayer {
                         alpha = dotAlpha
@@ -1463,6 +1664,12 @@ private fun LyricGapContent(
             val dotSpacing = 6.dp.toPx()
             val dotStride = radius * 2f + dotSpacing
 
+            val waveAmplitude =
+                GAP_WAVE_AMPLITUDE_DP.dp.toPx()
+
+            val waveElapsed =
+                (now - gap.startTimeMs).coerceAtLeast(0L)
+
             repeat(GAP_DOT_COUNT) { dotIndex ->
                 val lit =
                     (
@@ -1478,12 +1685,26 @@ private fun LyricGapContent(
                     GAP_REST_SCALE +
                         (1f - GAP_REST_SCALE) * lit
 
+                val waveAngle =
+                    (
+                        (
+                            (waveElapsed % GAP_WAVE_PERIOD_MS).toFloat() /
+                                GAP_WAVE_PERIOD_MS.toFloat()
+                            ) -
+                            dotIndex * GAP_WAVE_PHASE_STEP
+                        ).toDouble() * 2.0 * PI
+
+                val wave = sin(waveAngle).toFloat()
+
+                val bobScale =
+                    dotScale * (1f + 0.10f * max(wave, 0f))
+
                 drawCircle(
                     color = accentColor.copy(alpha = alpha),
-                    radius = radius * dotScale,
+                    radius = radius * bobScale,
                     center = Offset(
                         x = radius + dotIndex * dotStride,
-                        y = size.height / 2f,
+                        y = size.height / 2f - waveAmplitude * wave,
                     ),
                 )
             }
@@ -2186,6 +2407,285 @@ private fun smoothStep(
     return value * value * (3f - 2f * value)
 }
 
+
+private class LyricCharGrowth {
+    var scale: Float = 1f
+    var shift: Float = 0f
+    var rise: Float = 0f
+    var bloom: Float = 0f
+}
+
+private class GrowingLyricWord(
+    val wordIndex: Int,
+    val startMs: Long,
+    val endMs: Long,
+    private val scalePeak: FloatArray,
+    private val shiftPeak: FloatArray,
+    private val risePeak: FloatArray,
+    private val bloomPeak: FloatArray,
+    val restsAtMs: Long,
+) {
+    fun sampleInto(
+        charIndex: Int,
+        positionMs: Long,
+        into: LyricCharGrowth,
+    ) {
+        val span =
+            (endMs - startMs).coerceAtLeast(1L).toFloat()
+
+        val elapsed =
+            (positionMs - startMs).toFloat() -
+                charIndex * span * GROW_STAGGER
+
+        val phase =
+            (elapsed / (span * GROW_SPAN)).coerceIn(0f, 1f)
+
+        val peakScale = scalePeak[charIndex]
+
+        when {
+            phase < GROW_IN -> {
+                val t = smoothStep(phase / GROW_IN)
+                into.scale = 1f + (peakScale - 1f) * t
+                into.shift = shiftPeak[charIndex] * t
+                into.rise = risePeak[charIndex] * t
+                into.bloom = bloomPeak[charIndex] * t
+            }
+
+            phase < GROW_HOLD -> {
+                into.scale = peakScale
+                into.shift = shiftPeak[charIndex]
+                into.rise = risePeak[charIndex]
+                into.bloom = bloomPeak[charIndex]
+            }
+
+            phase < GROW_OUT -> {
+                val t =
+                    smoothStep(
+                        (phase - GROW_HOLD) / (GROW_OUT - GROW_HOLD),
+                    )
+                into.scale = peakScale + (1f - peakScale) * t
+                into.shift = shiftPeak[charIndex] * (1f - t)
+                into.rise =
+                    risePeak[charIndex] +
+                        (GROW_REST - risePeak[charIndex]) * t
+                into.bloom = bloomPeak[charIndex] * (1f - t)
+            }
+
+            else -> {
+                into.scale = 1f
+                into.shift = 0f
+                into.rise = GROW_REST
+                into.bloom = 0f
+            }
+        }
+    }
+}
+
+private fun buildGrowingLyricWord(
+    line: LyricLine,
+    wordIndex: Int,
+): GrowingLyricWord? {
+    val word =
+        line.words.getOrNull(wordIndex)
+            ?: return null
+
+    val chars = word.text.length
+
+    if (chars == 0 || chars > GROW_MAX_CHARS) return null
+    if ('-' in word.text) return null
+
+    if (
+        word.text.any {
+            it.isLyricBlockScript() || it.isLyricJoinedScript()
+        }
+    ) {
+        return null
+    }
+
+    val startMs = word.startTimeMs
+    val endMs = inferredWordEndTimeMs(line, wordIndex)
+    val heldMs = endMs - startMs
+
+    val qualifies =
+        when {
+            chars == 1 -> heldMs >= GROW_MIN_SOLO_MS
+            chars <= 3 ->
+                heldMs >=
+                    GROW_MIN_SHORT_MS +
+                        (chars - 2) * GROW_SHORT_STEP_MS
+            chars == 4 -> heldMs >= GROW_MIN_FOUR_MS
+            else ->
+                heldMs >= GROW_MIN_LONG_MS &&
+                    heldMs >= chars * GROW_MS_PER_CHAR
+        }
+
+    if (!qualifies) return null
+
+    val held = heldMs.coerceAtLeast(1L).toFloat()
+
+    val earnedRaw =
+        (
+            (held - GROW_RAMP_MIN_MS) /
+                (GROW_RAMP_MAX_MS - GROW_RAMP_MIN_MS)
+            ).coerceIn(0f, 1f)
+
+    val earned = earnedRaw * earnedRaw * earnedRaw
+
+    val decay = growingDecayRate(chars, held)
+
+    val bloomPace =
+        minOf(GROW_BLOOM_PACE_MAX, held / GROW_BLOOM_PACE_MS)
+
+    val bloomSpread =
+        when {
+            chars <= 3 -> GROW_BLOOM_SHORT
+            chars >= 6 -> GROW_BLOOM_LONG
+            else -> 1f
+        }
+
+    val base =
+        if (chars <= 3) GROW_BASE_SHORT else GROW_BASE_LONG
+
+    val liftPace =
+        (held / GROW_LIFT_PACE_MS).coerceIn(GROW_LIFT_FLOOR, 1f)
+
+    val scalePeak = FloatArray(chars)
+    val shiftPeak = FloatArray(chars)
+    val risePeak = FloatArray(chars)
+    val bloomPeak = FloatArray(chars)
+
+    for (i in 0 until chars) {
+        val place =
+            if (chars > 1) {
+                i.toFloat() / (chars - 1)
+            } else {
+                0f
+            }
+
+        val reach = earned * (1f - place * decay)
+        val scale = 1f + base + reach * GROW_SCALE_RANGE
+
+        scalePeak[i] = scale * GROW_SCALE_TRIM
+
+        bloomPeak[i] =
+            (GROW_BLOOM_FLOOR + reach * GROW_BLOOM_RANGE) *
+                bloomPace *
+                bloomSpread
+
+        risePeak[i] =
+            ((scale - 1f) / GROW_SCALE_CEILING) * liftPace
+
+        val centre = (i + 0.5f) / chars
+
+        shiftPeak[i] =
+            (centre - 0.5f) * 2f *
+                (scale - 1f) * GROW_SHIFT_EM * GROW_SCALE_TRIM
+    }
+
+    val last =
+        (chars - 1).coerceAtLeast(0) * GROW_STAGGER + GROW_SPAN
+
+    return GrowingLyricWord(
+        wordIndex = wordIndex,
+        startMs = startMs,
+        endMs = endMs,
+        scalePeak = scalePeak,
+        shiftPeak = shiftPeak,
+        risePeak = risePeak,
+        bloomPeak = bloomPeak,
+        restsAtMs = startMs + (held * last).toLong(),
+    )
+}
+
+private fun buildGrowingLyricWords(
+    line: LyricLine,
+): Map<Int, GrowingLyricWord> =
+    line.words.indices.mapNotNull { wordIndex ->
+        buildGrowingLyricWord(line, wordIndex)
+            ?.let { wordIndex to it }
+    }.toMap()
+
+private fun growingDecayRate(
+    chars: Int,
+    heldMs: Float,
+): Float {
+    val long = chars > GROW_DECAY_LONG_CHARS
+    val quick = heldMs < GROW_DECAY_QUICK_MS
+
+    if (!long && !quick) return 0f
+
+    var strength = 0f
+
+    if (long) {
+        strength +=
+            minOf(
+                (chars - GROW_DECAY_LONG_CHARS) / 5f,
+                1f,
+            ) * GROW_DECAY_LONG
+    }
+
+    if (quick) {
+        val short =
+            maxOf(
+                0f,
+                1f -
+                    (heldMs - GROW_DECAY_QUICK_FLOOR_MS) / 400f,
+            )
+
+        strength +=
+            short *
+                if (chars > 3) {
+                    GROW_DECAY_QUICK
+                } else {
+                    GROW_DECAY_QUICK_TINY
+                }
+    }
+
+    return minOf(strength, GROW_DECAY_MAX)
+}
+
+private fun growingWordFall(
+    line: LyricLine,
+    wordIndex: Int,
+    positionMs: Long,
+): Float {
+    val word =
+        line.words.getOrNull(wordIndex)
+            ?: return 0f
+
+    val endMs = inferredWordEndTimeMs(line, wordIndex)
+
+    val held =
+        (endMs - word.startTimeMs).toFloat()
+
+    val heldThrough =
+        (
+            (held - WORD_LIFT_QUICK_MS) /
+                (WORD_LIFT_HELD_MS - WORD_LIFT_QUICK_MS)
+            ).coerceIn(0f, 1f)
+
+    val liftHeight =
+        WORD_LIFT_FLOOR +
+            (1f - WORD_LIFT_FLOOR) * smoothStep(heldThrough)
+
+    val falling =
+        (
+            1f -
+                (positionMs - endMs).toFloat() / WORD_SETTLE_MS
+            ).coerceIn(0f, 1f)
+
+    return liftHeight * smoothStep(falling)
+}
+
+private fun Char.isLyricBlockScript(): Boolean =
+    this in '一'..'鿿' ||
+        this in '぀'..'ゟ' ||
+        this in '゠'..'ヿ' ||
+        this in '가'..'힯'
+
+private fun Char.isLyricJoinedScript(): Boolean =
+    this in '֐'..'ࣿ'
+
 private fun buildLyricVisualLineGeometry(
     layout: TextLayoutResult,
     line: LyricLine,
@@ -2300,6 +2800,58 @@ private fun buildLyricVisualLineGeometry(
     return visualLines
 }
 
+private fun ContentDrawScope.drawGrowingWordCharacters(
+    layout: TextLayoutResult,
+    line: LyricLine,
+    growing: GrowingLyricWord,
+    wordOffset: Int,
+    positionMs: Long,
+    peak: Float,
+    visualLine: LyricVisualLineGeometry,
+    growth: LyricCharGrowth,
+) {
+    val word = line.words.getOrNull(growing.wordIndex) ?: return
+    val textLength = layout.layoutInput.text.length
+    val em = layout.layoutInput.style.fontSize.toPx()
+    val fall = growingWordFall(line, growing.wordIndex, positionMs)
+    val rowMiddle = (visualLine.top + visualLine.bottom) / 2f
+
+    for (characterIndex in word.text.indices) {
+        val offset = wordOffset + characterIndex
+        if (offset !in 0 until textLength) continue
+        if (layout.getLineForOffset(offset) != visualLine.visualLine) continue
+
+        val character = word.text[characterIndex]
+        if (character.isWhitespace() || character.code in 0xD800..0xDFFF) continue
+
+        val bounds = layout.getBoundingBox(offset)
+        if (bounds.width <= 0f || bounds.height <= 0f) continue
+
+        growing.sampleInto(characterIndex, positionMs, growth)
+
+        val dx = growth.shift * em
+        val dy = -growth.rise * peak * fall
+        val overhang = bounds.width * (growth.scale - 1f) / 2f
+
+        clipRect(
+            left = bounds.left - overhang + dx,
+            top = visualLine.top - peak * GROW_HEADROOM,
+            right = bounds.right + overhang + dx,
+            bottom = bounds.bottom + 1f,
+        ) {
+            translate(left = dx, top = dy) {
+                scale(
+                    scaleX = growth.scale,
+                    scaleY = growth.scale,
+                    pivot = Offset(bounds.center.x, rowMiddle),
+                ) {
+                    this@drawGrowingWordCharacters.drawContent()
+                }
+            }
+        }
+    }
+}
+
 private fun ContentDrawScope.drawFloatingWords(
     line: LyricLine,
     visualLines: List<LyricVisualLineGeometry>,
@@ -2307,6 +2859,7 @@ private fun ContentDrawScope.drawFloatingWords(
     wordOffsets: List<Int>,
     positionMs: Long,
     animateTimedCharacters: Boolean,
+    growingWords: Map<Int, GrowingLyricWord>,
 ) {
     if (line.words.isEmpty() || visualLines.isEmpty()) {
         drawContent()
@@ -2321,6 +2874,8 @@ private fun ContentDrawScope.drawFloatingWords(
             positionMs = positionMs,
         )
     }
+
+    val growthBuffer = LyricCharGrowth()
 
     var hasActiveSegments = false
 
@@ -2438,7 +2993,24 @@ private fun ContentDrawScope.drawFloatingWords(
             val hasSyllableTiming =
                 animateTimedCharacters && word.syllables.isNotEmpty()
 
-            if (hasSyllableTiming) {
+            val growing = growingWords[segment.wordIndex]
+
+            if (
+                animateTimedCharacters &&
+                    growing != null &&
+                    positionMs in growing.startMs..growing.restsAtMs
+            ) {
+                drawGrowingWordCharacters(
+                    layout = layout,
+                    line = line,
+                    growing = growing,
+                    wordOffset = wordOffsets.getOrElse(segment.wordIndex) { 0 },
+                    positionMs = positionMs,
+                    peak = peak,
+                    visualLine = visualLine,
+                    growth = growthBuffer,
+                )
+            } else if (hasSyllableTiming) {
                 drawTimedWordCharacters(
                     layout = layout,
                     word = word,
@@ -2480,6 +3052,7 @@ private fun calculateLuminousCue(
     positionMs: Long,
     isWordSynced: Boolean,
     lineEndTimeMs: Long?,
+    growingWords: Map<Int, GrowingLyricWord>,
 ): LuminousCue? {
     if (!isWordSynced) {
         val lineEnd = lineEndTimeMs
@@ -2521,72 +3094,29 @@ private fun calculateLuminousCue(
         if (wordIndex > 0 && wordIndex - 1 in line.words.indices) add(wordIndex - 1)
     }
 
+    val backgroundFactor =
+        if (line.isBackground) LYRIC_BACKGROUND_GLOW_FACTOR else 1f
+
     return candidateIndices
         .distinct()
-        .mapNotNull { candidateIndex ->
-            calculateWordLuminousCue(
-                line = line,
-                wordIndex = candidateIndex,
-                positionMs = positionMs,
-            )
+        .firstNotNullOfOrNull { candidateIndex ->
+            val growing = growingWords[candidateIndex]
+
+            if (
+                growing == null ||
+                    positionMs < growing.startMs ||
+                    positionMs > growing.restsAtMs
+            ) {
+                null
+            } else {
+                LuminousCue(
+                    wordIndex = candidateIndex,
+                    startCharacter = 0,
+                    endCharacter = line.words[candidateIndex].text.length,
+                    alpha = LYRIC_GLOW_MAX_ALPHA * backgroundFactor,
+                )
+            }
         }
-        .maxByOrNull(LuminousCue::alpha)
-}
-
-private fun calculateWordLuminousCue(
-    line: LyricLine,
-    wordIndex: Int,
-    positionMs: Long,
-): LuminousCue? {
-    val word = line.words.getOrNull(wordIndex) ?: return null
-    if (word.text.isEmpty()) return null
-
-    val wordEnd = inferredWordEndTimeMs(line, wordIndex)
-    val duration = (wordEnd - word.startTimeMs).coerceAtLeast(1L)
-    if (positionMs < word.startTimeMs || positionMs > wordEnd + LYRIC_GLOW_TAIL_MS) {
-        return null
-    }
-
-    val afterEnd = (positionMs - wordEnd).coerceAtLeast(0L)
-    val progress = (
-        (positionMs - word.startTimeMs).toFloat() / duration.toFloat()
-        ).coerceIn(0f, 1f)
-    val strength = if (afterEnd > 0L) {
-        1f - afterEnd.toFloat() / LYRIC_GLOW_TAIL_MS.toFloat()
-    } else {
-        smoothStep((progress - 0.38f) / 0.58f)
-    }
-    if (strength <= 0.008f) return null
-
-    val luminousSegment = word.syllables
-        .asSequence()
-        .filter { it.endChar > it.startChar && it.endTimeMs > it.startTimeMs }
-        .filter {
-            positionMs >= it.startTimeMs - LYRIC_GLOW_TAIL_MS &&
-                positionMs <= it.endTimeMs + LYRIC_GLOW_TAIL_MS
-        }
-        .maxByOrNull { it.startTimeMs }
-
-    val startCharacter = luminousSegment
-        ?.startChar
-        ?.coerceIn(0, word.text.length)
-        ?: 0
-    val endCharacter = luminousSegment
-        ?.endChar
-        ?.coerceIn(startCharacter, word.text.length)
-        ?: word.text.length
-    if (endCharacter <= startCharacter) return null
-
-    val durationFactor = (duration.toFloat() / 900f).coerceIn(0.34f, 1f)
-    val backgroundFactor = if (line.isBackground) LYRIC_BACKGROUND_GLOW_FACTOR else 1f
-    val alpha = strength * durationFactor * LYRIC_GLOW_MAX_ALPHA * backgroundFactor
-
-    return LuminousCue(
-        wordIndex = wordIndex,
-        startCharacter = startCharacter,
-        endCharacter = endCharacter,
-        alpha = alpha.coerceIn(0f, LYRIC_GLOW_MAX_ALPHA),
-    )
 }
 
 private fun ContentDrawScope.drawLuminousGlyphRange(
@@ -2597,16 +3127,19 @@ private fun ContentDrawScope.drawLuminousGlyphRange(
     startCharacter: Int,
     endCharacter: Int,
     positionMs: Long,
+    growingWords: Map<Int, GrowingLyricWord>,
 ) {
+    val growing = growingWords[wordIndex] ?: return
     val word = line.words.getOrNull(wordIndex) ?: return
     val textLength = layout.layoutInput.text.length
     val first = (wordOffset + startCharacter).coerceIn(0, textLength)
     val last = (wordOffset + endCharacter).coerceIn(first, textLength)
     if (first >= last) return
 
-    val wordLift = calculateWordLift(line, wordIndex, positionMs)
-    val liftPixels = wordLift * WORD_RISE_DP.dp.toPx()
-    val characterRisePixels = LYRIC_CHARACTER_RISE_DP.dp.toPx()
+    val em = layout.layoutInput.style.fontSize.toPx()
+    val peak = WORD_RISE_DP.dp.toPx()
+    val fall = growingWordFall(line, wordIndex, positionMs)
+    val growth = LyricCharGrowth()
 
     for (characterIndex in startCharacter until endCharacter) {
         val offset = wordOffset + characterIndex
@@ -2618,31 +3151,37 @@ private fun ContentDrawScope.drawLuminousGlyphRange(
         val bounds = layout.getBoundingBox(offset)
         if (bounds.width <= 0f || bounds.height <= 0f) continue
 
-        val motion = characterMotionAmount(
-            word = word,
-            characterIndex = characterIndex,
-            positionMs = positionMs,
-        )
-        val scaleFactor = 1f + (LYRIC_CHARACTER_SCALE - 1f) * motion
-        val rise = liftPixels + characterRisePixels * motion
-        val horizontalRoom = bounds.width * (scaleFactor - 1f) / 2f + 1.5f
-        val verticalRoom = characterRisePixels + 2f
+        growing.sampleInto(characterIndex, positionMs, growth)
+        if (growth.bloom <= 0.01f) continue
+
+        val visualLine = layout.getLineForOffset(offset)
+        val rowTop = layout.getLineTop(visualLine)
+        val rowMiddle = (rowTop + layout.getLineBottom(visualLine)) / 2f
+
+        val dx = growth.shift * em
+        val dy = -growth.rise * peak * fall
+        val overhang = bounds.width * (growth.scale - 1f) / 2f
 
         clipRect(
-            left = bounds.left - horizontalRoom,
-            top = bounds.top - verticalRoom - liftPixels,
-            right = bounds.right + horizontalRoom,
+            left = bounds.left - overhang + dx,
+            top = rowTop - peak * GROW_HEADROOM,
+            right = bounds.right + overhang + dx,
             bottom = bounds.bottom + 1f,
         ) {
-            translate(top = -rise) {
+            translate(left = dx, top = dy) {
                 scale(
-                    scaleX = scaleFactor,
-                    scaleY = scaleFactor,
-                    pivot = Offset(bounds.center.x, bounds.center.y),
+                    scaleX = growth.scale,
+                    scaleY = growth.scale,
+                    pivot = Offset(bounds.center.x, rowMiddle),
                 ) {
                     this@drawLuminousGlyphRange.drawContent()
                 }
             }
+
+            drawRect(
+                color = Color.White.copy(alpha = growth.bloom),
+                blendMode = BlendMode.DstIn,
+            )
         }
     }
 }

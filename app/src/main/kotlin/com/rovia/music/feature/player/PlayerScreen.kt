@@ -36,17 +36,15 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -89,6 +89,7 @@ import com.rovia.music.ui.components.LyricLine
 import com.rovia.music.ui.components.LyricLinePreview
 import com.rovia.music.ui.components.SyncedLyrics
 import com.rovia.music.ui.components.AudioPipelineBottomSheet
+import com.rovia.music.ui.components.WavySeekBar
 import com.rovia.music.ui.components.TrackInfoBottomSheet
 import com.rovia.music.ui.components.AddToPlaylistDialog
 import com.rovia.music.ui.components.TrackMenu
@@ -111,6 +112,7 @@ fun PlayerScreen(
     onToggleLike: ((LocalAudioTrack) -> Unit)? = null,
     onAddToPlaylist: ((Long, LocalAudioTrack) -> Unit)? = null,
     onCreatePlaylist: ((String, LocalAudioTrack) -> Unit)? = null,
+    externalMode: Boolean = false,
 ) {
     val controller by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -137,8 +139,8 @@ fun PlayerScreen(
         mutableStateOf(controller?.mediaMetadata?.artist?.toString())
     }
 
-    // Use the same parser as LocalAudioTrack.artistNames and ArtistPage so artist credits
-    // are split consistently and protected names such as "Earth, Wind & Fire" stay intact.
+    // Uses the same parser as LocalAudioTrack.artistNames, so artist credits
+    // split consistently and protected names such as "Earth, Wind & Fire" stay intact.
     val artistNames = remember(currentArtist) {
         ArtistCreditParser.parse(currentArtist)
     }
@@ -232,9 +234,13 @@ fun PlayerScreen(
         }
     }
 
-    val sourceTrack = currentTrackDetail
-        ?.takeIf { it.uri == currentQueueTrack?.uri }
-        ?: currentQueueTrack
+    val sourceTrack = if (externalMode) {
+        null
+    } else {
+        currentTrackDetail
+            ?.takeIf { it.uri == currentQueueTrack?.uri }
+            ?: currentQueueTrack
+    }
 
     val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
     val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
@@ -613,8 +619,10 @@ fun PlayerScreen(
                                         UserLibraryRepository.likedTrackKey(track) in likedTrackKeys
                                     } ?: false,
                                     onToggleLike = onToggleLike,
-                                    onAddToPlaylist = { track ->
-                                        playlistPickerTrack = track
+                                    onAddToPlaylist = if (externalMode) {
+                                        null
+                                    } else {
+                                        { track -> playlistPickerTrack = track }
                                     },
                                 )
                             }
@@ -636,8 +644,8 @@ fun PlayerScreen(
                             .offset(y = -controlsVerticalOffset),
                     ) {
                         if (hasMedia) {
-                            // Fixed two-line slot: the lyric stays centered and
-                            // does not move when the text wraps.
+                            // Fixed two-line slot: the lyric stays centered
+                            // when the text wraps.
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -653,7 +661,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        // Only the seekbar moves here; the lyric slot and the
+                        // Only the seekbar moves here; the lyric slot and
                         // transport controls keep their own anchors.
                         Column(
                             modifier = Modifier.offset(y = -PlayerSeekbarVerticalAdjustment),
@@ -662,34 +670,39 @@ fun PlayerScreen(
                                 .takeIf { it > 0L }
                                 ?.toFloat()
                                 ?: 1f
-                            val sliderValue = (
-                                dragPosition ?: currentPosition.toFloat()
-                            ).coerceIn(0f, sliderMaximum)
-                            val sliderState = key(currentTitle, durationMs) {
-                                rememberSliderState(
-                                    value = sliderValue,
-                                    trackRange = 0f..sliderMaximum,
-                                )
+                            val seekHaptics = LocalHapticFeedback.current
+                            val lastSeekHapticStep = remember {
+                                intArrayOf(-1)
                             }
 
-                            LaunchedEffect(sliderValue, sliderMaximum) {
-                                sliderState.value = sliderValue
-                            }
-
-                            Slider(
-                                state = sliderState,
-                                onValueChange = { value ->
-                                    sliderState.value = value
-                                    dragPosition = value
+                            WavySeekBar(
+                                value = {
+                                    (
+                                        (dragPosition ?: currentPosition.toFloat()) /
+                                            sliderMaximum
+                                    ).coerceIn(0f, 1f)
                                 },
-                                onValueChangeFinished = {
-                                    dragPosition?.let { position ->
-                                        controller?.seekTo(position.toLong())
-                                        currentPosition = position.toLong()
+                                onValueChange = { fraction ->
+                                    dragPosition = fraction * sliderMaximum
+                                    val quantized = (fraction * 20f).toInt()
+                                    if (quantized != lastSeekHapticStep[0]) {
+                                        lastSeekHapticStep[0] = quantized
+                                        seekHaptics.performHapticFeedback(
+                                            HapticFeedbackType.TextHandleMove,
+                                        )
                                     }
+                                },
+                                onValueCommit = { fraction ->
+                                    val target = (fraction * sliderMaximum).toLong()
+                                    controller?.seekTo(target)
+                                    currentPosition = target
                                     dragPosition = null
                                 },
                                 enabled = controller != null && hasMedia && durationMs > 0L,
+                                isPlaying = isPlaying,
+                                semanticsLabel = stringResource(
+                                    R.string.player_playback_position,
+                                ),
                                 modifier = Modifier.fillMaxWidth(),
                             )
 
@@ -741,12 +754,19 @@ fun PlayerScreen(
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showPipelineSheet = true }
+                                    .clickable(
+                                        interactionSource = remember {
+                                            MutableInteractionSource()
+                                        },
+                                        indication = null,
+                                    ) { showPipelineSheet = true }
                                     .padding(vertical = 4.dp),
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        // Centers the source line between the seekbar and
+                        // the transport controls.
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // The content column owns the 18.dp side inset.
                         val playbackButtonGroupWidth = controlsWidth
@@ -790,6 +810,7 @@ fun PlayerScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             ButtonGroup(
+                                expandedRatio = 0.4f,
                                 modifier = Modifier.width(playbackButtonGroupWidth),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 overflowIndicator = { menuState ->
@@ -798,36 +819,6 @@ fun PlayerScreen(
                                     )
                                 },
                             ) {
-                                customItem(
-                                    buttonGroupContent = {
-                                        FilledIconButton(
-                                            enabled = hasMedia,
-                                            onClick = {
-                                                controller?.seekToPreviousMediaItem()
-                                            },
-                                            interactionSource = previousInteractionSource,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .animateWidth(
-                                                    interactionSource = previousInteractionSource,
-                                                    compressionLimit = 16.dp,
-                                                ),
-                                            colors = IconButtonDefaults.filledIconButtonColors(
-                                                containerColor = idlePlaybackContainerColor,
-                                                contentColor = idlePlaybackContentColor,
-                                            ),
-                                            shapes = IconButtonDefaults.shapes(),
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_skip_previous),
-                                                contentDescription = stringResource(R.string.player_previous),
-                                                modifier = Modifier.size(30.dp),
-                                            )
-                                        }
-                                    },
-                                    menuContent = {},
-                                )
-
                                 customItem(
                                     buttonGroupContent = {
                                         FilledIconToggleButton(
@@ -860,6 +851,36 @@ fun PlayerScreen(
                                                     if (showPauseIcon) R.string.player_pause else R.string.player_play,
                                                 ),
                                                 modifier = Modifier.size(32.dp),
+                                            )
+                                        }
+                                    },
+                                    menuContent = {},
+                                )
+
+                                customItem(
+                                    buttonGroupContent = {
+                                        FilledIconButton(
+                                            enabled = hasMedia,
+                                            onClick = {
+                                                controller?.seekToPreviousMediaItem()
+                                            },
+                                            interactionSource = previousInteractionSource,
+                                            modifier = Modifier
+                                                .size(64.dp)
+                                                .animateWidth(
+                                                    interactionSource = previousInteractionSource,
+                                                    compressionLimit = 16.dp,
+                                                ),
+                                            colors = IconButtonDefaults.filledIconButtonColors(
+                                                containerColor = idlePlaybackContainerColor,
+                                                contentColor = idlePlaybackContentColor,
+                                            ),
+                                            shapes = IconButtonDefaults.shapes(),
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_skip_previous),
+                                                contentDescription = stringResource(R.string.player_previous),
+                                                modifier = Modifier.size(30.dp),
                                             )
                                         }
                                     },
@@ -906,44 +927,47 @@ fun PlayerScreen(
                                 .height(64.dp)
                                 .offset(y = lyricsVerticalCompensation),
                         ) {
-                            FilledIconButton(
+                            IconButton(
                                 onClick = { showLyrics = true },
                                 enabled = hasMedia,
-                                modifier = Modifier.align(Alignment.CenterStart),
-                                shapes = IconButtonDefaults.shapes(),
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .size(48.dp),
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.White.copy(alpha = 0.38f),
                                 ),
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_lyrics),
                                     contentDescription = stringResource(R.string.player_lyrics),
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(28.dp),
                                 )
                             }
 
                             AudioOutputIndicator(
                                 enabled = hasMedia,
+                                externalMode = externalMode,
                                 modifier = Modifier
                                     .align(Alignment.Center)
                                     .padding(horizontal = 56.dp),
                             )
 
-                            FilledIconButton(
+                            IconButton(
                                 onClick = { showQueueSheet = true },
                                 enabled = hasMedia,
-                                modifier = Modifier.align(Alignment.CenterEnd),
-                                shapes = IconButtonDefaults.shapes(),
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .size(48.dp),
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.White.copy(alpha = 0.38f),
                                 ),
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_queue),
                                     contentDescription = stringResource(R.string.player_queue),
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(28.dp),
                                 )
                             }
                         }
@@ -958,6 +982,13 @@ fun PlayerScreen(
                     onTrackSelected = { index ->
                         playbackController.playQueueItem(index)
                     },
+                    onRepeatClick = {
+                        playbackController.cycleRepeatMode()
+                    },
+                    onShuffleClick = {
+                        playbackController.toggleShuffleMode()
+                    },
+                    navigationBarInset = systemNavigationBarBottomInset,
                 )
             }
 

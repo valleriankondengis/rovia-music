@@ -96,6 +96,7 @@ private data class AudioOutputSnapshot(
 internal fun AudioOutputIndicator(
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    externalMode: Boolean = false,
 ) {
     val context = LocalContext.current.applicationContext
     val audioManager = remember(context) {
@@ -111,7 +112,8 @@ internal fun AudioOutputIndicator(
         mutableStateOf(false)
     }
     val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
-    val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
+    val storedOutputMode by outputModeStore.mode.collectAsStateWithLifecycle()
+    val outputMode = if (externalMode) AudioOutputMode.OFF else storedOutputMode
     val directUsbController = remember(context) { DirectUsbControllerProvider.get(context) }
     var dacVolume by remember { mutableStateOf<DacVolumeDto?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -151,7 +153,7 @@ internal fun AudioOutputIndicator(
         else -> buttonLocalDeviceIcon
     }
     val buttonDescription = "$buttonContentDescription, $outputLabel"
-    val buttonContentColor = colorScheme.onSurface
+    val buttonContentColor = Color.White
     val sheetIconColor = colorScheme.onSurfaceVariant
     val volumeAccentColor = colorScheme.primary
 
