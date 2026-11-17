@@ -1,6 +1,6 @@
 # Rovia Music
 
-Rovia Music is a lightweight, native Kotlin and Jetpack Compose Android music player with a beautiful Material 3 Expressive UI.
+Rovia Music is a lightweight, native Kotlin, Jetpack Compose and Rust Android music player with a beautiful Material 3 Expressive UI.
 
 ## Requirements
 
