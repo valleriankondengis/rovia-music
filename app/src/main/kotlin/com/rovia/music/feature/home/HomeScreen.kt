@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -58,6 +58,24 @@ import com.rovia.music.ui.components.TrackListCard
 import com.rovia.music.ui.permissions.rememberAudioPermissionGranted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
+import com.rovia.music.feature.wrapped.WrappedPeriod
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.WeekFields
+import java.util.Locale
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.text.style.TextOverflow
+import java.text.NumberFormat
 
 private val HomeNavigationBarHeight = 80.dp
 private val HomeMiniPlayerHeight = 80.dp
@@ -72,7 +90,9 @@ fun HomeScreen(
     playbackController: PlaybackController,
     onOpenRecentlyAdded: () -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenWrapped: (WrappedPeriod) -> Unit,
+    wrappedCards: List<WrappedHomeCardData> = emptyList()
 ) {
     val hasAudioPermission = rememberAudioPermissionGranted()
 
@@ -130,7 +150,7 @@ fun HomeScreen(
     val contentTopPadding =
         statusBarTopInset +
             TopAppBarDefaults.TopAppBarExpandedHeight +
-            16.dp
+            4.dp
 
     val contentBottomPadding =
         navigationBarBottomInset +
@@ -204,6 +224,15 @@ fun HomeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (wrappedCards.isNotEmpty()) {
+                item {
+                    WrappedCarousel(
+                        cards = wrappedCards,
+                        onOpenWrapped = onOpenWrapped
+                    )
+                }
+            }
+
             item {
                 RecentlyAddedCarouselSection(
                     tracks = recentlyAddedTracks,
@@ -297,6 +326,7 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RecentlyAddedCarouselSection(
     tracks: List<LocalAudioTrack>,
@@ -314,7 +344,7 @@ private fun RecentlyAddedCarouselSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 22.dp, bottom = 10.dp),
+            .padding(bottom = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(
@@ -356,7 +386,7 @@ private fun RecentlyAddedCarouselSection(
                         .padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    ContainedLoadingIndicator()
                 }
             }
 
@@ -433,6 +463,151 @@ private fun CardMessage(
             onClick = onAction
         ) {
             Text(actionLabel)
+        }
+    }
+}
+data class WrappedHomeCardData(
+    val period: WrappedPeriod,
+    val minutes: Long,
+    val topTrack: String?,
+    val topArtist: String?,
+    val topAlbum: String?
+)
+
+@Composable
+private fun WrappedCarousel(
+    cards: List<WrappedHomeCardData>,
+    onOpenWrapped: (WrappedPeriod) -> Unit
+) {
+    val rowState = rememberLazyListState()
+    LazyRow(
+        state = rowState,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        flingBehavior = rememberSnapFlingBehavior(lazyListState = rowState)
+    ) {
+        items(
+            items = cards,
+            key = { card -> "wrapped-${card.period.name}" }
+        ) { card ->
+            WrappedHomeCard(
+                data = card,
+                onClick = { onOpenWrapped(card.period) },
+                modifier = Modifier.width(300.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun WrappedHomeCard(
+    data: WrappedHomeCardData,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val period = data.period
+    val subtitle = remember(period) {
+        val today = LocalDate.now()
+        val locale = Locale.getDefault()
+        when (period) {
+            WrappedPeriod.TODAY -> today.format(
+                DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", locale)
+            )
+            WrappedPeriod.WEEK -> {
+                val weekStart = today.with(
+                    WeekFields.of(locale).dayOfWeek(),
+                    1
+                )
+                val weekEnd = weekStart.plusDays(6)
+                weekStart.format(
+                    DateTimeFormatter.ofPattern("d MMM", locale)
+                ) + " \u2013 " + weekEnd.format(
+                    DateTimeFormatter.ofPattern("d MMM yyyy", locale)
+                )
+            }
+            WrappedPeriod.MONTH -> today.format(
+                DateTimeFormatter.ofPattern("MMMM yyyy", locale)
+            )
+            WrappedPeriod.YEAR -> today.format(
+                DateTimeFormatter.ofPattern("yyyy", locale)
+            )
+        }
+    }
+    val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
+    Card(
+        onClick = onClick,
+        modifier = modifier.aspectRatio(16f / 9f),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(30.dp)
+            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = stringResource(
+                        when (period) {
+                            WrappedPeriod.TODAY -> R.string.wrapped_card_today
+                            WrappedPeriod.WEEK -> R.string.wrapped_card_week
+                            WrappedPeriod.MONTH -> R.string.wrapped_card_month
+                            WrappedPeriod.YEAR -> R.string.wrapped_card_year
+                        }
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                        .copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = stringResource(
+                        R.string.wrapped_card_minutes,
+                        numberFormat.format(data.minutes)
+                    ),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                data.topTrack?.let { value ->
+                    Text(
+                        text = stringResource(R.string.wrapped_card_top_song, value),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                data.topArtist?.let { value ->
+                    Text(
+                        text = stringResource(R.string.wrapped_card_top_artist, value),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                data.topAlbum?.let { value ->
+                    Text(
+                        text = stringResource(R.string.wrapped_card_top_album, value),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }

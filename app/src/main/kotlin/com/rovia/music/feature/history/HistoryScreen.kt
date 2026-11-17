@@ -17,7 +17,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -111,6 +112,7 @@ private data class HistoryDisplayGroupKey(
     val entityIdentity: String,
 )
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HistoryScreen(
     items: List<HistoryActivityUiModel>,
@@ -290,7 +292,7 @@ fun HistoryScreen(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator()
+                    ContainedLoadingIndicator()
                 }
             }
 
@@ -431,7 +433,7 @@ fun HistoryScreen(
                                         .padding(16.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    CircularProgressIndicator()
+                                    ContainedLoadingIndicator()
                                 }
                             }
                         } else if (loadFailed) {
