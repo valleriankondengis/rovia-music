@@ -27,8 +27,38 @@
 
         </activity>
 
+        <activity
+            android:name=".ExternalPlayerActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.rovia.music.externalplayer"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+
+        </activity>
+
         <service
             android:name=".playback.service.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.session.MediaButtonReceiver" />
+            </intent-filter>
+
+        </service>
+
+        <service
+            android:name=".playback.external.ExternalPlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
 
@@ -49,6 +79,16 @@
 
         </receiver>
 
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

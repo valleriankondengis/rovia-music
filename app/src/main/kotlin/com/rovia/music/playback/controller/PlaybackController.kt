@@ -42,11 +42,14 @@ data class PlaybackQueueItem(
 data class PlaybackQueueState(
     val items: List<PlaybackQueueItem> = emptyList(),
     val currentIndex: Int = -1,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val shuffleModeEnabled: Boolean = false,
 )
 
 @OptIn(ExperimentalAtomicApi::class)
 class PlaybackController(
     context: Context,
+    private val serviceClass: Class<*> = PlaybackService::class.java,
 ) {
     private val appContext = context.applicationContext
     private val _mediaController = MutableStateFlow<MediaController?>(null)
@@ -65,7 +68,7 @@ class PlaybackController(
 
         val sessionToken = SessionToken(
             appContext,
-            ComponentName(appContext, PlaybackService::class.java),
+            ComponentName(appContext, serviceClass),
         )
         val future = MediaController.Builder(appContext, sessionToken).buildAsync()
         val releaseAction: () -> Unit = { MediaController.releaseFuture(future) }
@@ -100,12 +103,18 @@ class PlaybackController(
         tracks: List<LocalAudioTrack>,
         startIndex: Int,
         origin: PlaybackOrigin? = null,
+        shuffle: Boolean = false,
     ): Boolean {
         val controller = _mediaController.value ?: return false
         if (tracks.isEmpty() || startIndex !in tracks.indices) return false
 
         val requestedTracks = tracks.toList()
-        val selectedTrack = requestedTracks[startIndex]
+        val effectiveStartIndex = if (shuffle && requestedTracks.size > 1) {
+            requestedTracks.indices.random()
+        } else {
+            startIndex
+        }
+        val selectedTrack = requestedTracks[effectiveStartIndex]
         val playbackOrigin = origin ?: PlaybackOrigin(
             type = PlaybackOriginType.TRACK,
             entityKey = buildString {
@@ -213,18 +222,37 @@ class PlaybackController(
             if (
                 requestId != queueRequestId.load() ||
                 _mediaController.value !== controller ||
-                startIndex !in mediaItems.indices
+                effectiveStartIndex !in mediaItems.indices
             ) {
                 return@launch
             }
 
-            controller.setMediaItems(mediaItems, startIndex, 0L)
+            if (shuffle) {
+                controller.shuffleModeEnabled = true
+            }
+            controller.setMediaItems(mediaItems, effectiveStartIndex, 0L)
             controller.prepare()
             controller.play()
 
         }
 
         return true
+    }
+
+    fun cycleRepeatMode() {
+        val controller = _mediaController.value ?: return
+
+        controller.repeatMode = when (controller.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+    }
+
+    fun toggleShuffleMode() {
+        val controller = _mediaController.value ?: return
+
+        controller.shuffleModeEnabled = !controller.shuffleModeEnabled
     }
 
     fun playQueueItem(index: Int): Boolean {
@@ -285,6 +313,8 @@ class PlaybackController(
         _queueState.value = PlaybackQueueState(
             items = items,
             currentIndex = currentIndex,
+            repeatMode = player.repeatMode,
+            shuffleModeEnabled = player.shuffleModeEnabled,
         )
     }
 

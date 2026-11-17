@@ -27,6 +27,7 @@ import com.rovia.music.data.local.entity.PlaybackSessionEntity
 import com.rovia.music.data.local.entity.PlaybackTrackEventEntity
 import com.rovia.music.playback.bitperfect.AudioOutputMode
 import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.external.ExternalPlaybackCoordinator
 import com.rovia.music.playback.bitperfect.AudioOutputModeStore
 import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
 import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
@@ -255,6 +256,7 @@ class PlaybackService : MediaSessionService() {
         }
         val exoPlayer = buildPlayer(outputMode)
         player = exoPlayer
+        ExternalPlaybackCoordinator.registerMainPlayer(exoPlayer)
         startListeningCheckpointLoop(exoPlayer)
         if (outputMode == AudioOutputMode.DIRECT_USB) {
             ensureDirectSession()
@@ -326,6 +328,7 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = null
         player = null
+        ExternalPlaybackCoordinator.registerMainPlayer(null)
         super.onDestroy()
     }
 
@@ -408,6 +411,7 @@ class PlaybackService : MediaSessionService() {
 
         val newPlayer = buildPlayer(newMode)
         player = newPlayer
+        ExternalPlaybackCoordinator.registerMainPlayer(newPlayer)
         startListeningCheckpointLoop(newPlayer)
         mediaSession?.setPlayer(newPlayer)
 
