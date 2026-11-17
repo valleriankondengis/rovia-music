@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -56,6 +53,7 @@ import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
+import com.rovia.music.ui.theme.BackdropContentTheme
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.TrackInfoSheetHost
@@ -64,6 +62,10 @@ import com.rovia.music.ui.components.UserLibraryMenuDialogHost
 import com.rovia.music.ui.components.UserLibraryMenuState
 import com.rovia.music.ui.components.rememberTrackInfoState
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.DropdownMenuItem
 
 private val SinglePageNavigationBarHeight = 80.dp
 private val SinglePageMiniPlayerHeight = 80.dp
@@ -77,6 +79,8 @@ fun SinglePage(
     playbackController: PlaybackController,
     onBack: () -> Unit,
     userLibraryMenu: UserLibraryMenuState? = null,
+    entityLiked: Boolean = false,
+    onToggleEntityLike: (() -> Unit)? = null,
 ) {
     val release = releaseData?.takeIf { candidate ->
         candidate.type == AlbumReleaseType.SINGLE || candidate.type == AlbumReleaseType.EP
@@ -157,191 +161,192 @@ fun SinglePage(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val artworkUri = remember(release) { release?.artworkUri }
-        val artworkSize = minOf(maxWidth * 0.78f, 340.dp, maxHeight * 0.36f).coerceAtLeast(150.dp)
-        val playButtonWidth = (maxWidth * 0.66f).coerceAtMost(360.dp).coerceAtLeast(220.dp)
+    BackdropContentTheme {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val artworkUri = remember(release) { release?.artworkUri }
+            val artworkSize = minOf(maxWidth * 0.78f, 340.dp, maxHeight * 0.36f).coerceAtLeast(150.dp)
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            ArtworkBackdrop(
-                artworkUri = artworkUri,
-                foregroundArtworkHeight = 0.dp,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            if (pageTracks.isEmpty()) {
-                Column(
+            Box(modifier = Modifier.fillMaxSize()) {
+                ArtworkBackdrop(
+                    artworkUri = artworkUri,
+                    foregroundArtworkHeight = 0.dp,
                     modifier = Modifier.fillMaxSize()
-                        .padding(top = contentTopPadding, bottom = contentBottomPadding)
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_no_tracks),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (pageTracks.isEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .padding(top = contentTopPadding, bottom = contentBottomPadding)
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.library_no_tracks),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    TrackList(
+                        tracks = pageTracks,
+                        onTrackClick = { track, index ->
+                            val controller = mediaController
+                            if (controller != null) {
+                                if (currentMediaId == track.id.toString()) {
+                                    if (controller.isPlaying) {
+                                        controller.pause()
+                                    } else {
+                                        if (controller.playbackState == Player.STATE_ENDED) {
+                                            controller.seekToDefaultPosition()
+                                        }
+                                        controller.play()
+                                    }
+                                } else {
+                                    playbackController.playQueue(
+                                        tracks = pageTracks,
+                                        startIndex = index,
+                                        origin = PlaybackOrigin(
+                                            type = playbackOriginType,
+                                            entityKey = releaseKey,
+                                            title = pageTitle,
+                                            subtitle = releaseArtist,
+                                            artworkSourceUri = artworkUri,
+                                        ),
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        outerPadding = PaddingValues(
+                            top = contentTopPadding,
+                            bottom = contentBottomPadding
+                        ),
+                        horizontalPadding = 18.dp,
+                        verticalSpacing = 1.dp,
+                        currentTrackId = currentMediaId,
+                        itemsEnabled = mediaController != null,
+                        onTrackInfoClick = trackInfoState::show,
+                        likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                        onToggleLike = userLibraryMenu?.onToggleLike,
+                        onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
+                        headerContent = {
+                            item(key = "single-hero-$releaseKey") {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    AlbumArtwork(
+                                        artworkUri = artworkUri,
+                                        fallbackText = pageTitle,
+                                        contentDescription = pageTitle,
+                                        modifier = Modifier.size(artworkSize),
+                                        size = artworkSize,
+                                        shape = MaterialTheme.shapes.large
+                                    )
+
+                                    Spacer(modifier = Modifier.height(18.dp))
+                                    Text(
+                                        text = pageTitle,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = releaseArtist,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = releaseMetadata,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(22.dp))
+                                    PlayAndLikeButtonGroup(
+                                        onPlay = {
+                                            if (mediaController != null) {
+                                                playbackController.playQueue(
+                                                    tracks = pageTracks,
+                                                    startIndex = 0,
+                                                    origin = PlaybackOrigin(
+                                                        type = playbackOriginType,
+                                                        entityKey = releaseKey,
+                                                        title = pageTitle,
+                                                        subtitle = releaseArtist,
+                                                        artworkSourceUri = artworkUri,
+                                                    ),
+                                                )
+                                            }
+                                        },
+                                        onShufflePlay = {
+                                            if (mediaController != null) {
+                                                playbackController.playQueue(
+                                                    tracks = pageTracks,
+                                                    startIndex = 0,
+                                                    origin = PlaybackOrigin(
+                                                        type = playbackOriginType,
+                                                        entityKey = releaseKey,
+                                                        title = pageTitle,
+                                                        subtitle = releaseArtist,
+                                                        artworkSourceUri = artworkUri,
+                                                    ),
+                                                    shuffle = true,
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        playEnabled = mediaController != null && pageTracks.isNotEmpty(),
+                                        liked = entityLiked,
+                                        onToggleLike = onToggleEntityLike
+                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                }
+                            }
+                        }
                     )
                 }
-            } else {
-                TrackList(
-                    tracks = pageTracks,
-                    onTrackClick = { track, index ->
-                        val controller = mediaController
-                        if (controller != null) {
-                            if (currentMediaId == track.id.toString()) {
-                                if (controller.isPlaying) {
-                                    controller.pause()
-                                } else {
-                                    if (controller.playbackState == Player.STATE_ENDED) {
-                                        controller.seekToDefaultPosition()
-                                    }
-                                    controller.play()
-                                }
-                            } else {
-                                playbackController.playQueue(
-                                    tracks = pageTracks,
-                                    startIndex = index,
-                                    origin = PlaybackOrigin(
-                                        type = playbackOriginType,
-                                        entityKey = releaseKey,
-                                        title = pageTitle,
-                                        subtitle = releaseArtist,
-                                        artworkSourceUri = artworkUri,
-                                    ),
-                                )
-                            }
+
+                TopAppBar(
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
+                    title = {},
+                    navigationIcon = {
+                        FilledIconButton(
+                            onClick = onBack,
+                            shapes = IconButtonDefaults.shapes(),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_back),
+                                contentDescription = backContentDescription
+                            )
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    outerPadding = PaddingValues(
-                        top = contentTopPadding,
-                        bottom = contentBottomPadding
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     ),
-                    horizontalPadding = 18.dp,
-                    verticalSpacing = 1.dp,
-                    currentTrackId = currentMediaId,
-                    itemsEnabled = mediaController != null,
-                    onTrackInfoClick = trackInfoState::show,
-                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
-                    onToggleLike = userLibraryMenu?.onToggleLike,
-                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
-                    headerContent = {
-                        item(key = "single-hero-$releaseKey") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                AlbumArtwork(
-                                    artworkUri = artworkUri,
-                                    fallbackText = pageTitle,
-                                    contentDescription = pageTitle,
-                                    modifier = Modifier.size(artworkSize),
-                                    size = artworkSize,
-                                    shape = MaterialTheme.shapes.large
-                                )
-
-                                Spacer(modifier = Modifier.height(18.dp))
-                                Text(
-                                    text = pageTitle,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = releaseArtist,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = releaseMetadata,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(22.dp))
-                                Button(
-                                    onClick = {
-                                        if (mediaController != null) {
-                                            playbackController.playQueue(
-                                                tracks = pageTracks,
-                                                startIndex = 0,
-                                                origin = PlaybackOrigin(
-                                                    type = playbackOriginType,
-                                                    entityKey = releaseKey,
-                                                    title = pageTitle,
-                                                    subtitle = releaseArtist,
-                                                    artworkSourceUri = artworkUri,
-                                                ),
-                                            )
-                                        }
-                                    },
-                                    enabled = mediaController != null && pageTracks.isNotEmpty(),
-                                    modifier = Modifier.width(playButtonWidth).height(64.dp),
-                                    shape = RoundedCornerShape(percent = 50),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 28.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_play),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = stringResource(R.string.player_play),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(24.dp))
-                            }
-                        }
-                    }
+                    contentPadding = PaddingValues(horizontal = 10.dp),
                 )
             }
-
-            TopAppBar(
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
-                title = {},
-                navigationIcon = {
-                    FilledIconButton(
-                        onClick = onBack,
-                        shapes = IconButtonDefaults.shapes(),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = backContentDescription
-                        )
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent
-                ),
-                contentPadding = PaddingValues(horizontal = 10.dp),
-            )
         }
     }
 
@@ -352,4 +357,144 @@ fun SinglePage(
     }
 }
 
+
+
+/**
+ * The page's primary actions as a Material 3 Expressive button group:
+ * a Shuffle circle, a large Play circle, and a Liked toggle circle.
+ * Pressing a circle expands it and compresses its neighbours.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PlayAndLikeButtonGroup(
+    onPlay: () -> Unit,
+    onShufflePlay: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    playEnabled: Boolean = true,
+    liked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
+) {
+    ButtonGroup(
+        overflowIndicator = { state ->
+            ButtonGroupDefaults.OverflowIndicator(state)
+        },
+        modifier = modifier,
+        expandedRatio = 0.4f,
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onShufflePlay != null) {
+            customItem(
+                buttonGroupContent = {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    FilledIconButton(
+                        onClick = onShufflePlay,
+                        enabled = playEnabled,
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .animateWidth(interactionSource)
+                            .size(52.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_shuffle),
+                            contentDescription = stringResource(R.string.player_shuffle),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                menuContent = { state ->
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.player_shuffle)) },
+                        onClick = {
+                            onShufflePlay()
+                            state.dismiss()
+                        },
+                    )
+                },
+            )
+        }
+        customItem(
+            buttonGroupContent = {
+                val interactionSource = remember { MutableInteractionSource() }
+                FilledIconButton(
+                    onClick = onPlay,
+                    enabled = playEnabled,
+                    interactionSource = interactionSource,
+                    modifier = Modifier
+                        .animateWidth(interactionSource)
+                        .size(70.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = stringResource(R.string.player_play),
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            },
+            menuContent = { state ->
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.player_play)) },
+                    onClick = {
+                        onPlay()
+                        state.dismiss()
+                    },
+                )
+            },
+        )
+        if (onToggleLike != null) {
+            customItem(
+                buttonGroupContent = {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    FilledIconButton(
+                        onClick = onToggleLike,
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .animateWidth(interactionSource)
+                            .size(52.dp),
+                        colors = if (liked) {
+                            IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (liked) {
+                                    R.drawable.ic_favorite
+                                } else {
+                                    R.drawable.ic_favorite_border
+                                }
+                            ),
+                            contentDescription = stringResource(R.string.entity_like),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                menuContent = { state ->
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.entity_like)) },
+                        onClick = {
+                            onToggleLike()
+                            state.dismiss()
+                        },
+                    )
+                },
+            )
+        }
+    }
+}
 

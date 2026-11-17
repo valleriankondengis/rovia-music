@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,13 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -73,10 +71,18 @@ import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
+import com.rovia.music.ui.theme.BackdropContentTheme
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.ArtworkBitmapLoader
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Row
 
 private val ArtistCarouselArtworkSize = 150.dp
 private val ArtistCarouselItemWidth = ArtistCarouselArtworkSize
@@ -111,6 +117,9 @@ fun ArtistPage(
     onOpenAlbum: (String) -> Unit,
     onOpenGenre: (String) -> Unit,
     @StringRes songsAndEpsTitleRes: Int,
+    entityLiked: Boolean = false,
+    onToggleEntityLike: (() -> Unit)? = null,
+    topTracks: List<LocalAudioTrack> = emptyList(),
 ) {
     val artistKey = remember(artistName) {
         ArtistCreditParser.normalizeIdentity(artistName)
@@ -185,6 +194,8 @@ fun ArtistPage(
         buildArtistGenres(artistTracks)
     }
 
+    val recentRelease = sortedArtistReleases.firstOrNull()
+
     val singlesAndEpsListState = rememberLazyListState()
     val albumsListState = rememberLazyListState()
     val genresListState = rememberLazyListState()
@@ -199,167 +210,222 @@ fun ArtistPage(
     val reservedBottomSpace = navigationBarBottomInset + 80.dp + 16.dp +
         if (currentTrackId != null) 80.dp else 0.dp
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val heroHeightFraction = if (singlesAndEps.isNotEmpty() || albums.isNotEmpty()) {
-            0.68f
-        } else {
-            0.72f
-        }
-        val heroHeight = (maxHeight * heroHeightFraction)
-            .coerceAtLeast(380.dp)
-            .coerceAtMost(maxHeight)
-        val playButtonWidth = (maxWidth * 0.66f)
-            .coerceAtMost(360.dp)
-            .coerceAtLeast(220.dp)
+    BackdropContentTheme {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val heroHeight = (maxWidth / 0.95f)
+                .coerceAtMost(maxHeight * 0.6f)
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            key(heroArtworkUri) {
-                ArtworkBackdrop(
-                    artworkUri = heroArtworkUri,
-                    foregroundArtworkHeight = 0.dp,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(bottom = reservedBottomSpace),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                item(key = "artist-hero") {
-                    ArtistHeroHeader(
-                        artistName = resolvedArtistName,
+            Box(modifier = Modifier.fillMaxSize()) {
+                key(heroArtworkUri) {
+                    ArtworkBackdrop(
                         artworkUri = heroArtworkUri,
-                        heroHeight = heroHeight,
-                        playButtonWidth = playButtonWidth,
-                        trackCount = artistTracks.size,
-                        onPlay = {
-                            if (artistTracks.isNotEmpty()) {
-                                playbackController.playQueue(
-                                    tracks = artistTracks,
-                                    startIndex = 0,
-                                    origin = PlaybackOrigin(
-                                        type = PlaybackOriginType.ARTIST,
-                                        entityKey = resolvedArtistName,
-                                        title = resolvedArtistName,
-                                        artworkSourceUri = heroArtworkUri
-                                    )
-                                )
-                            }
-                        }
+                        foregroundArtworkHeight = 0.dp,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
-                if (singlesAndEps.isNotEmpty()) {
-                    item(key = "artist-singles-and-eps") {
-                        ArtistCarouselSection(
-                            title = stringResource(songsAndEpsTitleRes)
-                        ) {
-                            LazyRow(
-                                state = singlesAndEpsListState,
-                                contentPadding = PaddingValues(horizontal = 18.dp),
-                                horizontalArrangement = Arrangement.spacedBy(18.dp)
-                            ) {
-                                items(
-                                    items = singlesAndEps,
-                                    key = { "release:${it.key}" }
-                                ) { release ->
-                                    ArtistReleaseCarouselItem(
-                                        release = release,
-                                        isCurrent = currentTrackId != null &&
-                                            release.tracks.any {
-                                                it.id.toString() == currentTrackId
-                                            },
-                                        onClick = { onOpenSingle(release.key) }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = reservedBottomSpace),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    item(key = "artist-hero") {
+                        ArtistHeroHeader(
+                            artistName = resolvedArtistName,
+                            artworkUri = heroArtworkUri,
+                            heroHeight = heroHeight,
+                            trackCount = artistTracks.size,
+                            entityLiked = entityLiked,
+                            onToggleEntityLike = onToggleEntityLike,
+                            onPlay = {
+                                if (artistTracks.isNotEmpty()) {
+                                    playbackController.playQueue(
+                                        tracks = artistTracks,
+                                        startIndex = 0,
+                                        origin = PlaybackOrigin(
+                                            type = PlaybackOriginType.ARTIST,
+                                            entityKey = resolvedArtistName,
+                                            title = resolvedArtistName,
+                                            artworkSourceUri = heroArtworkUri
+                                        )
                                     )
+                                }
+                            },
+                            onShufflePlay = {
+                                if (artistTracks.isNotEmpty()) {
+                                    playbackController.playQueue(
+                                        tracks = artistTracks,
+                                        startIndex = 0,
+                                        origin = PlaybackOrigin(
+                                            type = PlaybackOriginType.ARTIST,
+                                            entityKey = resolvedArtistName,
+                                            title = resolvedArtistName,
+                                            artworkSourceUri = heroArtworkUri
+                                        ),
+                                        shuffle = true
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    if (recentRelease != null) {
+                        item(key = "artist-recent-release") {
+                            ArtistRecentReleaseCard(
+                                release = recentRelease,
+                                onClick = {
+                                    when (recentRelease.type) {
+                                        AlbumReleaseType.SINGLE,
+                                        AlbumReleaseType.EP ->
+                                            onOpenSingle(recentRelease.key)
+                                        else -> onOpenAlbum(recentRelease.key)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    if (topTracks.isNotEmpty()) {
+                        item(key = "artist-top-songs") {
+                            ArtistCarouselSection(
+                                title = stringResource(R.string.artist_top_songs)
+                            ) {
+                                Column {
+                                    topTracks.forEachIndexed { index, track ->
+                                        ArtistTopSongRow(
+                                            track = track,
+                                            isCurrent = currentTrackId != null &&
+                                                track.id.toString() == currentTrackId,
+                                            onClick = {
+                                                playbackController.playQueue(
+                                                    tracks = topTracks,
+                                                    startIndex = index,
+                                                    origin = PlaybackOrigin(
+                                                        type = PlaybackOriginType.ARTIST,
+                                                        entityKey = resolvedArtistName,
+                                                        title = resolvedArtistName,
+                                                        artworkSourceUri = heroArtworkUri
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (singlesAndEps.isNotEmpty()) {
+                        item(key = "artist-singles-and-eps") {
+                            ArtistCarouselSection(
+                                title = stringResource(songsAndEpsTitleRes)
+                            ) {
+                                LazyRow(
+                                    state = singlesAndEpsListState,
+                                    contentPadding = PaddingValues(horizontal = 18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                ) {
+                                    items(
+                                        items = singlesAndEps,
+                                        key = { "release:${it.key}" }
+                                    ) { release ->
+                                        ArtistReleaseCarouselItem(
+                                            release = release,
+                                            isCurrent = currentTrackId != null &&
+                                                release.tracks.any {
+                                                    it.id.toString() == currentTrackId
+                                                },
+                                            onClick = { onOpenSingle(release.key) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (albums.isNotEmpty()) {
+                        item(key = "artist-albums") {
+                            ArtistCarouselSection(
+                                title = stringResource(R.string.library_category_albums)
+                            ) {
+                                LazyRow(
+                                    state = albumsListState,
+                                    contentPadding = PaddingValues(horizontal = 18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                ) {
+                                    items(
+                                        items = albums,
+                                        key = { "album:${it.key}" }
+                                    ) { release ->
+                                        ArtistReleaseCarouselItem(
+                                            release = release,
+                                            isCurrent = currentTrackId != null &&
+                                                release.tracks.any {
+                                                    it.id.toString() == currentTrackId
+                                                },
+                                            onClick = { onOpenAlbum(release.key) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (genres.isNotEmpty()) {
+                        item(key = "artist-genres") {
+                            ArtistCarouselSection(
+                                title = stringResource(R.string.library_category_genres)
+                            ) {
+                                LazyRow(
+                                    state = genresListState,
+                                    contentPadding = PaddingValues(horizontal = 18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                ) {
+                                    items(
+                                        items = genres,
+                                        key = { "genre:${it.key}" }
+                                    ) { genre ->
+                                        ArtistGenreCarouselItem(
+                                            genre = genre,
+                                            onClick = { onOpenGenre(genre.key) }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                if (albums.isNotEmpty()) {
-                    item(key = "artist-albums") {
-                        ArtistCarouselSection(
-                            title = stringResource(R.string.library_category_albums)
+                TopAppBar(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
+                    title = {},
+                    navigationIcon = {
+                        FilledIconButton(
+                            onClick = onBack,
+                            shapes = IconButtonDefaults.shapes(),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
                         ) {
-                            LazyRow(
-                                state = albumsListState,
-                                contentPadding = PaddingValues(horizontal = 18.dp),
-                                horizontalArrangement = Arrangement.spacedBy(18.dp)
-                            ) {
-                                items(
-                                    items = albums,
-                                    key = { "album:${it.key}" }
-                                ) { release ->
-                                    ArtistReleaseCarouselItem(
-                                        release = release,
-                                        isCurrent = currentTrackId != null &&
-                                            release.tracks.any {
-                                                it.id.toString() == currentTrackId
-                                            },
-                                        onClick = { onOpenAlbum(release.key) }
-                                    )
-                                }
-                            }
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_back),
+                                contentDescription = stringResource(R.string.player_back)
+                            )
                         }
-                    }
-                }
-
-                if (genres.isNotEmpty()) {
-                    item(key = "artist-genres") {
-                        ArtistCarouselSection(
-                            title = stringResource(R.string.library_category_genres)
-                        ) {
-                            LazyRow(
-                                state = genresListState,
-                                contentPadding = PaddingValues(horizontal = 18.dp),
-                                horizontalArrangement = Arrangement.spacedBy(18.dp)
-                            ) {
-                                items(
-                                    items = genres,
-                                    key = { "genre:${it.key}" }
-                                ) { genre ->
-                                    ArtistGenreCarouselItem(
-                                        genre = genre,
-                                        onClick = { onOpenGenre(genre.key) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                    },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                )
             }
-
-            TopAppBar(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
-                title = {},
-                navigationIcon = {
-                    FilledIconButton(
-                        onClick = onBack,
-                        shapes = IconButtonDefaults.shapes(),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = stringResource(R.string.player_back)
-                        )
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent
-                ),
-                contentPadding = PaddingValues(horizontal = 10.dp)
-            )
         }
     }
 }
@@ -369,9 +435,11 @@ private fun ArtistHeroHeader(
     artistName: String,
     artworkUri: String?,
     heroHeight: Dp,
-    playButtonWidth: Dp,
     trackCount: Int,
-    onPlay: () -> Unit
+    entityLiked: Boolean,
+    onToggleEntityLike: (() -> Unit)?,
+    onPlay: () -> Unit,
+    onShufflePlay: () -> Unit
 ) {
     val context = LocalContext.current.applicationContext
     var heroBitmap by remember(artworkUri, context) {
@@ -389,100 +457,92 @@ private fun ArtistHeroHeader(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(heroHeight)
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to Color.White,
-                                0.48f to Color.White,
-                                0.76f to Color.White.copy(alpha = 0.56f),
-                                1f to Color.Transparent
-                            )
-                        ),
-                        blendMode = BlendMode.DstIn
+                .fillMaxWidth()
+                .height(heroHeight)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.White,
+                                    0.48f to Color.White,
+                                    0.76f to Color.White.copy(alpha = 0.56f),
+                                    1f to Color.Transparent
+                                )
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+                    .background(Color.Transparent)
+            ) {
+                val bitmap = heroBitmap?.takeUnless(Bitmap::isRecycled)
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center
                     )
                 }
-                .background(Color.Transparent)
-        ) {
-            val bitmap = heroBitmap?.takeUnless(Bitmap::isRecycled)
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.Center
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = artistName,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip
+                )
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.library_track_count,
+                        trackCount,
+                        trackCount
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.82f),
+                    textAlign = TextAlign.Center
                 )
             }
         }
 
-        Column(
+        PlayAndLikeButtonGroup(
+            onPlay = onPlay,
+            onShufflePlay = onShufflePlay,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = artistName,
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = pluralStringResource(
-                    R.plurals.library_track_count,
-                    trackCount,
-                    trackCount
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.82f),
-                textAlign = TextAlign.Center
-            )
-            Button(
-                onClick = onPlay,
-                enabled = trackCount > 0,
-                modifier = Modifier
-                    .width(playButtonWidth)
-                    .height(64.dp),
-                shape = RoundedCornerShape(percent = 50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                contentPadding = PaddingValues(horizontal = 28.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_play),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = stringResource(R.string.player_play),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+                .padding(start = 18.dp, end = 18.dp, top = 16.dp),
+            playEnabled = trackCount > 0,
+            liked = entityLiked,
+            onToggleLike = onToggleEntityLike
+        )
+        Spacer(modifier = Modifier.height(26.dp))
     }
 }
 
@@ -586,7 +646,11 @@ private fun ArtistCarouselItem(
         modifier = Modifier
             .width(ArtistCarouselItemWidth)
             .height(ArtistCarouselItemHeight)
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         AlbumArtwork(
@@ -696,3 +760,262 @@ private fun buildArtistGenres(
 
 private fun normalizeArtistKey(value: String): String =
     ArtistCreditParser.normalizeIdentity(value)
+
+/**
+ * The page's primary actions as a Material 3 Expressive button group:
+ * a Shuffle circle, a large Play circle, and a Liked toggle circle.
+ * Pressing a circle expands it and compresses its neighbours.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PlayAndLikeButtonGroup(
+    onPlay: () -> Unit,
+    onShufflePlay: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    playEnabled: Boolean = true,
+    liked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
+) {
+    ButtonGroup(
+        overflowIndicator = { state ->
+            ButtonGroupDefaults.OverflowIndicator(state)
+        },
+        modifier = modifier,
+        expandedRatio = 0.4f,
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onShufflePlay != null) {
+            customItem(
+                buttonGroupContent = {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    FilledIconButton(
+                        onClick = onShufflePlay,
+                        enabled = playEnabled,
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .animateWidth(interactionSource)
+                            .size(52.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_shuffle),
+                            contentDescription = stringResource(R.string.player_shuffle),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                menuContent = { state ->
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.player_shuffle)) },
+                        onClick = {
+                            onShufflePlay()
+                            state.dismiss()
+                        },
+                    )
+                },
+            )
+        }
+        customItem(
+            buttonGroupContent = {
+                val interactionSource = remember { MutableInteractionSource() }
+                FilledIconButton(
+                    onClick = onPlay,
+                    enabled = playEnabled,
+                    interactionSource = interactionSource,
+                    modifier = Modifier
+                        .animateWidth(interactionSource)
+                        .size(70.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = stringResource(R.string.player_play),
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            },
+            menuContent = { state ->
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.player_play)) },
+                    onClick = {
+                        onPlay()
+                        state.dismiss()
+                    },
+                )
+            },
+        )
+        if (onToggleLike != null) {
+            customItem(
+                buttonGroupContent = {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    FilledIconButton(
+                        onClick = onToggleLike,
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .animateWidth(interactionSource)
+                            .size(52.dp),
+                        colors = if (liked) {
+                            IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (liked) {
+                                    R.drawable.ic_favorite
+                                } else {
+                                    R.drawable.ic_favorite_border
+                                }
+                            ),
+                            contentDescription = stringResource(R.string.entity_like),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+                menuContent = { state ->
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.entity_like)) },
+                        onClick = {
+                            onToggleLike()
+                            state.dismiss()
+                        },
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistRecentReleaseCard(
+    release: AlbumRelease,
+    onClick: () -> Unit
+) {
+    val releaseYear = remember(release) {
+        CatalogArtworkSelector.releaseYearForDisplay(release.tracks)
+    }
+    val artworkUri = remember(release.tracks) {
+        CatalogArtworkSelector.albumArtworkTrack(release.tracks)?.uri?.toString()
+    }
+    val recentLabel = stringResource(
+        when (release.type) {
+            AlbumReleaseType.SINGLE -> R.string.artist_recent_single
+            AlbumReleaseType.EP -> R.string.artist_recent_ep
+            else -> R.string.artist_recent_album
+        }
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp)
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AlbumArtwork(
+            artworkUri = artworkUri,
+            fallbackText = release.title,
+            contentDescription = release.title,
+            modifier = Modifier.size(96.dp),
+            size = 96.dp,
+            shape = RoundedCornerShape(12.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            if (releaseYear != null) {
+                Text(
+                    text = releaseYear.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = release.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = recentLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistTopSongRow(
+    track: LocalAudioTrack,
+    isCurrent: Boolean,
+    onClick: () -> Unit
+) {
+    val title = track.title
+        ?: track.displayName?.substringBeforeLast('.')
+        ?: track.uri.lastPathSegment.orEmpty()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AlbumArtwork(
+            artworkUri = track.uri.toString(),
+            fallbackText = title,
+            contentDescription = title,
+            modifier = Modifier.size(52.dp),
+            size = 52.dp,
+            shape = RoundedCornerShape(12.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (isCurrent) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = track.artist.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}

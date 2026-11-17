@@ -73,13 +73,18 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEvent
 import com.rovia.music.data.repository.GenreDetailCatalog
+import com.rovia.music.data.mediastore.CatalogArtworkSelector
 import com.rovia.music.data.repository.ArtistDetailCatalog
+import com.rovia.music.data.repository.LikedEntityType
+import com.rovia.music.data.repository.UserLibraryRepository
+import com.rovia.music.data.repository.toLikedEntityType
 import com.rovia.music.feature.album.AlbumPage
 import com.rovia.music.feature.artist.ArtistPage
 import com.rovia.music.feature.genre.GenrePage
 import com.rovia.music.feature.single.SinglePage
 import com.rovia.music.feature.home.HomeRecentlyAddedScreen
 import com.rovia.music.feature.home.HomeScreen
+import com.rovia.music.feature.home.WrappedHomeCardData
 import com.rovia.music.feature.history.HistoryActivityType
 import com.rovia.music.feature.history.HistoryActivityUiModel
 import com.rovia.music.feature.history.HistoryScreen
@@ -103,6 +108,19 @@ import com.rovia.music.ui.components.rememberTrackInfoState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import androidx.compose.runtime.produceState
+import com.rovia.music.data.mediastore.ArtistCreditParser
+import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.feature.wrapped.WrappedAlbum
+import com.rovia.music.feature.wrapped.WrappedArtist
+import com.rovia.music.feature.wrapped.WrappedData
+import com.rovia.music.feature.wrapped.WrappedScreen
+import com.rovia.music.feature.wrapped.WrappedTrack
+import java.time.LocalDate
+import kotlinx.coroutines.flow.first
+import com.rovia.music.feature.wrapped.WrappedPeriod
+import java.time.temporal.WeekFields
+import java.util.Locale
 
 @Serializable
 private data object HomeDestination : NavKey
@@ -112,6 +130,31 @@ private data object HomeRecentlyAddedDestination : NavKey
 
 @Serializable
 private data object HistoryDestination : NavKey
+
+@Serializable
+private data class WrappedDestination(val period: WrappedPeriod) : NavKey
+
+private fun wrappedPeriodRange(
+    period: WrappedPeriod,
+    today: LocalDate = LocalDate.now(),
+): Pair<LocalDate, LocalDate> = when (period) {
+    WrappedPeriod.TODAY -> today to today.plusDays(1)
+    WrappedPeriod.WEEK -> {
+        val weekStart = today.with(
+            WeekFields.of(Locale.getDefault()).dayOfWeek(),
+            1,
+        )
+        weekStart to weekStart.plusWeeks(1)
+    }
+    WrappedPeriod.MONTH -> {
+        val monthStart = today.withDayOfMonth(1)
+        monthStart to monthStart.plusMonths(1)
+    }
+    WrappedPeriod.YEAR -> {
+        val yearStart = LocalDate.of(today.year, 1, 1)
+        yearStart to yearStart.plusYears(1)
+    }
+}
 
 @Serializable
 private data object SearchDestination : NavKey
@@ -244,6 +287,43 @@ fun Navigation(appContainer: AppContainer) {
 
     val routeEntryProvider = entryProvider<NavKey> {
         entry<HomeDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val wrappedCards by produceState(
+                initialValue = emptyList<WrappedHomeCardData>(),
+            ) {
+                val statistics = appContainer.playbackStatisticsRepository
+                value = WrappedPeriod.entries.mapNotNull { period ->
+                    val (start, end) = wrappedPeriodRange(period)
+                    val eventCount = statistics.getPlaybackEventCount(
+                        startDate = start,
+                        endDateExclusive = end,
+                    )
+                    if (eventCount <= 0) {
+                        null
+                    } else {
+                        val summary = statistics.getSummary(start, end)
+                        WrappedHomeCardData(
+                            period = period,
+                            minutes = summary.totalListeningDurationMs / 60_000L,
+                            topTrack = statistics.getTopTracks(
+                                startDate = start,
+                                endDateExclusive = end,
+                                limit = 1,
+                            ).firstOrNull()?.displayTitle,
+                            topArtist = statistics.getTopArtists(
+                                startDate = start,
+                                endDateExclusive = end,
+                                limit = 1,
+                            ).firstOrNull()?.displayName,
+                            topAlbum = statistics.getTopAlbums(
+                                startDate = start,
+                                endDateExclusive = end,
+                                limit = 1,
+                            ).firstOrNull()?.displayTitle,
+                        )
+                    }
+                }
+            }
+
             NavigationDestinationSurface {
                 HomeScreen(
                     audioRepository =
@@ -267,6 +347,184 @@ fun Navigation(appContainer: AppContainer) {
                             owner = TopLevelSection.HOME,
                             destination = SettingsDestination(TopLevelSection.HOME),
                         )
+                    },
+                    onOpenWrapped = { period ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.HOME,
+                            destination = WrappedDestination(period),
+                        )
+                    },
+                    wrappedCards = wrappedCards,
+                )
+            }
+        }
+
+        entry<WrappedDestination>(clazzContentKey = { key -> navigationContentKey(key) }) { destination ->
+            val periodPhrase = when (destination.period) {
+                WrappedPeriod.YEAR -> stringResource(
+                    R.string.wrapped_period_in_year,
+                    LocalDate.now().year,
+                )
+                WrappedPeriod.TODAY ->
+                    stringResource(R.string.wrapped_period_phrase_today)
+                WrappedPeriod.WEEK ->
+                    stringResource(R.string.wrapped_period_phrase_week)
+                WrappedPeriod.MONTH ->
+                    stringResource(R.string.wrapped_period_phrase_month)
+            }
+            val recapPhrase = when (destination.period) {
+                WrappedPeriod.YEAR -> LocalDate.now().year.toString()
+                WrappedPeriod.TODAY ->
+                    stringResource(R.string.wrapped_period_label_today)
+                WrappedPeriod.WEEK ->
+                    stringResource(R.string.wrapped_period_label_week)
+                WrappedPeriod.MONTH ->
+                    stringResource(R.string.wrapped_period_label_month)
+            }
+            val fileTag = when (destination.period) {
+                WrappedPeriod.YEAR -> LocalDate.now().year.toString()
+                WrappedPeriod.TODAY -> "today"
+                WrappedPeriod.WEEK -> "week"
+                WrappedPeriod.MONTH -> "month"
+            }
+            val wrappedData by produceState<WrappedData?>(
+                initialValue = null,
+            ) {
+                val statistics = appContainer.playbackStatisticsRepository
+                val (start, end) = wrappedPeriodRange(destination.period)
+                val summary = statistics.getSummary(start, end)
+                if (summary.eventCount == 0L) {
+                    value = WrappedData(
+                        period = destination.period,
+                        periodPhrase = periodPhrase,
+                        recapPhrase = recapPhrase,
+                        fileTag = fileTag,
+                        hasData = false,
+                        totalMinutes = 0,
+                        totalPlays = 0,
+                        uniqueTracks = 0,
+                        uniqueArtists = 0,
+                        uniqueAlbums = 0,
+                        topArtists = emptyList(),
+                        topTracks = emptyList(),
+                        topAlbums = emptyList(),
+                    )
+                } else {
+                    val catalog = appContainer.libraryRepository
+                        .observeCatalog()
+                        .first()
+                    val artistAggregates = statistics.getTopArtists(
+                        startDate = start,
+                        endDateExclusive = end,
+                        limit = 5,
+                    )
+                    val artists = artistAggregates.map { aggregate ->
+                        val detail = appContainer.libraryRepository
+                            .observeArtistDetail(aggregate.displayName)
+                            .first()
+                        val artworkUri = CatalogArtworkSelector
+                            .artistArtworkTrack(
+                                artistName = aggregate.displayName,
+                                releases = detail.releases,
+                                ungroupedArtistTracks = detail.tracks.filter {
+                                    it.album.isNullOrBlank()
+                                },
+                            )?.uri?.toString()
+                        val genre = detail.tracks
+                            .flatMap { it.genres }
+                            .groupingBy { it }
+                            .eachCount()
+                            .maxByOrNull { it.value }
+                            ?.key
+                        WrappedArtist(
+                            name = aggregate.displayName,
+                            artworkUri = artworkUri,
+                            genre = genre,
+                            minutes =
+                                aggregate.totalListenedDurationMs / 60_000,
+                            plays = aggregate.qualifiedPlayCount,
+                        )
+                    }
+                    val trackDao = appContainer.database.trackDao()
+                    val tracks = statistics.getTopTracks(
+                        startDate = start,
+                        endDateExclusive = end,
+                        limit = 5,
+                    ).map { aggregate ->
+                        val entity = aggregate.trackId?.let { trackId ->
+                            trackDao.getById(trackId)
+                        }
+                        val track = entity?.mediaStoreId?.let { mediaStoreId ->
+                            catalog.tracks.firstOrNull { candidate ->
+                                candidate.id == mediaStoreId &&
+                                    candidate.volumeName == entity.volumeName
+                            }
+                        }
+                        WrappedTrack(
+                            title = track?.title ?: aggregate.displayTitle,
+                            artist = track?.artist,
+                            artworkUri = track?.uri?.toString(),
+                            minutes =
+                                aggregate.totalListenedDurationMs / 60_000,
+                            plays = aggregate.qualifiedPlayCount,
+                        )
+                    }
+                    val albumDao = appContainer.database.albumDao()
+                    val albums = statistics.getTopAlbums(
+                        startDate = start,
+                        endDateExclusive = end,
+                        limit = 5,
+                    ).map { aggregate ->
+                        val entity = aggregate.albumId?.let { albumId ->
+                            albumDao.getById(albumId)
+                        }
+                        val title = entity?.title ?: aggregate.displayTitle
+                        val albumTracks = catalog.tracks.filter { candidate ->
+                            candidate.album.equals(title, ignoreCase = true)
+                        }
+                        WrappedAlbum(
+                            title = title,
+                            artist = entity?.albumArtistCreditRaw,
+                            artworkUri = CatalogArtworkSelector
+                                .albumArtworkTrack(albumTracks)
+                                ?.uri?.toString(),
+                            minutes =
+                                aggregate.totalListenedDurationMs / 60_000,
+                            plays = aggregate.qualifiedPlayCount,
+                        )
+                    }
+                    value = WrappedData(
+                        period = destination.period,
+                        periodPhrase = periodPhrase,
+                        recapPhrase = recapPhrase,
+                        fileTag = fileTag,
+                        hasData = true,
+                        totalMinutes =
+                            summary.totalListeningDurationMs / 60_000,
+                        totalPlays = summary.qualifiedPlayCount,
+                        uniqueTracks = summary.uniqueTrackCount.toInt(),
+                        uniqueArtists = statistics.getTopArtists(
+                            startDate = start,
+                            endDateExclusive = end,
+                            limit = 1000,
+                        ).size,
+                        uniqueAlbums = statistics.getTopAlbums(
+                            startDate = start,
+                            endDateExclusive = end,
+                            limit = 1000,
+                        ).size,
+                        topArtists = artists,
+                        topTracks = tracks,
+                        topAlbums = albums,
+                    )
+                }
+            }
+
+            NavigationDestinationSurface {
+                WrappedScreen(
+                    data = wrappedData,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.HOME)
                     },
                 )
             }
@@ -526,6 +784,15 @@ fun Navigation(appContainer: AppContainer) {
                             ),
                         )
                     },
+                    onOpenGenre = { genreKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.SEARCH,
+                            destination = GenreDestination(
+                                genreKey = genreKey,
+                                owner = TopLevelSection.SEARCH,
+                            ),
+                        )
+                    },
                     onOpenPlaylist = { playlistId ->
                         navigationState.navigateWithin(
                             owner = TopLevelSection.SEARCH,
@@ -566,6 +833,12 @@ fun Navigation(appContainer: AppContainer) {
                         navigationState.navigateWithin(
                             owner = TopLevelSection.LIBRARY,
                             destination = AlbumDestination(releaseKey),
+                        )
+                    },
+                    onOpenSingle = { releaseKey ->
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.LIBRARY,
+                            destination = SingleDestination(releaseKey),
                         )
                     },
                     onOpenGenre = { genreKey ->
@@ -715,12 +988,45 @@ fun Navigation(appContainer: AppContainer) {
             val artistDetail by artistDetailFlow.collectAsStateWithLifecycle(
                 initialValue = ArtistDetailCatalog(),
             )
+            val userLibraryRepository = appContainer.userLibraryRepository
+            val likedEntitiesFlow = remember(userLibraryRepository) {
+                userLibraryRepository.observeLikedEntities()
+            }
+            val likedEntities by likedEntitiesFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val scope = rememberCoroutineScope()
+            val topTracks by produceState(
+                initialValue = emptyList<LocalAudioTrack>(),
+                destination.artistName,
+                artistDetail.tracks,
+            ) {
+                val identityKey = "artist:" +
+                    ArtistCreditParser.normalizeIdentity(destination.artistName)
+                val aggregates = appContainer.playbackStatisticsRepository
+                    .getTopTracksForArtist(identityKey, limit = 8)
+                    .filter { aggregate -> aggregate.qualifiedPlayCount > 0 }
+                value = aggregates.mapNotNull { aggregate ->
+                    val roomTrackId = aggregate.trackId
+                        ?: return@mapNotNull null
+                    val entity = appContainer.database.trackDao()
+                        .getById(roomTrackId)
+                        ?: return@mapNotNull null
+                    val mediaStoreId = entity.mediaStoreId
+                        ?: return@mapNotNull null
+                    artistDetail.tracks.firstOrNull { track ->
+                        track.id == mediaStoreId &&
+                            track.volumeName == entity.volumeName
+                    }
+                }.take(5)
+            }
 
             NavigationDestinationSurface {
                 ArtistPage(
                     artistName = destination.artistName,
                     tracks = artistDetail.tracks,
                     releases = artistDetail.releases,
+                    topTracks = topTracks,
                     onLoadReleaseMetadata =
                         appContainer.mediaStoreAudioRepository::loadReleaseMetadata,
                     playbackController = appContainer.playbackController,
@@ -756,6 +1062,29 @@ fun Navigation(appContainer: AppContainer) {
                         )
                     },
                     songsAndEpsTitleRes = R.string.artist_songs_and_eps,
+                    entityLiked = UserLibraryRepository.isEntityLiked(
+                        entities = likedEntities,
+                        type = LikedEntityType.ARTIST,
+                        key = destination.artistName,
+                    ),
+                    onToggleEntityLike = {
+                        val artworkUri = CatalogArtworkSelector.artistArtworkTrack(
+                            artistName = destination.artistName,
+                            releases = artistDetail.releases,
+                            ungroupedArtistTracks = artistDetail.tracks.filter { track ->
+                                track.album.isNullOrBlank()
+                            }
+                        )?.uri?.toString()
+                        scope.launch {
+                            userLibraryRepository.toggleLikedEntity(
+                                type = LikedEntityType.ARTIST,
+                                key = destination.artistName,
+                                title = destination.artistName,
+                                subtitle = null,
+                                artworkUri = artworkUri,
+                            )
+                        }
+                    },
                 )
             }
         }
@@ -769,9 +1098,38 @@ fun Navigation(appContainer: AppContainer) {
 
             val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
 
+            val likedEntitiesFlow = remember(appContainer.userLibraryRepository) {
+                appContainer.userLibraryRepository.observeLikedEntities()
+            }
+            val likedEntities by likedEntitiesFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val scope = rememberCoroutineScope()
+
             NavigationDestinationSurface {
                 SinglePage(
                     userLibraryMenu = userLibraryMenu,
+                    entityLiked = release?.let { current ->
+                        UserLibraryRepository.isEntityLiked(
+                            entities = likedEntities,
+                            type = current.type.toLikedEntityType(),
+                            key = current.key,
+                        )
+                    } ?: false,
+                    onToggleEntityLike = {
+                        release?.let { current ->
+                            scope.launch {
+                                appContainer.userLibraryRepository.toggleLikedEntity(
+                                    type = current.type.toLikedEntityType(),
+                                    key = current.key,
+                                    title = current.title,
+                                    subtitle = current.albumArtist
+                                        ?: current.artists.joinToString(", "),
+                                    artworkUri = current.artworkUri,
+                                )
+                            }
+                        }
+                    },
                     releaseKey = destination.releaseKey,
                     releaseData = release,
                     onLoadReleaseMetadata =
@@ -793,9 +1151,38 @@ fun Navigation(appContainer: AppContainer) {
 
             val userLibraryMenu = rememberUserLibraryMenuState(appContainer.userLibraryRepository)
 
+            val likedEntitiesFlow = remember(appContainer.userLibraryRepository) {
+                appContainer.userLibraryRepository.observeLikedEntities()
+            }
+            val likedEntities by likedEntitiesFlow.collectAsStateWithLifecycle(
+                initialValue = emptyList(),
+            )
+            val scope = rememberCoroutineScope()
+
             NavigationDestinationSurface {
                 AlbumPage(
                     userLibraryMenu = userLibraryMenu,
+                    entityLiked = release?.let { current ->
+                        UserLibraryRepository.isEntityLiked(
+                            entities = likedEntities,
+                            type = current.type.toLikedEntityType(),
+                            key = current.key,
+                        )
+                    } ?: false,
+                    onToggleEntityLike = {
+                        release?.let { current ->
+                            scope.launch {
+                                appContainer.userLibraryRepository.toggleLikedEntity(
+                                    type = current.type.toLikedEntityType(),
+                                    key = current.key,
+                                    title = current.title,
+                                    subtitle = current.albumArtist
+                                        ?: current.artists.joinToString(", "),
+                                    artworkUri = current.artworkUri,
+                                )
+                            }
+                        }
+                    },
                     releaseKey = destination.releaseKey,
                     release = release,
                     onLoadReleaseMetadata =
@@ -1005,7 +1392,8 @@ fun Navigation(appContainer: AppContainer) {
             },
         )
 
-        HorizontalFloatingToolbar(
+        if (!navigationState.isWrappedActive) {
+            HorizontalFloatingToolbar(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.navigationBars)
@@ -1053,7 +1441,11 @@ fun Navigation(appContainer: AppContainer) {
             },
         )
 
-        if (!showPlayerSheet && !navigationState.isSettingsFlowActive) {
+        }
+
+        if (!showPlayerSheet && !navigationState.isSettingsFlowActive &&
+            !navigationState.isWrappedActive
+        ) {
             MiniPlayer(
                 playbackController = appContainer.playbackController,
                 onOpenPlayer = {
@@ -1302,6 +1694,9 @@ private class RoviaNavigationState(
 
     val isSettingsFlowActive: Boolean
         get() = activeBackStack?.lastOrNull().isSettingsFlowDestination() == true
+
+    val isWrappedActive: Boolean
+        get() = activeBackStack?.lastOrNull() is WrappedDestination
 
     fun isTopLevelSectionSelected(section: TopLevelSection): Boolean =
         topLevelSection == section && !isSettingsFlowActive

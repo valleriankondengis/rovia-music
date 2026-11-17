@@ -52,6 +52,7 @@ import com.rovia.music.data.repository.GenreDetailCatalog
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
+import com.rovia.music.ui.theme.BackdropContentTheme
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.TrackInfoSheetHost
@@ -63,7 +64,7 @@ import java.text.Normalizer
 private val GenrePageNavigationBarHeight = 80.dp
 private val GenrePageMiniPlayerHeight = 80.dp
 
-/** Genre detail page with the same artwork-led layout and playback-list behavior as AlbumPage. */
+/** Genre detail page with an artwork-led layout and a playback track list. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun GenrePage(
@@ -123,199 +124,201 @@ fun GenrePage(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val artworkSize = minOf(maxWidth * 0.78f, 340.dp, maxHeight * 0.36f).coerceAtLeast(150.dp)
-        val playButtonWidth = (maxWidth * 0.66f).coerceAtMost(360.dp).coerceAtLeast(220.dp)
+    BackdropContentTheme {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val artworkSize = minOf(maxWidth * 0.78f, 340.dp, maxHeight * 0.36f).coerceAtLeast(150.dp)
+            val playButtonWidth = (maxWidth * 0.66f).coerceAtMost(360.dp).coerceAtLeast(220.dp)
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            ArtworkBackdrop(
-                artworkUri = artworkUri,
-                foregroundArtworkHeight = 0.dp,
-                modifier = Modifier.fillMaxSize()
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                ArtworkBackdrop(
+                    artworkUri = artworkUri,
+                    foregroundArtworkHeight = 0.dp,
+                    modifier = Modifier.fillMaxSize()
+                )
 
-            if (pageTracks.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = contentTopPadding, bottom = contentBottomPadding)
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_no_tracks),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                TrackList(
-                    tracks = pageTracks,
-                    onTrackClick = { track, index ->
-                        val controller = mediaController
-                        if (controller != null) {
-                            if (currentMediaId == track.id.toString()) {
-                                if (controller.isPlaying) {
-                                    controller.pause()
-                                } else {
-                                    if (controller.playbackState == Player.STATE_ENDED) {
-                                        controller.seekToDefaultPosition()
+                if (pageTracks.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = contentTopPadding, bottom = contentBottomPadding)
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.library_no_tracks),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    TrackList(
+                        tracks = pageTracks,
+                        onTrackClick = { track, index ->
+                            val controller = mediaController
+                            if (controller != null) {
+                                if (currentMediaId == track.id.toString()) {
+                                    if (controller.isPlaying) {
+                                        controller.pause()
+                                    } else {
+                                        if (controller.playbackState == Player.STATE_ENDED) {
+                                            controller.seekToDefaultPosition()
+                                        }
+                                        controller.play()
                                     }
-                                    controller.play()
+                                } else {
+                                    playbackController.playQueue(
+                                        tracks = pageTracks,
+                                        startIndex = index,
+                                        origin = PlaybackOrigin(
+                                            type = PlaybackOriginType.GENRE,
+                                            entityKey = genreKey,
+                                            title = pageTitle,
+                                            subtitle = subtitleArtist,
+                                            artworkSourceUri = artworkUri,
+                                        ),
+                                    )
                                 }
-                            } else {
-                                playbackController.playQueue(
-                                    tracks = pageTracks,
-                                    startIndex = index,
-                                    origin = PlaybackOrigin(
-                                        type = PlaybackOriginType.GENRE,
-                                        entityKey = genreKey,
-                                        title = pageTitle,
-                                        subtitle = subtitleArtist,
-                                        artworkSourceUri = artworkUri,
-                                    ),
-                                )
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    outerPadding = PaddingValues(
-                        top = contentTopPadding,
-                        bottom = contentBottomPadding
-                    ),
-                    horizontalPadding = 18.dp,
-                    verticalSpacing = 1.dp,
-                    currentTrackId = currentMediaId,
-                    itemsEnabled = mediaController != null,
-                    onTrackInfoClick = trackInfoState::show,
-                    likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
-                    onToggleLike = userLibraryMenu?.onToggleLike,
-                    onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
-                    headerContent = {
-                        item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                AlbumArtwork(
-                                    artworkUri = artworkUri,
-                                    fallbackText = pageTitle,
-                                    contentDescription = pageTitle,
-                                    modifier = Modifier.size(artworkSize),
-                                    size = artworkSize,
-                                    shape = MaterialTheme.shapes.large
-                                )
+                        },
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        outerPadding = PaddingValues(
+                            top = contentTopPadding,
+                            bottom = contentBottomPadding
+                        ),
+                        horizontalPadding = 18.dp,
+                        verticalSpacing = 1.dp,
+                        currentTrackId = currentMediaId,
+                        itemsEnabled = mediaController != null,
+                        onTrackInfoClick = trackInfoState::show,
+                        likedTrackKeys = userLibraryMenu?.likedTrackKeys ?: emptySet(),
+                        onToggleLike = userLibraryMenu?.onToggleLike,
+                        onAddToPlaylistClick = userLibraryMenu?.onShowPlaylistPicker,
+                        headerContent = {
+                            item(key = "genre-hero-$genreKey-${normalizedArtistKey.orEmpty()}") {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    AlbumArtwork(
+                                        artworkUri = artworkUri,
+                                        fallbackText = pageTitle,
+                                        contentDescription = pageTitle,
+                                        modifier = Modifier.size(artworkSize),
+                                        size = artworkSize,
+                                        shape = MaterialTheme.shapes.large
+                                    )
 
-                                Spacer(modifier = Modifier.height(18.dp))
+                                    Spacer(modifier = Modifier.height(18.dp))
 
-                                Text(
-                                    text = pageTitle,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                if (subtitleArtist != null) {
                                     Text(
-                                        text = subtitleArtist,
+                                        text = pageTitle,
                                         modifier = Modifier.fillMaxWidth(),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         textAlign = TextAlign.Center,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Spacer(modifier = Modifier.height(3.dp))
-                                }
 
-                                Text(
-                                    text = trackCountLabel,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                    if (subtitleArtist != null) {
+                                        Text(
+                                            text = subtitleArtist,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                    }
 
-                                Spacer(modifier = Modifier.height(22.dp))
-
-                                Button(
-                                    onClick = {
-                                        if (mediaController != null) {
-                                            playbackController.playQueue(
-                                                tracks = pageTracks,
-                                                startIndex = 0,
-                                                origin = PlaybackOrigin(
-                                                    type = PlaybackOriginType.GENRE,
-                                                    entityKey = genreKey,
-                                                    title = pageTitle,
-                                                    subtitle = subtitleArtist,
-                                                    artworkSourceUri = artworkUri,
-                                                ),
-                                            )
-                                        }
-                                    },
-                                    enabled = mediaController != null && pageTracks.isNotEmpty(),
-                                    modifier = Modifier.width(playButtonWidth).height(64.dp),
-                                    shape = RoundedCornerShape(percent = 50),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 28.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_play),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = stringResource(R.string.player_play),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
+                                        text = trackCountLabel,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                }
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                                    Spacer(modifier = Modifier.height(22.dp))
+
+                                    Button(
+                                        onClick = {
+                                            if (mediaController != null) {
+                                                playbackController.playQueue(
+                                                    tracks = pageTracks,
+                                                    startIndex = 0,
+                                                    origin = PlaybackOrigin(
+                                                        type = PlaybackOriginType.GENRE,
+                                                        entityKey = genreKey,
+                                                        title = pageTitle,
+                                                        subtitle = subtitleArtist,
+                                                        artworkSourceUri = artworkUri,
+                                                    ),
+                                                )
+                                            }
+                                        },
+                                        enabled = mediaController != null && pageTracks.isNotEmpty(),
+                                        modifier = Modifier.width(playButtonWidth).height(64.dp),
+                                        shape = RoundedCornerShape(percent = 50),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 28.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_play),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = stringResource(R.string.player_play),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                }
                             }
                         }
-                    }
+                    )
+                }
+
+                TopAppBar(
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
+                    title = {},
+                    navigationIcon = {
+                        FilledIconButton(
+                            onClick = onBack,
+                            shapes = IconButtonDefaults.shapes(),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_back),
+                                contentDescription = backContentDescription
+                            )
+                        }
+                    },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp),
                 )
             }
-
-            TopAppBar(
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
-                title = {},
-                navigationIcon = {
-                    FilledIconButton(
-                        onClick = onBack,
-                        shapes = IconButtonDefaults.shapes(),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = backContentDescription
-                        )
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent
-                ),
-                contentPadding = PaddingValues(horizontal = 10.dp),
-            )
         }
     }
 

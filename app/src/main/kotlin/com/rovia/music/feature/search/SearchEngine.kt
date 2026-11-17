@@ -320,8 +320,8 @@ object SearchEngine {
             )
 
             if (score > 0) {
-                // Use the same latest-release selector as ArtistPage, so an
-                // artist's cover is identical in search and on the artist page.
+                // Uses the same latest-release selector as ArtistPage, so an
+                // artist's cover matches in search and on the artist page.
                 val artworkTrack = CatalogArtworkSelector.artistArtworkTrack(
                     artistName = artist.name,
                     tracks = artist.tracks,
