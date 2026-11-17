@@ -257,3 +257,14 @@ fade or time/pitch modification takes place in a Bit-Perfect path.
 Development and playback testing use a Xiaomi POCO F4 phone and a Cayin
 RU3 USB DAC; see [Hardware](hardware/README.md) for the devices and what
 was run on them.
+
+## 11. The external player
+
+Beside the regular playback service, a second `MediaSessionService`
+powers the External Player for files opened through Open With. It is a
+plain standard-path ExoPlayer with its own session: it never touches the
+database, the folder filter or the output-mode machinery, and the only
+interaction between the two stacks is an explicit pause/resume handshake
+— the regular player pauses when external playback starts and resumes
+when it ends. The full contract is in
+[the External Player document](media3/EXTERNAL_PLAYER.md).

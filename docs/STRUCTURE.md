@@ -30,6 +30,7 @@ rovia/
 │   │       │               │   │   │   ├── ExcludedFolderDao.kt
 │   │       │               │   │   │   ├── GenreDao.kt
 │   │       │               │   │   │   ├── LikedTrackDao.kt
+│   │       │               │   │   │   ├── LikedEntityDao.kt
 │   │       │               │   │   │   ├── ListeningSegmentDao.kt
 │   │       │               │   │   │   ├── MediaStoreSyncStateDao.kt
 │   │       │               │   │   │   ├── PlaybackActivityDao.kt
@@ -49,6 +50,7 @@ rovia/
 │   │       │               │   │       ├── ExcludedFolderEntity.kt
 │   │       │               │   │       ├── GenreEntity.kt
 │   │       │               │   │       ├── LikedTrackEntity.kt
+│   │       │               │   │       ├── LikedEntity.kt
 │   │       │               │   │       ├── ListeningSegmentEntity.kt
 │   │       │               │   │       ├── MediaStoreSyncStateEntity.kt
 │   │       │               │   │       ├── PlaybackActivityEntity.kt
@@ -102,18 +104,22 @@ rovia/
 │   │       │               │   ├── player/
 │   │       │               │   │   ├── AudioOutput.kt
 │   │       │               │   │   ├── PlayerLyric.kt
+│   │       │               │   │   ├── PlayerLyricShare.kt
 │   │       │               │   │   ├── PlayerScreen.kt
 │   │       │               │   │   └── QueueSheet.kt
 │   │       │               │   ├── search/
 │   │       │               │   │   ├── SearchEngine.kt
+│   │       │               │   │   ├── SearchHistoryStore.kt
 │   │       │               │   │   └── SearchScreen.kt
 │   │       │               │   ├── settings/
 │   │       │               │   │   ├── AboutScreen.kt
 │   │       │               │   │   ├── AudioScreen.kt
 │   │       │               │   │   ├── FolderFilterScreen.kt
 │   │       │               │   │   └── SettingsScreen.kt
-│   │       │               │   └── single/
-│   │       │               │       └── SinglePage.kt
+│   │       │               │   ├── single/
+│   │       │               │   │   └── SinglePage.kt
+│   │       │               │   └── wrapped/
+│   │       │               │       └── WrappedScreen.kt
 │   │       │               ├── playback/
 │   │       │               │   ├── PlaybackDecoderStore.kt
 │   │       │               │   ├── bitperfect/
@@ -136,6 +142,9 @@ rovia/
 │   │       │               │   │       └── DirectUsbRenderer.kt
 │   │       │               │   ├── controller/
 │   │       │               │   │   └── PlaybackController.kt
+│   │       │               │   ├── external/
+│   │       │               │   │   ├── ExternalPlaybackCoordinator.kt
+│   │       │               │   │   └── ExternalPlaybackService.kt
 │   │       │               │   ├── queue/
 │   │       │               │   │   ├── PlaybackMetadataKeys.kt
 │   │       │               │   │   └── PlaybackOrigin.kt
@@ -151,13 +160,17 @@ rovia/
 │   │       │               │   │   ├── ArtworkBitmapLoader.kt
 │   │       │               │   │   ├── ArtworkDiskCache.kt
 │   │       │               │   │   ├── Lyric.kt
+│   │       │               │   │   ├── LyricMenu.kt
+│   │       │               │   │   ├── LyricOffsetBottomSheet.kt
+│   │       │               │   │   ├── LyricShareBottomSheet.kt
 │   │       │               │   │   ├── MiniPlayer.kt
 │   │       │               │   │   ├── PlaylistArtwork.kt
 │   │       │               │   │   ├── PlaylistDialogs.kt
 │   │       │               │   │   ├── AudioPipeline.kt
 │   │       │               │   │   ├── TrackInfo.kt
 │   │       │               │   │   ├── TrackList.kt
-│   │       │               │   │   └── TrackMenu.kt
+│   │       │               │   │   ├── TrackMenu.kt
+│   │       │               │   │   └── WavySeekBar.kt
 │   │       │               │   ├── permissions/
 │   │       │               │   │   └── AudioPermission.kt
 │   │       │               │   └── theme/
@@ -167,6 +180,7 @@ rovia/
 │   │       │               ├── uniffi/
 │   │       │               │   └── rovia_uniffi.kt
 │   │       │               ├── AppContainer.kt
+│   │       │               ├── ExternalPlayerActivity.kt
 │   │       │               ├── MainActivity.kt
 │   │       │               └── Navigation.kt
 │   │       ├── res/
@@ -175,14 +189,19 @@ rovia/
 │   │       │   │   ├── ic_arrow_back.xml
 │   │       │   │   ├── ic_arrow_forward.xml
 │   │       │   │   ├── ic_bluetooth.xml
+│   │       │   │   ├── ic_close.xml
+│   │       │   │   ├── ic_favorite.xml
+│   │       │   │   ├── ic_favorite_border.xml
 │   │       │   │   ├── ic_folder.xml
 │   │       │   │   ├── ic_history.xml
 │   │       │   │   ├── ic_home.xml
+│   │       │   │   ├── ic_info.xml
 │   │       │   │   ├── ic_launcher_background.xml
 │   │       │   │   ├── ic_launcher_foreground.xml
 │   │       │   │   ├── ic_library.xml
 │   │       │   │   ├── ic_lyrics.xml
 │   │       │   │   ├── ic_more_vert.xml
+│   │       │   │   ├── ic_offset.xml
 │   │       │   │   ├── ic_pause.xml
 │   │       │   │   ├── ic_play.xml
 │   │       │   │   ├── ic_play_arrow.xml
@@ -224,7 +243,8 @@ rovia/
 │   │       │   │   └── themes.xml
 │   │       │   ├── xml/
 │   │       │   │   ├── backup_rules.xml
-│   │       │   │   └── data_extraction_rules.xml
+│   │       │   │   ├── data_extraction_rules.xml
+│   │       │   │   └── file_paths.xml
 │   │       │   └── resources.properties
 │   │       └── AndroidManifest.xml
 │   ├── build.gradle.kts
@@ -249,6 +269,7 @@ rovia/
 │   │   ├── DECODER_POLICY.md
 │   │   ├── DIRECT_USB_PLAYBACK_COORDINATION.md
 │   │   ├── EXOPLAYER_PIPELINE.md
+│   │   ├── EXTERNAL_PLAYER.md
 │   │   ├── MEDIA3_UPGRADE_POLICY.md
 │   │   └── README.md
 │   ├── modes/
@@ -262,6 +283,10 @@ rovia/
 │   │   ├── EXACT_PCM_ADAPTER.md
 │   │   ├── PCM_FORMAT_MODEL.md
 │   │   └── README.md
+│   ├── room3/
+│   │   ├── README.md
+│   │   ├── database-mechanism.md
+│   │   └── features.md
 │   ├── verification/
 │   │   ├── DIAGNOSTICS.md
 │   │   ├── README.md
@@ -269,6 +294,7 @@ rovia/
 │   │   ├── result_c2_android_flac_decoder.md
 │   │   └── VALIDATION_MATRIX.md
 │   ├── ARCHITECTURE.md
+│   ├── FEATURES.md
 │   ├── README.md
 │   ├── REFERENCE.md
 │   └── STRUCTURE.md
@@ -329,11 +355,14 @@ The documentation package:
 ```text
 docs/
 ├── ARCHITECTURE.md
+├── FEATURES.md
 ├── README.md
 ├── REFERENCE.md
 ├── STRUCTURE.md
 ├── direct-usb
 │   ├── ANDROID_USB_UNIFFI.md
+│   ├── DIRECT_USB_PIPELINE.md
+│   ├── HARDWARE_VOLUME.md
 │   ├── LIFECYCLE_AND_POSITION.md
 │   ├── QUEUE_AND_PACKETIZATION.md
 │   ├── README.md
@@ -349,6 +378,7 @@ docs/
 │   ├── DECODER_POLICY.md
 │   ├── DIRECT_USB_PLAYBACK_COORDINATION.md
 │   ├── EXOPLAYER_PIPELINE.md
+│   ├── EXTERNAL_PLAYER.md
 │   ├── MEDIA3_UPGRADE_POLICY.md
 │   └── README.md
 ├── modes
@@ -362,6 +392,10 @@ docs/
 │   ├── EXACT_PCM_ADAPTER.md
 │   ├── PCM_FORMAT_MODEL.md
 │   └── README.md
+├── room3
+│   ├── README.md
+│   ├── database-mechanism.md
+│   └── features.md
 └── verification
     ├── DIAGNOSTICS.md
     ├── README.md
@@ -383,6 +417,7 @@ docs/
 | `data/repository/` | Repository implementations for library, search, folder filters and playback history. |
 | `feature/` | Compose screens and feature-specific presentation logic. |
 | `playback/controller/` | Playback command and control boundary. |
+| `playback/external/` | The temporary External Player service and its pause/resume coordination with the regular player. |
 | `playback/queue/` | Playback metadata keys and playback-origin metadata. |
 | `playback/service/` | ExoPlayer and MediaSession service lifecycle. |
 | `playback/statistics/` | Playback statistics repository. |
@@ -418,7 +453,10 @@ docs/
 |---|---|
 | `app/src/main/kotlin/com/rovia/music/playback/service/PlaybackService.kt` | ExoPlayer and MediaSession service lifecycle; owns the output-mode state, rebuilds the player transactionally on mode changes and feeds the current media item to all three Bit-Perfect coordinators. |
 | `app/src/main/kotlin/com/rovia/music/playback/service/RoviaRenderersFactory.kt` | Builds the standard Android audio renderers for OFF, or the active mode's control renderer alone when a Bit-Perfect mode is selected. |
-| `app/src/main/kotlin/com/rovia/music/playback/controller/PlaybackController.kt` | Existing playback controller. |
+| `app/src/main/kotlin/com/rovia/music/playback/controller/PlaybackController.kt` | MediaController boundary for the UI; addresses a MediaSessionService by class — the regular PlaybackService by default, the ExternalPlaybackService from the external player. |
+| `app/src/main/kotlin/com/rovia/music/ExternalPlayerActivity.kt` | The Open With entry point: hosts only the player screen (in its external mode) for one externally handed audio file, reads its metadata, and ends the temporary playback when the user leaves. |
+| `app/src/main/kotlin/com/rovia/music/playback/external/ExternalPlaybackService.kt` | The External Player's MediaSessionService: a plain standard-path ExoPlayer with its own session and notification, with no database, statistics or folder-filter involvement. |
+| `app/src/main/kotlin/com/rovia/music/playback/external/ExternalPlaybackCoordinator.kt` | The pause/resume handshake between the external and regular players: pauses a playing regular player at external takeover and resumes it when the external session ends, unless the user took it back manually. |
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/AudioOutputMode.kt` | The four output modes and their persisted, observable store shared by Settings and the playback service. |
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/direct/DirectUsbController.kt` | Android USB discovery, permission, connection and Rust session coordination, including the source-playback bridge used by the coordinator. |
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/direct/DirectUsbPlaybackCoordinator.kt` | Serializes native playback commands, resolves the current item to a duplicated source descriptor, polls native status and anchors the playback clock to completed output frames. |

@@ -16,6 +16,7 @@ mode.
 ## Documents
 
 - [ExoPlayer pipeline by mode](EXOPLAYER_PIPELINE.md)
+- [External Player](EXTERNAL_PLAYER.md) — the second, temporary MediaSessionService behind Open With, and its pause/resume handshake with the regular player.
 - [Direct USB playback coordination](DIRECT_USB_PLAYBACK_COORDINATION.md)
 - [Direct USB end-to-end pipeline](../direct-usb/DIRECT_USB_PIPELINE.md)
 - [Decoder policy](DECODER_POLICY.md)

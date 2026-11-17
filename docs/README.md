@@ -7,8 +7,9 @@ backend works, and why the Bit-Perfect modes decode with Symphonia.
 ## Start here
 
 1. [Architecture](ARCHITECTURE.md) — the playback architecture and the four output modes.
-2. [Repository structure](STRUCTURE.md) — source and documentation map.
-3. [Official references](REFERENCE.md) — platform, Media3, Symphonia, UAC and libusb sources.
+2. [Feature reference](FEATURES.md) — every user-facing feature of the app and how it behaves.
+3. [Repository structure](STRUCTURE.md) — source and documentation map.
+4. [Official references](REFERENCE.md) — platform, Media3, Symphonia, UAC and libusb sources.
 
 ## Technical areas
 
@@ -16,6 +17,7 @@ backend works, and why the Bit-Perfect modes decode with Symphonia.
 - [Direct USB native playback](direct-usb/README.md) — the Rust USB backend end to end.
 - [PCM integrity](pcm/README.md) — how decoded samples are preserved.
 - [Output modes](modes/README.md) — OFF, Native A14, Direct USB and DAP.
+- [Room3 database](room3/README.md) — the Room 3 tables, the database mechanism, and the features that depend on it.
 - [Verification](verification/README.md) — measurements and validation records.
 - [Hardware](hardware/README.md) — the test phone, the DAC and their validated combination.
 
