@@ -90,8 +90,7 @@ fun CreatePlaylistDialog(
 
 /**
  * Playlist picker shown when adding a track: lists the existing playlists and
- * offers inline creation, following the reference player's bottom-sheet flow
- * in dialog form.
+ * offers inline creation.
  */
 @Composable
 fun AddToPlaylistDialog(

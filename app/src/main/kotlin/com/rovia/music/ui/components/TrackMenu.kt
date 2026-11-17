@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -37,13 +38,12 @@ import com.rovia.music.data.repository.PlaylistSummary
 import com.rovia.music.data.repository.UserLibraryRepository
 import kotlinx.coroutines.launch
 
-/** Dismiss handle for the open track menu, in the Essentials menu pattern. */
+/** Dismiss handle for the open track menu. */
 val LocalTrackMenuDismiss = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * One row of a track menu: a segmented card row on surfaceContainerHigh that
- * dismisses the menu after its action, following the Essentials
- * SegmentedDropdownMenu design.
+ * dismisses the menu after its action.
  */
 @Composable
 fun ColumnScope.TrackMenuItem(

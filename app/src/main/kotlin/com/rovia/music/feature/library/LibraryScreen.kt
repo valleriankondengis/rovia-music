@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -61,6 +61,8 @@ import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.LibraryCollection
+import com.rovia.music.data.repository.LikedEntityItem
+import com.rovia.music.data.repository.LikedEntityType
 import com.rovia.music.data.repository.PlaylistSummary
 import com.rovia.music.data.repository.LibraryFolder
 import com.rovia.music.playback.controller.PlaybackController
@@ -108,6 +110,7 @@ fun LibraryScreen(
     playbackController: PlaybackController,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
+    onOpenSingle: (String) -> Unit,
     onOpenGenre: (String) -> Unit,
     onOpenPlaylist: (Long) -> Unit,
     onOpenLiked: () -> Unit,
@@ -283,7 +286,7 @@ fun LibraryScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    ContainedLoadingIndicator()
                 }
             }
 
@@ -431,11 +434,15 @@ fun LibraryScreen(
             selectedCategory == LibraryCategory.LIKED -> {
                 LibraryLikedList(
                     likedCount = libraryState.likedCount,
+                    likedEntities = libraryState.likedEntities,
                     modifier = Modifier
                         .fillMaxSize(),
                     contentTopPadding = categoryContentTopPadding,
                     contentBottomPadding = contentBottomPadding,
-                    onOpenLiked = onOpenLiked
+                    onOpenLiked = onOpenLiked,
+                    onOpenArtist = onOpenArtist,
+                    onOpenAlbum = onOpenAlbum,
+                    onOpenSingle = onOpenSingle
                 )
             }
 
@@ -533,6 +540,7 @@ fun LibraryScreen(
 
                 MaterialTheme(colorScheme = buttonGroupColorScheme) {
                     ButtonGroup(
+                        expandedRatio = 0.4f,
                         overflowIndicator = { menuState ->
                             ButtonGroupDefaults.OverflowIndicator(
                                 menuState = menuState,
@@ -641,6 +649,7 @@ private fun FolderBreadcrumb(
     ) {
         MaterialTheme(colorScheme = breadcrumbColorScheme) {
             ButtonGroup(
+                expandedRatio = 0.4f,
                 overflowIndicator = { menuState ->
                     ButtonGroupDefaults.OverflowIndicator(
                         menuState = menuState,
@@ -972,19 +981,6 @@ private fun LibraryPlaylistList(
             )
         }
 
-        if (playlists.isEmpty()) {
-            item(key = "library-playlists-empty") {
-                Text(
-                    text = stringResource(R.string.playlist_empty),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 24.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
         itemsIndexed(
             items = playlists,
             key = { _, playlist -> "library-playlist-${playlist.id}" },
@@ -1040,11 +1036,16 @@ private fun LibraryPlaylistList(
 @Composable
 private fun LibraryLikedList(
     likedCount: Int,
+    likedEntities: List<LikedEntityItem>,
     modifier: Modifier = Modifier,
     contentTopPadding: Dp,
     contentBottomPadding: Dp,
     onOpenLiked: () -> Unit,
+    onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (String) -> Unit,
+    onOpenSingle: (String) -> Unit,
 ) {
+    val totalCount = 1 + likedEntities.size
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(
@@ -1061,7 +1062,7 @@ private fun LibraryLikedList(
                 onClick = onOpenLiked,
                 shapes = ListItemDefaults.segmentedShapes(
                     index = 0,
-                    count = 1,
+                    count = totalCount,
                 ),
                 leadingContent = {
                     LikedArtwork(
@@ -1084,6 +1085,64 @@ private fun LibraryLikedList(
                 content = {
                     Text(
                         text = stringResource(R.string.liked_songs_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+
+        itemsIndexed(
+            items = likedEntities,
+            key = { _, entity -> "liked-entity:${entity.type}:${entity.key}" }
+        ) { entityIndex, entity ->
+            val index = entityIndex + 1
+            val typeLabel = stringResource(
+                when (entity.type) {
+                    LikedEntityType.ARTIST -> R.string.library_category_artists
+                    LikedEntityType.ALBUM -> R.string.library_category_albums
+                    LikedEntityType.SINGLE -> R.string.artist_release_type_single
+                    LikedEntityType.EP -> R.string.artist_release_type_ep
+                }
+            )
+            val supportingText = entity.subtitle
+                ?.takeIf { subtitle -> subtitle.isNotBlank() }
+                ?.let { subtitle -> "$typeLabel \u2022 $subtitle" }
+                ?: typeLabel
+            SegmentedListItem(
+                selected = false,
+                onClick = {
+                    when (entity.type) {
+                        LikedEntityType.ARTIST -> onOpenArtist(entity.key)
+                        LikedEntityType.ALBUM -> onOpenAlbum(entity.key)
+                        LikedEntityType.SINGLE,
+                        LikedEntityType.EP -> onOpenSingle(entity.key)
+                    }
+                },
+                shapes = ListItemDefaults.segmentedShapes(
+                    index = index,
+                    count = totalCount,
+                ),
+                leadingContent = {
+                    AlbumArtwork(
+                        artworkUri = entity.artworkUri,
+                        fallbackText = entity.title,
+                        contentDescription = null,
+                        modifier = Modifier.size(52.dp),
+                        size = 52.dp,
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supportingText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                content = {
+                    Text(
+                        text = entity.title,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

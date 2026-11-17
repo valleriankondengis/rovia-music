@@ -7,6 +7,7 @@ import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.LibraryCatalog
 import com.rovia.music.data.repository.LibraryRepository
 import com.rovia.music.data.repository.PlaylistSummary
+import com.rovia.music.data.repository.LikedEntityItem
 import com.rovia.music.data.repository.UserLibraryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -25,6 +26,7 @@ data class LibraryUiState(
     val playlists: List<PlaylistSummary> = emptyList(),
     val likedCount: Int = 0,
     val likedTrackKeys: Set<String> = emptySet(),
+    val likedEntities: List<LikedEntityItem> = emptyList(),
 )
 
 class LibraryViewModel(
@@ -46,6 +48,11 @@ class LibraryViewModel(
         viewModelScope.launch {
             userLibraryRepository.observeLikedTrackKeys().collect { keys ->
                 mutableState.update { current -> current.copy(likedTrackKeys = keys) }
+            }
+        }
+        viewModelScope.launch {
+            userLibraryRepository.observeLikedEntities().collect { entities ->
+                mutableState.update { current -> current.copy(likedEntities = entities) }
             }
         }
     }

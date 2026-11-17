@@ -29,7 +29,7 @@ import com.rovia.music.R
  * Artwork for a playlist. Playlists never carry imported images: the playlist
  * name itself is the artwork, set as cover typography on a background color
  * derived deterministically from the name. Every size shows the full name,
- * scaled down on small tiles, the way streaming services render text covers.
+ * scaled down on small tiles.
  */
 @Composable
 fun PlaylistArtwork(

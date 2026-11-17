@@ -1,6 +1,7 @@
 package com.rovia.music.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -186,7 +187,12 @@ fun TrackListCard(
         modifier = modifier
             .width(width)
             .height(height)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AlbumArtwork(
