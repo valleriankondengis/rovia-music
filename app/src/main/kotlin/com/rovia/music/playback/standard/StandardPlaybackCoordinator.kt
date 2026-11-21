@@ -10,7 +10,9 @@ import android.os.HandlerThread
 import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import com.rovia.music.playback.PlaybackDecoderStore
-import com.rovia.music.playback.PlaybackDiagnostics
+import com.rovia.music.playback.PipelineInfo
+import com.rovia.music.playback.PlaybackPipelineStore
+import com.rovia.music.playback.bitperfect.AudioOutputMode
 import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import kotlinx.coroutines.CoroutineScope
@@ -417,7 +419,7 @@ internal class StandardPlaybackCoordinator(
         failureGeneration = streamGeneration
         failureMessage = message
         PlaybackDecoderStore.setFailure(message)
-        PlaybackDiagnostics.log("OFF failure: $message")
+        PlaybackPipelineStore.clear()
     }
 
     private fun headFrames(): Long {
@@ -586,11 +588,15 @@ internal class StandardPlaybackCoordinator(
             preparedGeneration = streamGeneration
             preparedMediaId = item.mediaId
             anchorTo(startSourceUs, playing = false)
-            PlaybackDiagnostics.log(
-                "OFF prepare ${item.mediaId}: probe ${info.sampleRateHz} Hz " +
-                    "${info.bitsPerSample}-bit ${info.channels}ch -> " +
-                    "AudioTrack ${format.sampleRate} Hz" +
-                    if (downsampler != null) " (downsampled to 48 kHz)" else "",
+            PlaybackPipelineStore.set(
+                PipelineInfo(
+                    mode = AudioOutputMode.OFF,
+                    offOutputSampleRateHz = format.sampleRate,
+                    offDownsamplerActive = downsampler != null,
+                    offDownsampledFromHz = if (downsampler != null) info.sampleRateHz else null,
+                    offBufferBytes = maxOf(minBuffer * 2, targetBuffer),
+                    offFrameCount = built.bufferSizeInFrames,
+                ),
             )
             return true
         }
@@ -671,6 +677,7 @@ internal class StandardPlaybackCoordinator(
         preparedMediaId = null
         outputEnded = false
         anchorPlaying = false
+        PlaybackPipelineStore.clear()
         val activeTrack = track
         track = null
         if (activeTrack != null) {

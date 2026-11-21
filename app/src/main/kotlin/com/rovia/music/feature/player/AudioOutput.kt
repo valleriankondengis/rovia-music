@@ -67,6 +67,7 @@ import com.rovia.music.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rovia.music.playback.bitperfect.AudioOutputMode
 import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
+import com.rovia.music.playback.bitperfect.UsbAudioClass
 import com.rovia.music.playback.bitperfect.direct.DirectUsbControllerProvider
 import com.rovia.music.uniffi.DacVolumeDto
 import kotlinx.coroutines.delay
@@ -254,7 +255,17 @@ internal fun AudioOutputIndicator(
             else -> sheetLocalDeviceIcon
         }
         val sheetDeviceSubtitle = when {
-            outputState.usbDacName != null -> outputState.usbDacUacLabel
+            outputState.usbDacName != null -> {
+                // In Direct USB mode the live session knows the
+                // configuration the DAC is operating in; the snapshot
+                // label is the fallback when no session is retained.
+                if (outputMode == AudioOutputMode.DIRECT_USB) {
+                    directUsbController.activeDeviceUacVersion()
+                        ?: outputState.usbDacUacLabel
+                } else {
+                    outputState.usbDacUacLabel
+                }
+            }
             outputState.isBluetoothConnected -> bluetoothAudioLabel
             outputState.isWiredConnected -> wiredAudioLabel
             else -> null
@@ -604,30 +615,24 @@ private fun detectUsbAudioDeviceName(usbManager: UsbManager?): String? {
 
 private fun detectUsbAudioClassLabel(usbManager: UsbManager?, preferredName: String?): String? {
     val manager = usbManager ?: return null
+    // The name the output snapshot already read carries an explicit
+    // mode marker on devices that declare their mode in the product
+    // string; that marker names the operating mode directly.
+    UsbAudioClass.labelFromProductName(preferredName)?.let { return it }
     return runCatching {
         val devices = manager.deviceList.values.toList()
         val ordered = devices.sortedBy { device ->
             if (preferredName != null && device.productName == preferredName) 0 else 1
         }
-        ordered.firstNotNullOfOrNull { device ->
-            var label: String? = null
-            for (configIndex in 0 until device.configurationCount) {
-                val configuration = device.getConfiguration(configIndex)
-                for (interfaceIndex in 0 until configuration.interfaceCount) {
-                    val usbInterface = configuration.getInterface(interfaceIndex)
-                    if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_AUDIO &&
-                        usbInterface.interfaceSubclass == 1
-                    ) {
-                        label = when (usbInterface.interfaceProtocol) {
-                            0x20 -> "UAC2"
-                            0x30 -> "UAC3"
-                            else -> "UAC1"
-                        }
-                    }
-                }
-            }
-            label
+        for (device in ordered) {
+            if (!UsbAudioClass.hasAudioFunction(device)) continue
+            // The first audio device in the ordered list is the DAC the
+            // snapshot named; its label stands even when it is null
+            // (its configurations disagree on the class version),
+            // rather than borrowing another device's label.
+            return@runCatching UsbAudioClass.labelForDevice(device)
         }
+        null
     }.getOrNull()
 }
 

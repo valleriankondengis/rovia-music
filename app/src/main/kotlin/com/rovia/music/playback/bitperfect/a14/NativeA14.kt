@@ -116,9 +116,12 @@ internal class NativeA14MixerController(context: Context) {
             NativeA14Status.set("Native A14: no USB audio device is connected.")
             return null
         }
-        val match = audioManager.getSupportedMixerAttributes(usb).firstOrNull { attributes ->
-            attributes.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT &&
-                attributes.format.sampleRate == sampleRate &&
+        val offered = audioManager.getSupportedMixerAttributes(usb)
+            .filter { attributes ->
+                attributes.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT
+            }
+        val match = offered.firstOrNull { attributes ->
+            attributes.format.sampleRate == sampleRate &&
                 attributes.format.channelMask == channelMask &&
                 attributes.format.encoding == encoding
         }

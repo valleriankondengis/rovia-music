@@ -11,6 +11,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import com.rovia.music.playback.bitperfect.UsbAudioClass
 import com.rovia.music.uniffi.DacVolumeDto
 import com.rovia.music.uniffi.PlaybackStatusDto
 import com.rovia.music.uniffi.SourceInfoDto
@@ -68,6 +69,7 @@ internal class DirectUsbController(context: Context) : AutoCloseable {
     @Volatile private var activeConnection: UsbDeviceConnection? = null
     @Volatile private var activeSession: UsbDirectSession? = null
     @Volatile private var activeDeviceId: Int? = null
+    @Volatile private var activeUacLabel: String? = null
     private var receiverRegistered = false
     private var detachReceiverRegistered = false
 
@@ -266,6 +268,16 @@ internal class DirectUsbController(context: Context) : AutoCloseable {
             }
             ensureCurrentInspection()
             val openedConnection = requireNotNull(connection)
+            // The label names the mode the device is operating in: the
+            // product name's explicit mode marker when it carries one,
+            // otherwise the active configuration read from the live
+            // connection, never the first AudioControl protocol in the
+            // static descriptor list.
+            val sessionUacLabel = withContext(Dispatchers.IO) {
+                UsbAudioClass.labelFromProductName(device.productName)
+                    ?: UsbAudioClass.labelFromActiveConfiguration(openedConnection, device)
+                    ?: UsbAudioClass.bestEffortLabel(device)
+            }
             val fileDescriptor = openedConnection.fileDescriptor
             if (fileDescriptor < 0) {
                 throw IllegalStateException("Android returned an invalid USB file descriptor")
@@ -307,6 +319,7 @@ internal class DirectUsbController(context: Context) : AutoCloseable {
                 activeConnection = openedConnection
                 activeSession = openedSession
                 activeDeviceId = deviceId
+                activeUacLabel = sessionUacLabel
                 connection = null
                 session = null
             }
@@ -407,6 +420,14 @@ internal class DirectUsbController(context: Context) : AutoCloseable {
     internal fun playbackDacVolume(): DacVolumeDto? {
         val session = synchronized(sessionLock) { activeSession } ?: return null
         return runCatching { session.dacVolume() }.getOrNull()
+    }
+
+    internal fun activeDeviceUacVersion(): String? {
+        activeUacLabel?.let { return it }
+        val deviceId = synchronized(sessionLock) { activeDeviceId } ?: return null
+        val device = usbManager.deviceList.values.firstOrNull { it.deviceId == deviceId }
+            ?: return null
+        return UsbAudioClass.labelForDevice(device)
     }
 
     internal suspend fun playbackSetDacVolume(db: Double): DacVolumeDto {
@@ -526,6 +547,7 @@ internal class DirectUsbController(context: Context) : AutoCloseable {
         activeSession = null
         activeConnection = null
         activeDeviceId = null
+        activeUacLabel = null
         if (session != null) {
             val finalStatus = runCatching { session.shutdown() }
                 .onFailure {  }

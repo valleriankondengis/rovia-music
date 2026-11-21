@@ -264,6 +264,12 @@ class PlaybackController(
         return true
     }
 
+    fun stopPlayback() {
+        val controller = _mediaController.value ?: return
+        controller.stop()
+        controller.clearMediaItems()
+    }
+
     private fun observeQueue(controller: MediaController) {
         detachQueueListener(resetState = false)
 

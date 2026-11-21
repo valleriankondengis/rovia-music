@@ -14,6 +14,9 @@ import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.decoder.DecodedSourceInfo
 import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.PipelineInfo
+import com.rovia.music.playback.PlaybackPipelineStore
+import com.rovia.music.playback.bitperfect.AudioOutputMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,10 +33,6 @@ import java.util.concurrent.atomic.AtomicLong
 private const val POLL_INTERVAL_MS = 200L
 private const val SHUTDOWN_TIMEOUT_MS = 3_000L
 private const val MAX_PREPARE_ATTEMPTS = 3
-// 32 KiB: a decoded block must fit the AudioTrack buffer (about 200 ms,
-// e.g. ~53 KiB for 48 kHz stereo 24-bit) so one block normally drains in
-// a single pump run. A partial write is still harmless: the pump keeps
-// the remainder (see pendingData) and never seeks to recover it.
 private const val READ_BLOCK_BYTES = 32_768
 private const val MAX_WRITE_ATTEMPTS = 8
 private const val PUMP_RETRY_DELAY_MS = 5L
@@ -120,15 +119,6 @@ internal class NativeA14PlaybackCoordinator(
     @Volatile
     private var framesWritten: Long = 0L
 
-    // Remainder of the current decoded block not yet written to the
-    // AudioTrack. The pump owns this: a block is never discarded, and a
-    // partial write never seeks the decoder. (2026-11-21: the old
-    // reanchorAfterPartialWrite sought to positionBaseFrames + the
-    // absolute playback head, without flushing, so the head was counted
-    // twice on every partial write and the decoder raced ahead — the
-    // song played in fast-forward jumps. A 64 KiB block is larger than
-    // the ~53 KiB AudioTrack buffer, so partial writes happened on
-    // every block.)
     @Volatile
     private var pendingData: ByteArray? = null
     @Volatile
@@ -160,9 +150,6 @@ internal class NativeA14PlaybackCoordinator(
             }
             var progressed = false
             try {
-                // Finish the pending remainder before decoding more: the
-                // decoder only advances when the previous block is fully
-                // written, so no audio is ever skipped or repeated.
                 var data = pendingData
                 var offset = pendingOffset
                 if (data == null) {
@@ -207,8 +194,6 @@ internal class NativeA14PlaybackCoordinator(
                         framesWritten += (offset - startOffset) / bytesPerFrame
                     }
                     if (offset < data.size) {
-                        // Track buffer full: keep the remainder for the
-                        // next pump run. Never discard it, never seek.
                         pendingData = data
                         pendingOffset = offset
                     } else {
@@ -457,6 +442,7 @@ internal class NativeA14PlaybackCoordinator(
         failureGeneration = streamGeneration
         failureMessage = message
         PlaybackDecoderStore.setFailure(message)
+        PlaybackPipelineStore.clear()
 
     }
 
@@ -513,8 +499,6 @@ internal class NativeA14PlaybackCoordinator(
                     ?: throw IllegalStateException("The media source could not be opened")
                 val fileDescriptor = descriptor.detachFd()
                 source.openSource(fileDescriptor, item.extensionHint)
-                // Publish the decoded source (decoder id comes from the
-                // registry, never a hardcoded backend name here).
                 .also { info ->
                     PlaybackDecoderStore.setDecoderInfo(
                         DecodedSourceInfo.fromSourceInfoDto(
@@ -629,6 +613,14 @@ internal class NativeA14PlaybackCoordinator(
             preparedGeneration = streamGeneration
             preparedMediaId = item.mediaId
             anchorTo(startSourceUs, playing = false)
+            PlaybackPipelineStore.set(
+                PipelineInfo(
+                    mode = AudioOutputMode.NATIVE_A14,
+                    a14SelectedFormat = NativeA14Support.describe(chosen.attributes.format),
+                    a14DeviceName = chosen.device.productName?.toString(),
+                    a14RouteVerified = true,
+                ),
+            )
             return true
         }
     }
@@ -673,7 +665,6 @@ internal class NativeA14PlaybackCoordinator(
         runCatching { source.seek(framesToUs(positionFrames).toULong()) }.onFailure { }
         positionBaseFrames = positionFrames
         framesWritten = 0L
-        // The track was flushed, so any unwritten remainder is gone too.
         pendingData = null
         pendingOffset = 0
         sourceEos = false
@@ -695,7 +686,6 @@ internal class NativeA14PlaybackCoordinator(
             }
         positionBaseFrames = usToFrames(sourcePositionUs)
         framesWritten = 0L
-        // The track was flushed, so any unwritten remainder is gone too.
         pendingData = null
         pendingOffset = 0
         sourceEos = false
@@ -708,6 +698,9 @@ internal class NativeA14PlaybackCoordinator(
     }
 
     private fun releaseSegmentLocked() {
+        mixer?.clear()
+        selection = null
+        PlaybackPipelineStore.clear()
         pumpPlaying = false
         pumpHandler.removeCallbacks(pumpRunnable)
         startedGeneration = -1L

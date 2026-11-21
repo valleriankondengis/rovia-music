@@ -10,6 +10,9 @@ import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.decoder.DecodedSourceInfo
 import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.PipelineInfo
+import com.rovia.music.playback.PlaybackPipelineStore
+import com.rovia.music.playback.bitperfect.AudioOutputMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -368,6 +371,7 @@ internal class DirectUsbPlaybackCoordinator(
         failureGeneration = streamGeneration
         failureMessage = message
         PlaybackDecoderStore.setFailure(message)
+        PlaybackPipelineStore.clear()
 
     }
 
@@ -402,8 +406,6 @@ internal class DirectUsbPlaybackCoordinator(
                     ?: throw IllegalStateException("The media source could not be opened")
                 val fileDescriptor = descriptor.detachFd()
                 val info = controller.playbackOpenSource(fileDescriptor, item.extensionHint)
-                // Publish the decoded source; the id/display name come
-                // from the registry, never a hardcoded backend name here.
                 PlaybackDecoderStore.setDecoderInfo(
                     DecodedSourceInfo.fromSourceInfoDto(
                         DecoderRegistry.defaultBackendId(),
@@ -412,7 +414,8 @@ internal class DirectUsbPlaybackCoordinator(
                     ),
                 )
 
-                controller.playbackPrepare()
+                val status = controller.playbackPrepare()
+                status
             } catch (failure: Throwable) {
                 if (failure is VirtualMachineError || failure is ThreadDeath) throw failure
                 preparedGeneration = -1L
@@ -437,6 +440,29 @@ internal class DirectUsbPlaybackCoordinator(
             preparedGeneration = streamGeneration
             preparedMediaId = item.mediaId
             applyStatus(prepared)
+            val dacVolume = controller.playbackDacVolume()
+            val deviceItem = controller.state.value.let { state ->
+                state.devices.firstOrNull { it.deviceId == state.selectedDeviceId }
+                    ?: state.devices.firstOrNull()
+            }
+            PlaybackPipelineStore.set(
+                PipelineInfo(
+                    mode = AudioOutputMode.DIRECT_USB,
+                    usbNegotiatedRateHz = prepared.sampleRate.toInt(),
+                    usbNegotiatedChannels = prepared.channels.toInt(),
+                    usbNegotiatedBits = prepared.validBits.toInt(),
+                    usbUacVersion = controller.activeDeviceUacVersion(),
+                    usbVendorId = deviceItem?.vendorId,
+                    usbProductId = deviceItem?.productId,
+                    usbManufacturer = deviceItem?.manufacturerName?.takeIf { it.isNotBlank() },
+                    usbDeviceName = deviceItem?.displayName,
+                    dacVolumeAvailable = dacVolume?.available == true,
+                    dacVolumeMinDb = dacVolume?.minDb,
+                    dacVolumeMaxDb = dacVolume?.maxDb,
+                    dacVolumeCurrentDb = dacVolume?.currentDb,
+                    fixedVolumeAllowed = AudioOutputModeStoreProvider.get(applicationContext).allowFixedVolume.value,
+                ),
+            )
             val startSourceUs = pendingStartSourceUs
             if (startSourceUs > 0L) {
                 runCatching { controller.playbackSeek(startSourceUs) }
@@ -468,6 +494,7 @@ internal class DirectUsbPlaybackCoordinator(
         volumeBlockedGeneration = -1L
         startedGeneration = -1L
         preparedGeneration = -1L
+        PlaybackPipelineStore.clear()
         preparedMediaId = null
         outputEnded = false
         anchorPlaying = false

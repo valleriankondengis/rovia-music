@@ -12,6 +12,9 @@ import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.decoder.DecodedSourceInfo
 import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.PipelineInfo
+import com.rovia.music.playback.PlaybackPipelineStore
+import com.rovia.music.playback.bitperfect.AudioOutputMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -353,6 +356,7 @@ internal class DapPlaybackCoordinator(
         failureGeneration = streamGeneration
         failureMessage = message
         PlaybackDecoderStore.setFailure(message)
+        PlaybackPipelineStore.clear()
 
     }
 
@@ -376,8 +380,6 @@ internal class DapPlaybackCoordinator(
                     ?: throw IllegalStateException("The media source could not be opened")
                 val fileDescriptor = descriptor.detachFd()
                 val info = activeSession.openSource(fileDescriptor, item.extensionHint)
-                // Publish the decoded source; the id/display name come
-                // from the registry, never a hardcoded backend name here.
                 PlaybackDecoderStore.setDecoderInfo(
                     DecodedSourceInfo.fromSourceInfoDto(
                         DecoderRegistry.defaultBackendId(),
@@ -411,6 +413,14 @@ internal class DapPlaybackCoordinator(
             preparedGeneration = streamGeneration
             preparedMediaId = item.mediaId
             applyStatus(prepared)
+            PlaybackPipelineStore.set(
+                PipelineInfo(
+                    mode = AudioOutputMode.DAP,
+                    dapVerifiedRateHz = prepared.sampleRate.toInt(),
+                    dapVerifiedChannels = prepared.channels.toInt(),
+                    dapVerifiedBits = prepared.validBits.toInt(),
+                ),
+            )
             val startSourceUs = pendingStartSourceUs
             if (startSourceUs > 0L) {
                 runCatching { activeSession.seekPlayback(startSourceUs.toULong()) }.onFailure {}
@@ -428,6 +438,7 @@ internal class DapPlaybackCoordinator(
         startedGeneration = -1L
         preparedGeneration = -1L
         preparedMediaId = null
+        PlaybackPipelineStore.clear()
         outputEnded = false
         anchorPlaying = false
         val activeSession = sessionOrNull() ?: return
