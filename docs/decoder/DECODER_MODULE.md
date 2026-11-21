@@ -69,7 +69,7 @@ from a platform retriever — that is why those fields are blank in
 
 | Coordinator | Output route | Decode |
 |---|---|---|
-| `playback/standard/StandardPlaybackCoordinator.kt` (+ `StandardRenderer`, `StandardMediaClock`) | Plain AudioTrack, media usage; mixed by the Android system | Registry default backend |
+| `playback/standard/StandardPlaybackCoordinator.kt` (+ `StandardRenderer`, `StandardMediaClock`) | Plain AudioTrack, media usage; mixed by the Android system. Output rate capped at 48 kHz: a track above 48 kHz is downsampled to 48 kHz (`PcmDownsampler`, linear interpolation) so the hifi output never opens and the USB backend never gets pinned at 192 kHz; 44.1/48 kHz tracks keep their native rate. | Registry default backend |
 | `playback/bitperfect/a14/NativeA14PlaybackCoordinator.kt` | Native A14 BIT_PERFECT mixer route | `NativePcmSource` (Symphonia) |
 | `playback/bitperfect/direct/DirectUsbPlaybackCoordinator.kt` | Rust/libusb UAC transport | `NativePcmSource` (Symphonia) |
 | `playback/bitperfect/dap/DapPlaybackCoordinator.kt` | AAudio exclusive stream | Rust session (Symphonia) |
