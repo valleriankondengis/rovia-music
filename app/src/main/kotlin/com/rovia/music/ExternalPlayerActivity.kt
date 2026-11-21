@@ -196,10 +196,6 @@ class ExternalPlayerActivity : ComponentActivity() {
         var album: String? = null
         var durationMs: Long? = null
 
-        // Metadata only: title/artist/album/duration for display.
-        // The audio itself is decoded by the registered decoder backend
-        // (Symphonia, id "symphonia-rust") in ExternalPlaybackService,
-        // never by a platform decoder.
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(applicationContext, uri)

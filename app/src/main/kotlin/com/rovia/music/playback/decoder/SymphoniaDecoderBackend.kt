@@ -2,23 +2,6 @@ package com.rovia.music.playback.decoder
 
 import com.rovia.music.uniffi.NativePcmSource
 
-/**
- * The Symphonia decoder backend: pure-Rust decoding via the UniFFI
- * [NativePcmSource] (Symphonia 0.6.1, pinned by Git revision).
- *
- * Supported containers: WAV, FLAC, AIFF, CAF, ISO/MP4 (M4A/MP4), OGG,
- * Matroska/WebM. Supported codecs: PCM, FLAC, ALAC, AAC-LC, MP1/MP2/MP3,
- * Vorbis, ADPCM. Container support and codec support are separate facts:
- * a container can carry a codec this backend cannot decode.
- *
- * Explicitly NOT supported (sacrificed 2026-11-21, see
- * docs/media3/DECODER_POLICY.md): HE-AAC and HE-AACv2 — Symphonia has no
- * SBR decoder, so it can at best decode the AAC-LC core at half the
- * sample rate, which this backend does not pretend is full playback.
- * Also unsupported: AAC-ELD, xHE-AAC, Opus in MP4, DSD, WavPack, APE
- * audio, WMA and AC-3/E-AC-3. Those fail with an explicit reason instead
- * of silently skipping or falling back to a platform decoder.
- */
 internal class SymphoniaDecoderBackend(
     private val source: NativePcmSource = NativePcmSource(),
 ) : DecoderBackend {
@@ -42,8 +25,6 @@ internal class SymphoniaDecoderBackend(
                 failure,
             )
         }
-        // The Rust side already rejected unsupported codecs at open; a
-        // successful open is a supported codec by construction.
         return DecodedSourceInfo.fromSourceInfoDto(BACKEND_ID, DISPLAY_NAME, dto)
     }
 
@@ -82,11 +63,6 @@ internal class SymphoniaDecoderBackend(
     }
 
     companion object {
-        // Canonical backend id, following the <decoder>-<language/tech>
-        // naming rule (locked 2026-11-21): "symphonia-rust", never the
-        // bare "symphonia". A future FFmpeg backend would be "ffmpeg-c".
-        // The UI label ("Symphonia (Rust)") is the spelled-out form of
-        // the same id, not a second identifier.
         const val BACKEND_ID: String = "symphonia-rust"
         const val DISPLAY_NAME: String = "Symphonia 0.6.1 (Rust)"
 
@@ -95,7 +71,6 @@ internal class SymphoniaDecoderBackend(
             "VORBIS", "ADPCM",
         )
 
-        /** Codec -> reason it is unsupported by Symphonia. */
         private val UNSUPPORTED_CODECS: Map<String, String> = mapOf(
             "HE-AAC" to "HE-AAC (SBR) is not supported by Symphonia",
             "HE-AACV1" to "HE-AAC (SBR) is not supported by Symphonia",
@@ -127,7 +102,6 @@ internal class SymphoniaDecoderBackend(
         fun supportsCodec(container: String?, codec: String?): DecoderSupport {
             val key = codec?.trim()?.uppercase().orEmpty()
             if (key.isEmpty()) {
-                // No codec claimed yet: let the probe decide at open.
                 return DecoderSupport.Supported
             }
             unsupportedReason(key)?.let { reason ->
@@ -136,8 +110,6 @@ internal class SymphoniaDecoderBackend(
             if (key in SUPPORTED_CODECS || SUPPORTED_CODECS.any { key.contains(it) }) {
                 return DecoderSupport.Supported
             }
-            // Unknown codec: do not claim support; the probe at open is
-            // the authority and will fail explicitly if it cannot decode.
             return DecoderSupport.Unsupported(
                 codec = codec!!,
                 reason = "$codec is not supported by Symphonia",

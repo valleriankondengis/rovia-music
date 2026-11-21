@@ -14,13 +14,6 @@ import androidx.media3.exoplayer.source.SampleStream
 
 private const val MAX_INPUT_SIZE_BYTES = 1_048_576
 
-/**
- * The standard (OFF) renderer. It claims every audio format — the
- * decoder backend, not a platform decoder, decides whether a source
- * can be decoded — and drains the stream the same way the bit-perfect
- * renderers do. A decoder failure surfaces here as a renderer
- * exception, which [PlaybackService] reports instead of skipping.
- */
 @OptIn(UnstableApi::class)
 internal class StandardRenderer(
     private val coordinator: StandardPlaybackCoordinator,

@@ -19,16 +19,11 @@ import com.rovia.music.playback.standard.StandardRenderer
 
 /**
  * The player behind the external (Open With) entry point: a separate
- * [MediaSessionService] with its own ExoPlayer. It never touches the
- * library, the playback statistics, or any other database, ignores the
- * folder filter, and is not eligible for playback resumption. Its only
- * contact with the regular player is the pause/resume handshake in
- * [ExternalPlaybackCoordinator].
- *
- * External files are decoded by the registered decoder backend
- * (Symphonia, id "symphonia-rust") through the standard coordinator,
- * exactly like OFF mode in the main player — never by a platform
- * decoder. ExoPlayer here only drives the queue/timeline.
+ * [MediaSessionService] with its own ExoPlayer on the standard system path.
+ * It never touches the library, the playback statistics, or any other
+ * database, ignores the folder filter, and is not eligible for playback
+ * resumption. Its only contact with the regular player is the pause/resume
+ * handshake in [ExternalPlaybackCoordinator].
  */
 @OptIn(UnstableApi::class)
 class ExternalPlaybackService : MediaSessionService() {

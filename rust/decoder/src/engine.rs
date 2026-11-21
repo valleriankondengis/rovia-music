@@ -241,9 +241,6 @@ fn select_track(
         }
     }
     if saw_audio_track {
-        // Name the codec: a bare "not supported" gives the UI nothing to
-        // show, and the Kotlin side matches on the codec name (e.g. the
-        // HE-AAC recording case) to explain the failure.
         let codec = first_codec.unwrap_or_else(|| "unknown".to_string());
         Err(DecoderError::Unsupported(format!(
             "unsupported source: audio codec {codec} is not supported by Symphonia"

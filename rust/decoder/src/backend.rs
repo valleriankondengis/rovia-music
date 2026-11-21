@@ -1,49 +1,24 @@
-//! Decoder backend trait + registry.
-//!
-//! This is the Rust mirror of the Kotlin `DecoderBackend` interface
-//! (`playback/decoder/DecoderBackend.kt`). Playback code in
-//! `rovia-uniffi` / `direct-usb` talks to a backend through this trait,
-//! never to a concrete decoder: adding a decoder means implementing the
-//! trait and registering it in [`BackendRegistry`], replacing a decoder
-//! means registering a different default. No playback file changes.
-//!
-//! Backend ids follow the `<decoder>-<language/tech>` rule (locked
-//! 2026-11-21): the Symphonia backend's canonical id is
-//! `"symphonia-rust"`, a future FFmpeg backend would be `"ffmpeg-c"`.
-//! Never register a bare decoder name such as `"symphonia"`.
-//!
-//! The crate itself stays `rovia-decoder` and the Symphonia
-//! implementation stays `DecoderEngine`; only the backend id exposed
-//! to Kotlin / the UI / docs follows the `<decoder>-<tech>` rule.
 
 use std::path::Path;
 
 use crate::{DecodedBlock, DecoderEngine, DecoderError, SourceInfo};
 
-/// The only contract a decoder backend must satisfy.
 pub trait DecoderBackend {
-    /// Canonical backend id, e.g. `"symphonia-rust"`.
     fn backend_id(&self) -> &'static str;
 
-    /// Opens a source file for decoding. The hint is a file extension
-    /// such as `"m4a"`; the container/codec are probed, never assumed.
     fn open_path(
         &mut self,
         path: &Path,
         extension_hint: Option<&str>,
     ) -> Result<SourceInfo, DecoderError>;
 
-    /// Decodes the next block, or `None` at end of stream.
     fn decode_next(&mut self) -> Result<Option<DecodedBlock>, DecoderError>;
 
-    /// Seeks; returns the actual position in microseconds.
     fn seek(&mut self, position_us: u64) -> Result<u64, DecoderError>;
 
-    /// Properties of the currently open source, if any.
     fn info(&self) -> Option<&SourceInfo>;
 }
 
-/// The Symphonia backend: [`DecoderEngine`] behind the trait.
 pub struct SymphoniaBackend {
     engine: Option<DecoderEngine>,
 }
@@ -99,8 +74,6 @@ impl DecoderBackend for SymphoniaBackend {
     }
 }
 
-/// Which codecs the Symphonia backend can decode, by codec name
-/// (upper-cased, as reported by Symphonia / the container).
 fn symphonia_supports(codec: &str) -> bool {
     matches!(
         codec.to_ascii_uppercase().as_str(),
@@ -108,7 +81,6 @@ fn symphonia_supports(codec: &str) -> bool {
     )
 }
 
-/// Human-readable reason a codec is unsupported by Symphonia, if any.
 pub fn symphonia_unsupported_reason(codec: &str) -> Option<&'static str> {
     let key = codec.to_ascii_uppercase();
     match key.as_str() {
@@ -129,30 +101,19 @@ pub fn symphonia_unsupported_reason(codec: &str) -> Option<&'static str> {
     }
 }
 
-/// The registry: the only place a backend id is resolved.
-///
-/// A future backend registers its id here (e.g. `"ffmpeg-c"`) and
-/// implements [`DecoderBackend`]; playback code then resolves it by id
-/// without knowing which decoder it is.
 pub struct BackendRegistry;
 
 impl BackendRegistry {
-    /// Canonical id of the Symphonia backend.
     pub const SYMPHONIA_RUST_ID: &'static str = "symphonia-rust";
 
-    /// The default backend id.
     pub fn default_id() -> &'static str {
         Self::SYMPHONIA_RUST_ID
     }
 
-    /// All registered backend ids, in preference order.
     pub fn backend_ids() -> &'static [&'static str] {
         &[Self::SYMPHONIA_RUST_ID]
     }
 
-    /// Resolves a codec name to the backend that can decode it.
-    /// Returns `Err(DecoderError::Unsupported)` naming the codec when
-    /// no registered backend supports it.
     pub fn resolve(codec: &str) -> Result<&'static str, DecoderError> {
         if symphonia_supports(codec) {
             return Ok(Self::SYMPHONIA_RUST_ID);
@@ -165,8 +126,6 @@ impl BackendRegistry {
         )))
     }
 
-    /// Creates a backend by id. Unknown ids are an error, not a
-    /// silent fallback to another decoder.
     pub fn create(id: &str) -> Result<Box<dyn DecoderBackend>, DecoderError> {
         match id {
             Self::SYMPHONIA_RUST_ID => Ok(Box::new(SymphoniaBackend::new())),
@@ -217,8 +176,6 @@ mod tests {
                 "{codec}: expected Unsupported, got {failure:?}"
             );
         }
-        // HE-AAC is the sacrificed format (2026-11-21): the reason must
-        // say SBR, so the UI can explain it instead of skipping silently.
         let message = BackendRegistry::resolve("HE-AAC").unwrap_err().to_string();
         assert!(message.contains("SBR"), "HE-AAC reason: {message}");
     }
@@ -230,8 +187,6 @@ mod tests {
         let info = backend
             .open_path(&fixture("tone_lossy.m4a"), Some("m4a"))
             .expect("open tone_lossy.m4a");
-        // Codec short name is Symphonia's ("AAC" in 0.6.1); do not
-        // hard-code it beyond non-empty, the rate is the stable fact.
         assert!(!info.codec.is_empty());
         assert_eq!(info.sample_rate, 44_100);
         assert!(backend.decode_next().expect("decode").is_some());

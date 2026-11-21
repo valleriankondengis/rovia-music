@@ -775,15 +775,7 @@ class MediaStoreAudioRepository(
                     composer = value(MediaMetadataRetriever.METADATA_KEY_COMPOSER),
                     author = value(MediaMetadataRetriever.METADATA_KEY_AUTHOR),
                     writer = value(MediaMetadataRetriever.METADATA_KEY_WRITER),
-                    // mimeType is kept as a display tag only; it is
-                    // never a decoder decision — the decoder is chosen
-                    // by the registered backend at playback.
                     mimeType = value(MediaMetadataRetriever.METADATA_KEY_MIMETYPE),
-                    // Audio format deliberately NOT read here: sample
-                    // rate, bit depth and bitrate now come from the decoder
-                    // probe at playback (PlaybackDecoderStore), never from
-                    // a platform metadata scan. This retriever is used
-                    // only for tags.
                     sampleRateHz = null,
                     bitsPerSample = null,
                     bitrateBps = null,

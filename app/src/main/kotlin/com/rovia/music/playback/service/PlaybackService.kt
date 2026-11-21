@@ -217,11 +217,6 @@ class PlaybackService : MediaSessionService() {
                     return
                 }
                 if (isUnsupportedDecoderFailure(error)) {
-                    // An unsupported format is an explicit failure, not a
-                    // bad item to silently drop: stop on the current item
-                    // and publish the reason so the UI can show it
-                    // (e.g. HE-AAC, sacrificed 2026-11-21). There is no
-                    // platform-decoder fallback to silently switch to.
                     PlaybackDecoderStore.setFailure(
                         error.message ?: "Format not supported by the decoder",
                     )
