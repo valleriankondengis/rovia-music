@@ -775,16 +775,18 @@ class MediaStoreAudioRepository(
                     composer = value(MediaMetadataRetriever.METADATA_KEY_COMPOSER),
                     author = value(MediaMetadataRetriever.METADATA_KEY_AUTHOR),
                     writer = value(MediaMetadataRetriever.METADATA_KEY_WRITER),
+                    // mimeType is kept as a display tag only; it is
+                    // never a decoder decision — the decoder is chosen
+                    // by the registered backend at playback.
                     mimeType = value(MediaMetadataRetriever.METADATA_KEY_MIMETYPE),
-                    sampleRateHz = value(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
-                        ?.toIntOrNull()
-                        ?.takeIf { it > 0 },
-                    bitsPerSample = value(MediaMetadataRetriever.METADATA_KEY_BITS_PER_SAMPLE)
-                        ?.toIntOrNull()
-                        ?.takeIf { it > 0 },
-                    bitrateBps = value(MediaMetadataRetriever.METADATA_KEY_BITRATE)
-                        ?.toIntOrNull()
-                        ?.takeIf { it > 0 },
+                    // Audio format deliberately NOT read here: sample
+                    // rate, bit depth and bitrate now come from the decoder
+                    // probe at playback (PlaybackDecoderStore), never from
+                    // a platform metadata scan. This retriever is used
+                    // only for tags.
+                    sampleRateHz = null,
+                    bitsPerSample = null,
+                    bitrateBps = null,
                     extractionSucceeded = true,
                 )
             } ?: EmbeddedTrackMetadata()

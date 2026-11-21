@@ -67,10 +67,31 @@ fun AudioPipelineBottomSheet(
     )
 
     val bitPerfect = outputMode != AudioOutputMode.OFF
+
+    // The decoder is always the registered backend (Symphonia,
+    // id "symphonia-rust"); there is no platform-decoder branch.
+    val decoderInfo by PlaybackDecoderStore.decoderInfo
+        .collectAsStateWithLifecycle()
+    val decoderFailure by PlaybackDecoderStore.lastFailure
+        .collectAsStateWithLifecycle()
+    val decoderValue = when {
+        decoderFailure != null ->
+            stringResource(R.string.pipeline_decoder_unsupported)
+        decoderInfo != null -> decoderInfo!!.decoderLabel()
+        else -> stringResource(R.string.pipeline_decoder_symphonia)
+    }
+
+    // Source format comes from the decoder probe when available; the
+    // library track no longer carries sample rate / bit depth (see
+    // MediaStoreAudioRepository.readEmbeddedMetadata).
+    val decodedBits = decoderInfo?.bitsPerSample?.takeIf { it > 0 }
+        ?: track.bitsPerSample
+    val decodedRate = decoderInfo?.sampleRateHz?.takeIf { it > 0 }
+        ?: track.sampleRateHz
     val sourceSummary = listOfNotNull(
         formatPipelineAudioType(track.mimeType),
-        track.bitsPerSample?.takeIf { it > 0 }?.let { "$it-bit" },
-        track.sampleRateHz?.takeIf { it > 0 }?.let(::formatPipelineSampleRate),
+        decodedBits?.takeIf { it > 0 }?.let { "$it-bit" },
+        decodedRate?.takeIf { it > 0 }?.let(::formatPipelineSampleRate),
     ).joinToString(" · ")
     val sourceValue = listOfNotNull(
         sourceSummary.takeIf { it.isNotBlank() },
@@ -83,9 +104,6 @@ fun AudioPipelineBottomSheet(
     val artistValue = track.artist
         ?.takeIf(String::isNotBlank)
         ?: stringResource(R.string.player_unknown_artist)
-
-    val platformDecoderName by PlaybackDecoderStore.decoderName
-        .collectAsStateWithLifecycle()
     val stages = listOf(
         PipelineStage(
             label = stringResource(R.string.pipeline_title),
@@ -108,12 +126,7 @@ fun AudioPipelineBottomSheet(
         ),
         PipelineStage(
             label = stringResource(R.string.pipeline_decoder),
-            value = if (bitPerfect) {
-                stringResource(R.string.pipeline_decoder_symphonia)
-            } else {
-                platformDecoderName
-                    ?: stringResource(R.string.pipeline_decoder_platform)
-            },
+            value = decoderValue,
         ),
         PipelineStage(
             label = stringResource(R.string.pipeline_output),

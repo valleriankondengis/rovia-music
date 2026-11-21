@@ -78,6 +78,7 @@ import android.media.AudioManager
 import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.data.repository.PlaylistSummary
 import com.rovia.music.data.repository.UserLibraryRepository
+import com.rovia.music.playback.PlaybackDecoderStore
 import com.rovia.music.playback.bitperfect.AudioOutputMode
 import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
 import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
@@ -244,6 +245,12 @@ fun PlayerScreen(
 
     val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
     val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
+    // Format line source of truth: the decoder that actually opened this
+    // track (PlaybackDecoderStore), not the library metadata — the library
+    // no longer scans sample rate / bit depth from a platform retriever.
+    // Falls back to the track's own fields when the decoder has not
+    // reported yet (e.g. before prepare).
+    val decoderInfo by PlaybackDecoderStore.decoderInfo.collectAsStateWithLifecycle()
     var dacName by remember {
         mutableStateOf(UsbAudioOutputPresence.usbAudioOutputDeviceName(context))
     }
@@ -738,13 +745,18 @@ fun PlayerScreen(
                             )
                             val sourceParts = buildList {
                                 if (dacName != null) add("DAC")
-                                track.bitsPerSample
+                                val decodedBits = decoderInfo?.bitsPerSample
                                     ?.takeIf { it > 0 }
-                                    ?.let { add("$it-bit") }
-                                track.sampleRateHz
+                                    ?: track.bitsPerSample?.takeIf { it > 0 }
+                                decodedBits?.let { add("$it-bit") }
+                                val decodedRate = decoderInfo?.sampleRateHz
                                     ?.takeIf { it > 0 }
-                                    ?.let { add(formatSourceSampleRate(it)) }
-                                formatSourceAudioType(track.mimeType)?.let(::add)
+                                    ?: track.sampleRateHz?.takeIf { it > 0 }
+                                decodedRate?.let { add(formatSourceSampleRate(it)) }
+                                val decodedCodec = decoderInfo?.codec
+                                    ?.takeIf(String::isNotBlank)?.uppercase()
+                                (decodedCodec ?: formatSourceAudioType(track.mimeType))
+                                    ?.let(::add)
                                 add(routeLabel)
                             }
                             Text(

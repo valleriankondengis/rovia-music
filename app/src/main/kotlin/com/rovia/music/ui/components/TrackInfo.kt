@@ -41,10 +41,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
 import com.rovia.music.data.mediastore.LocalAudioTrack
+import com.rovia.music.playback.PlaybackDecoderStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -258,6 +260,12 @@ fun TrackInfoBottomSheet(
         ),
     )
 
+    // Decoder-reported format wins over the track's library fields: the
+    // library no longer scans sample rate / bit depth, and the retriever
+    // enrichment below is metadata-only for those fields when this sheet
+    // is opened for a track that is not currently playing.
+    val decoderInfo by PlaybackDecoderStore.decoderInfo.collectAsStateWithLifecycle()
+
     var lyricsUiState by remember(track.uri) {
         mutableStateOf<EmbeddedLyricsUiState>(EmbeddedLyricsUiState.Unavailable)
     }
@@ -356,14 +364,16 @@ fun TrackInfoBottomSheet(
         ),
         TrackInfoEntry(
             label = stringResource(R.string.track_info_sample_rate),
-            value = track.sampleRateHz
-                ?.takeIf { it > 0 }
+            value = (decoderInfo?.sampleRateHz?.takeIf { it > 0 }
+                ?: track.sampleRateHz?.takeIf { it > 0 })
                 ?.let(::formatSampleRate)
                 .orEmpty(),
         ),
         TrackInfoEntry(
             label = stringResource(R.string.track_info_bit_depth),
-            value = track.bitsPerSample?.takeIf { it > 0 }?.let { "$it-bit" }.orEmpty(),
+            value = (decoderInfo?.bitsPerSample?.takeIf { it > 0 }
+                ?: track.bitsPerSample?.takeIf { it > 0 })
+                ?.let { "$it-bit" }.orEmpty(),
         ),
         TrackInfoEntry(
             label = stringResource(R.string.track_info_bitrate),

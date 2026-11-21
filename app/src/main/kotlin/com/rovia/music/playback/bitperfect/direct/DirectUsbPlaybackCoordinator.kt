@@ -7,6 +7,9 @@ import androidx.media3.common.MediaItem
 import com.rovia.music.playback.bitperfect.AudioOutputModeStoreProvider
 import com.rovia.music.uniffi.PlaybackStatusDto
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
+import com.rovia.music.playback.decoder.DecoderRegistry
+import com.rovia.music.playback.decoder.DecodedSourceInfo
+import com.rovia.music.playback.PlaybackDecoderStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -364,6 +367,7 @@ internal class DirectUsbPlaybackCoordinator(
         if (failureGeneration == streamGeneration && failureMessage != null) return
         failureGeneration = streamGeneration
         failureMessage = message
+        PlaybackDecoderStore.setFailure(message)
 
     }
 
@@ -398,6 +402,15 @@ internal class DirectUsbPlaybackCoordinator(
                     ?: throw IllegalStateException("The media source could not be opened")
                 val fileDescriptor = descriptor.detachFd()
                 val info = controller.playbackOpenSource(fileDescriptor, item.extensionHint)
+                // Publish the decoded source; the id/display name come
+                // from the registry, never a hardcoded backend name here.
+                PlaybackDecoderStore.setDecoderInfo(
+                    DecodedSourceInfo.fromSourceInfoDto(
+                        DecoderRegistry.defaultBackendId(),
+                        DecoderRegistry.defaultBackendDisplayName(),
+                        info,
+                    ),
+                )
 
                 controller.playbackPrepare()
             } catch (failure: Throwable) {

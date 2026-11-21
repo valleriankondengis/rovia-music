@@ -45,7 +45,12 @@ impl DecoderEngine {
         let (track_id, time_base, params, duration, total_frames) = selected;
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
-            .map_err(|failure| DecoderError::Unsupported(failure.to_string()))?;
+            .map_err(|failure| {
+                DecoderError::Unsupported(format!(
+                    "unsupported source: audio codec {:?} is not supported by Symphonia ({failure})",
+                    params.codec
+                ))
+            })?;
         let duration_us = match (time_base, duration) {
             (Some(base), Some(value)) => base
                 .calc_duration(value)
@@ -219,11 +224,15 @@ fn select_track(
     DecoderError,
 > {
     let mut saw_audio_track = false;
+    let mut first_codec: Option<String> = None;
     for track in format.tracks() {
         let Some(params) = track.codec_params.as_ref().and_then(|params| params.audio()) else {
             continue;
         };
         saw_audio_track = true;
+        if first_codec.is_none() {
+            first_codec = Some(format!("{:?}", params.codec));
+        }
         if symphonia::default::get_codecs()
             .make_audio_decoder(params, &AudioDecoderOptions::default())
             .is_ok()
@@ -232,7 +241,13 @@ fn select_track(
         }
     }
     if saw_audio_track {
-        Err(DecoderError::Unsupported("audio codec is not supported".to_string()))
+        // Name the codec: a bare "not supported" gives the UI nothing to
+        // show, and the Kotlin side matches on the codec name (e.g. the
+        // HE-AAC recording case) to explain the failure.
+        let codec = first_codec.unwrap_or_else(|| "unknown".to_string());
+        Err(DecoderError::Unsupported(format!(
+            "unsupported source: audio codec {codec} is not supported by Symphonia"
+        )))
     } else {
         Err(DecoderError::Unsupported("source has no audio track".to_string()))
     }

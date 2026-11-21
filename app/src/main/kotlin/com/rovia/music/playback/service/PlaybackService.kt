@@ -13,7 +13,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -40,6 +39,8 @@ import com.rovia.music.playback.bitperfect.direct.DirectUsbController
 import com.rovia.music.playback.bitperfect.direct.DirectUsbControllerProvider
 import com.rovia.music.playback.bitperfect.direct.DirectUsbPlaybackCoordinator
 import com.rovia.music.playback.bitperfect.direct.DirectUsbRenderer
+import com.rovia.music.playback.standard.StandardPlaybackCoordinator
+import com.rovia.music.playback.standard.StandardRenderer
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import com.rovia.music.playback.queue.PlaybackOriginType
 import kotlinx.coroutines.CancellationException
@@ -71,22 +72,12 @@ class PlaybackService : MediaSessionService() {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var checkpointJob: Job? = null
     private var playerListener: Player.Listener? = null
-    private val analyticsListener = object : AnalyticsListener {
-        override fun onAudioDecoderInitialized(
-            eventTime: AnalyticsListener.EventTime,
-            decoderName: String,
-            initializedTimestampMs: Long,
-            initializationDurationMs: Long,
-        ) {
-            PlaybackDecoderStore.setDecoderName(decoderName)
-        }
-    }
-
     private var outputMode: AudioOutputMode = AudioOutputMode.OFF
     private var directUsbController: DirectUsbController? = null
     private var directCoordinator: DirectUsbPlaybackCoordinator? = null
     private var dapCoordinator: DapPlaybackCoordinator? = null
     private var a14Coordinator: NativeA14PlaybackCoordinator? = null
+    private var standardCoordinator: StandardPlaybackCoordinator? = null
     private var modeObserverJob: Job? = null
     private var directSessionJob: Job? = null
     private var detachReverter: UsbDetachModeReverter? = null
@@ -130,6 +121,7 @@ class PlaybackService : MediaSessionService() {
         directCoordinator = coordinator
         dapCoordinator = DapPlaybackCoordinator(this)
         a14Coordinator = NativeA14PlaybackCoordinator(this)
+        standardCoordinator = StandardPlaybackCoordinator(this)
 
         val listener = object : Player.Listener {
             override fun onMediaItemTransition(
@@ -140,6 +132,7 @@ class PlaybackService : MediaSessionService() {
                 directCoordinator?.onCurrentItemChanged(mediaItem)
                 dapCoordinator?.onCurrentItemChanged(mediaItem)
                 a14Coordinator?.onCurrentItemChanged(mediaItem)
+                standardCoordinator?.onCurrentItemChanged(mediaItem)
                 val oldSessionKey = activePlayback?.sessionKey ?: activeSessionKey
                 val nextSessionKey = mediaItem?.let {
                     resolveSessionKey(it, oldSessionKey)
@@ -221,6 +214,18 @@ class PlaybackService : MediaSessionService() {
                 if (outputMode == AudioOutputMode.DAP && isDapRouteFailure(error)) {
 
                     modeStore.setMode(AudioOutputMode.OFF)
+                    return
+                }
+                if (isUnsupportedDecoderFailure(error)) {
+                    // An unsupported format is an explicit failure, not a
+                    // bad item to silently drop: stop on the current item
+                    // and publish the reason so the UI can show it
+                    // (e.g. HE-AAC, sacrificed 2026-11-21). There is no
+                    // platform-decoder fallback to silently switch to.
+                    PlaybackDecoderStore.setFailure(
+                        error.message ?: "Format not supported by the decoder",
+                    )
+                    exoPlayer.stop()
                     return
                 }
                 val failedIndex = exoPlayer.currentMediaItemIndex
@@ -306,6 +311,8 @@ class PlaybackService : MediaSessionService() {
         dapCoordinator = null
         a14Coordinator?.close()
         a14Coordinator = null
+        standardCoordinator?.close()
+        standardCoordinator = null
 
         val currentPlayer = player
         finishCurrentPlayback(
@@ -343,7 +350,9 @@ class PlaybackService : MediaSessionService() {
             AudioOutputMode.NATIVE_A14 -> a14Coordinator?.let { coordinator ->
                 NativeA14Renderer(coordinator)
             }
-            AudioOutputMode.OFF -> null
+            AudioOutputMode.OFF -> standardCoordinator?.let { coordinator ->
+                StandardRenderer(coordinator)
+            }
         }
         val factory = RoviaRenderersFactory(
             this,
@@ -355,7 +364,6 @@ class PlaybackService : MediaSessionService() {
         val built = playerBuilder.build()
         built.setAudioAttributes(AudioAttributes.DEFAULT, true)
         playerListener?.let { built.addListener(it) }
-        built.addAnalyticsListener(analyticsListener)
         return built
     }
 
@@ -406,6 +414,9 @@ class PlaybackService : MediaSessionService() {
         if (previousMode == AudioOutputMode.NATIVE_A14) {
             a14Coordinator?.shutdownEngineAndWait()
         }
+        if (previousMode == AudioOutputMode.OFF) {
+            standardCoordinator?.shutdownEngineAndWait()
+        }
         playerListener?.let { listener -> oldPlayer.removeListener(listener) }
         oldPlayer.release()
 
@@ -425,6 +436,7 @@ class PlaybackService : MediaSessionService() {
             directCoordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
             dapCoordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
             a14Coordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
+            standardCoordinator?.onCurrentItemChanged(newPlayer.currentMediaItem)
         }
         newPlayer.repeatMode = repeatMode
         newPlayer.shuffleModeEnabled = shuffleModeEnabled
@@ -435,6 +447,23 @@ class PlaybackService : MediaSessionService() {
             ensureDirectSession()
         }
 
+    }
+
+    private fun isUnsupportedDecoderFailure(error: Throwable): Boolean {
+        var cause: Throwable? = error
+        while (cause != null) {
+            val message = cause.message.orEmpty()
+            if (message.contains("Unsupported", ignoreCase = true) ||
+                message.contains("not supported", ignoreCase = true) ||
+                message.contains("HE-AAC", ignoreCase = true) ||
+                message.contains("source_open") ||
+                message.contains("source_decode")
+            ) {
+                return true
+            }
+            cause = cause.cause
+        }
+        return false
     }
 
     private fun isDapRouteFailure(error: Throwable): Boolean {

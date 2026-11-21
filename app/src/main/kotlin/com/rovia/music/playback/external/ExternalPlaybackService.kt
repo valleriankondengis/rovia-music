@@ -13,19 +13,28 @@ import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.DefaultMediaNotificationProvider
 import com.rovia.music.ExternalPlayerActivity
 import com.rovia.music.R
+import com.rovia.music.playback.service.RoviaRenderersFactory
+import com.rovia.music.playback.standard.StandardPlaybackCoordinator
+import com.rovia.music.playback.standard.StandardRenderer
 
 /**
  * The player behind the external (Open With) entry point: a separate
- * [MediaSessionService] with its own ExoPlayer on the standard system path.
- * It never touches the library, the playback statistics, or any other
- * database, ignores the folder filter, and is not eligible for playback
- * resumption. Its only contact with the regular player is the pause/resume
- * handshake in [ExternalPlaybackCoordinator].
+ * [MediaSessionService] with its own ExoPlayer. It never touches the
+ * library, the playback statistics, or any other database, ignores the
+ * folder filter, and is not eligible for playback resumption. Its only
+ * contact with the regular player is the pause/resume handshake in
+ * [ExternalPlaybackCoordinator].
+ *
+ * External files are decoded by the registered decoder backend
+ * (Symphonia, id "symphonia-rust") through the standard coordinator,
+ * exactly like OFF mode in the main player — never by a platform
+ * decoder. ExoPlayer here only drives the queue/timeline.
  */
 @OptIn(UnstableApi::class)
 class ExternalPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var standardCoordinator: StandardPlaybackCoordinator? = null
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -54,7 +63,12 @@ class ExternalPlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
+        val coordinator = StandardPlaybackCoordinator(this)
+        standardCoordinator = coordinator
         val player = ExoPlayer.Builder(this)
+            .setRenderersFactory(
+                RoviaRenderersFactory(this, StandardRenderer(coordinator)),
+            )
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -84,6 +98,8 @@ class ExternalPlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        standardCoordinator?.close()
+        standardCoordinator = null
         super.onDestroy()
     }
 }
