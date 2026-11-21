@@ -10,6 +10,7 @@ import android.os.HandlerThread
 import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import com.rovia.music.playback.PlaybackDecoderStore
+import com.rovia.music.playback.PlaybackDiagnostics
 import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
 import kotlinx.coroutines.CoroutineScope
@@ -28,30 +29,11 @@ import java.util.concurrent.atomic.AtomicLong
 private const val POLL_INTERVAL_MS = 200L
 private const val SHUTDOWN_TIMEOUT_MS = 3_000L
 private const val MAX_PREPARE_ATTEMPTS = 3
-// 32 KiB: a decoded block must fit the AudioTrack buffer (about 200 ms,
-// e.g. ~53 KiB for 48 kHz stereo 24-bit) so one block normally drains in
-// a single pump run. A partial write is still harmless: the pump keeps
-// the remainder (see pendingData) and never seeks to recover it.
 private const val READ_BLOCK_BYTES = 32_768
 private const val MAX_WRITE_ATTEMPTS = 8
 private const val PUMP_RETRY_DELAY_MS = 5L
+private const val OFF_MAX_SAMPLE_RATE = 48_000
 
-/**
- * The standard (OFF) playback coordinator.
- *
- * Modelled on [NativeA14PlaybackCoordinator] with the Native A14 parts
- * removed: no mixer controller, no BIT_PERFECT route selection and no
- * route verification. Decoding comes from the registered decoder backend
- * ([DecoderRegistry.defaultBackend], Symphonia by default) and the
- * decoded PCM is pumped into a plain [AudioTrack] with media usage, so
- * the Android audio system mixes it like any normal app. This is the
- * only difference from the bit-perfect modes: the decoder is the same,
- * only the output route is the system mixer.
- *
- * No platform decoder is involved anywhere in this path: ExoPlayer
- * only drives the queue/timeline, the [StandardRenderer] only drains
- * the stream, and this coordinator owns decode + output.
- */
 internal class StandardPlaybackCoordinator(
     context: Context,
 ) : AutoCloseable {
@@ -67,9 +49,6 @@ internal class StandardPlaybackCoordinator(
     private val commandMutex = Mutex()
     private val generation = AtomicLong(0L)
 
-    // The decoder backend. The coordinator never names Symphonia: the
-    // registry supplies the default backend, so swapping decoders is a
-    // registry change, not a coordinator change.
     private val backend = DecoderRegistry.defaultBackend()
 
     private val pumpThread = HandlerThread("RoviaStandardPump").apply { start() }
@@ -130,15 +109,6 @@ internal class StandardPlaybackCoordinator(
     @Volatile
     private var framesWritten: Long = 0L
 
-    // Remainder of the current decoded block not yet written to the
-    // AudioTrack. The pump owns this: a block is never discarded, and a
-    // partial write never seeks the decoder. (2026-11-21: the old
-    // reanchorAfterPartialWrite sought to positionBaseFrames + the
-    // absolute playback head, without flushing, so the head was counted
-    // twice on every partial write and the decoder raced ahead — the
-    // song played in fast-forward jumps. A 64 KiB block is larger than
-    // the ~53 KiB AudioTrack buffer, so partial writes happened on
-    // every block.)
     @Volatile
     private var pendingData: ByteArray? = null
     @Volatile
@@ -152,6 +122,9 @@ internal class StandardPlaybackCoordinator(
 
     @Volatile
     private var frameBytes: Int = 0
+
+    @Volatile
+    private var downsampler: PcmDownsampler? = null
 
     @Volatile
     private var durationUs: Long = 0L
@@ -170,15 +143,13 @@ internal class StandardPlaybackCoordinator(
             }
             var progressed = false
             try {
-                // Finish the pending remainder before decoding more: the
-                // decoder only advances when the previous block is fully
-                // written, so no audio is ever skipped or repeated.
                 var data = pendingData
                 var offset = pendingOffset
                 if (data == null) {
                     val block = backend.readBlock(READ_BLOCK_BYTES.toUInt())
                     if (block.data.isNotEmpty()) {
-                        data = block.data
+                        val sampler = downsampler
+                        data = sampler?.process(block.data, block.eos) ?: block.data
                         offset = 0
                     }
                     if (block.eos) {
@@ -217,8 +188,6 @@ internal class StandardPlaybackCoordinator(
                         framesWritten += (offset - startOffset) / bytesPerFrame
                     }
                     if (offset < data.size) {
-                        // Track buffer full: keep the remainder for the
-                        // next pump run. Never discard it, never seek.
                         pendingData = data
                         pendingOffset = offset
                     } else {
@@ -448,6 +417,7 @@ internal class StandardPlaybackCoordinator(
         failureGeneration = streamGeneration
         failureMessage = message
         PlaybackDecoderStore.setFailure(message)
+        PlaybackDiagnostics.log("OFF failure: $message")
     }
 
     private fun headFrames(): Long {
@@ -506,9 +476,6 @@ internal class StandardPlaybackCoordinator(
                 )
                 return false
             }
-            // Publish the decoded source: the pipeline UI reads its
-            // decoder, sample rate and bit depth from here, never from a
-            // platform metadata scan.
             PlaybackDecoderStore.setDecoderInfo(info)
 
             val encoding = when (info.bitsPerSample) {
@@ -534,8 +501,13 @@ internal class StandardPlaybackCoordinator(
                     return false
                 }
             }
+            val outputSampleRate = if (info.sampleRateHz > OFF_MAX_SAMPLE_RATE) {
+                OFF_MAX_SAMPLE_RATE
+            } else {
+                info.sampleRateHz
+            }
             val format = AudioFormat.Builder()
-                .setSampleRate(info.sampleRateHz)
+                .setSampleRate(outputSampleRate)
                 .setChannelMask(channelMask)
                 .setEncoding(encoding)
                 .build()
@@ -544,8 +516,18 @@ internal class StandardPlaybackCoordinator(
                 AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
                 else -> 4
             }
-            sampleRate = info.sampleRateHz
+            sampleRate = outputSampleRate
             frameBytes = info.channels * bytesPerSample
+            downsampler = if (outputSampleRate != info.sampleRateHz) {
+                PcmDownsampler(
+                    inputRate = info.sampleRateHz,
+                    outputRate = outputSampleRate,
+                    channels = info.channels,
+                    bytesPerSample = bytesPerSample,
+                )
+            } else {
+                null
+            }
             durationUs = info.durationUs
             val minBuffer = AudioTrack.getMinBufferSize(
                 format.sampleRate,
@@ -604,6 +586,12 @@ internal class StandardPlaybackCoordinator(
             preparedGeneration = streamGeneration
             preparedMediaId = item.mediaId
             anchorTo(startSourceUs, playing = false)
+            PlaybackDiagnostics.log(
+                "OFF prepare ${item.mediaId}: probe ${info.sampleRateHz} Hz " +
+                    "${info.bitsPerSample}-bit ${info.channels}ch -> " +
+                    "AudioTrack ${format.sampleRate} Hz" +
+                    if (downsampler != null) " (downsampled to 48 kHz)" else "",
+            )
             return true
         }
     }
@@ -639,9 +627,9 @@ internal class StandardPlaybackCoordinator(
         runCatching { activeTrack.pause() }.onFailure { }
         runCatching { activeTrack.flush() }.onFailure { }
         runCatching { backend.seek(framesToUs(positionFrames).toULong()) }.onFailure { }
+        downsampler?.reset()
         positionBaseFrames = positionFrames
         framesWritten = 0L
-        // The track was flushed, so any unwritten remainder is gone too.
         pendingData = null
         pendingOffset = 0
         sourceEos = false
@@ -661,9 +649,9 @@ internal class StandardPlaybackCoordinator(
             .onFailure { failure ->
                 setFailure(streamGeneration, failure.message ?: "Standard seek failed")
             }
+        downsampler?.reset()
         positionBaseFrames = usToFrames(sourcePositionUs)
         framesWritten = 0L
-        // The track was flushed, so any unwritten remainder is gone too.
         pendingData = null
         pendingOffset = 0
         sourceEos = false
@@ -691,6 +679,7 @@ internal class StandardPlaybackCoordinator(
             runCatching { activeTrack.release() }.onFailure { }
         }
         runCatching { backend.releaseSource() }.onFailure { }
+        downsampler = null
         framesWritten = 0L
         pendingData = null
         pendingOffset = 0
