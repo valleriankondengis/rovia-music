@@ -13,9 +13,10 @@ Symphonia in Rust decodes every format this mode plays, lossless and
 lossy alike, through the same playback engine as Direct USB — decoder,
 exact PCM adapter and bounded producer — with an AAudio-backed sink, so
 format handling, seek and EOS semantics are the same across both modes
-by construction. Android Codec2/platform decoders are not used in this
-mode. A format Symphonia cannot decode fails explicitly here; it still
-plays in OFF.
+by construction. No platform decoder is used in any mode. A format
+Symphonia cannot decode fails explicitly here, and it fails in OFF too
+— OFF decodes with the same Symphonia backend, only through the system
+mixer.
 
 ## How it works
 

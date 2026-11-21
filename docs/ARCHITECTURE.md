@@ -12,7 +12,7 @@ app-facing playback coordinator in every mode: it owns the queue, the
 timeline, the current-item identity and the MediaSession. What differs per
 mode is who decodes the audio and where the PCM goes.
 
-Every Bit-Perfect mode decodes with the shared Symphonia engine in Rust:
+Every mode decodes with the shared Symphonia engine in Rust (backend id `symphonia-rust`):
 
 - **Direct USB** transports the decoded PCM to the DAC through the Rust
   USB backend.
@@ -22,8 +22,9 @@ Every Bit-Perfect mode decodes with the shared Symphonia engine in Rust:
   application-owned AudioTrack running under the Android 14 BIT_PERFECT
   mixer route.
 
-**OFF** is the only mode that decodes with Android Codec2/platform
-decoders, by design: it is the non-Bit-Perfect mode. No Bit-Perfect mode
+**OFF** is the non-Bit-Perfect mode: it decodes with the same Symphonia
+engine, but its decoded PCM goes through the standard Android audio
+system (system mixer) instead of a verified bit-perfect route. No mode
 routes audio through a custom Media3 AudioSink, a ForwardingAudioSink or
 renderer PCM forwarding.
 
@@ -37,24 +38,24 @@ The settings screen exposes exactly four mutually exclusive radio choices:
 
 | Radio choice | Decoder / engine | Output path |
 |---|---|---|
-| **OFF** | Android Codec2 / platform decoder selected by Media3 for the source format | Standard Media3 Android audio output |
+| **OFF** | Symphonia in Rust (id `symphonia-rust`) | Standard Android audio output (system mixer) |
 | **Native A14** | Symphonia in Rust; Kotlin pulls decoded PCM blocks from the native source | Application-owned `AudioTrack` under `AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT` through the framework and a supporting HAL route |
 | **Direct USB** | Symphonia in Rust | Rust PCM pipeline → Rust/libusb → UAC isochronous endpoint → USB DAC |
 | **DAP Mode** | Symphonia in Rust, through the shared Rust playback engine | Dedicated AAudio stream owned by the Rust session |
 
-The decoder policy is deliberate: Symphonia decodes in every Bit-Perfect
-mode, for lossless and lossy codecs alike, so the decoder never changes
-when a queue moves between lossless and lossy tracks. Codec2 serves OFF
-only. Codec2 is a platform codec framework, not one universal codec name:
-MP3, AAC, FLAC and other formats each use the platform decoder component
-selected for that format and device — `c2.android.flac.decoder` is
-specifically the FLAC component.
+The decoder policy is deliberate: Symphonia (id `symphonia-rust`)
+decodes in every mode, for lossless and lossy codecs alike, so the
+decoder never changes when a queue moves between lossless and lossy
+tracks or when the output mode changes. Only the output route changes.
+The old platform decoder (Codec2, e.g. `c2.android.flac.decoder` for
+FLAC) was removed from all modes on 2026-11-21; the measurement behind
+that removal is archived in [Verification](verification/README.md).
 
 ### Why Symphonia decodes the Bit-Perfect modes
 
 The standard Android path was measured on the test device (see
-[Verification](verification/README.md)): a 24-bit FLAC source is decoded by
-the platform decoder, but what reaches the AudioSink and the AudioTrack is
+[Verification](verification/README.md)): a 24-bit FLAC source decoded by the
+old platform decoder reached the AudioSink and the AudioTrack as
 16-bit PCM — the standard route truncates 24-bit audio to 16-bit, and the
 system output route additionally resamples to the device's preferred rates.
 A Bit-Perfect mode cannot be built on a decoder and route that provably
@@ -69,9 +70,11 @@ flowchart TD
     UI[Compose UI: four radio choices] --> COORD[Playback and mode coordinator]
     COORD --> SESSION[One Media3 MediaSession / app playback contract]
     SESSION --> MODE{Selected mode}
-    MODE -->|OFF| EXO1[ExoPlayer standard audio renderer]
-    EXO1 --> C2A[Android Codec2 / platform decoder]
-    C2A --> ANDROID[Standard Android audio output]
+    MODE -->|OFF| EXO1[ExoPlayer + StandardRenderer control and clock]
+    EXO1 --> PUMPOFF[Kotlin pump: decoder-backend block pull via registry]
+    PUMPOFF --> SYMPH
+    SYMPH --> TRACKOFF[Application AudioTrack, media usage, system mixer]
+    TRACKOFF --> ANDROID[Standard Android audio output]
     MODE -->|Native A14| EXOA14[ExoPlayer + NativeA14Renderer control and clock]
     EXOA14 --> PULL[Kotlin pump: NativePcmSource block pull via UniFFI]
     MODE -->|DAP Mode| EXODAP[ExoPlayer + DapRenderer control and clock]
@@ -112,8 +115,9 @@ instead decoded independently with Symphonia in Rust, so the integration
 is a control seam, not an audio seam:
 
 - One renderer per mode (`DirectUsbRenderer`, `DapRenderer`,
-  `NativeA14Renderer`) is built into the player for that mode; the
-  standard Android audio renderer is not part of the audio chain.
+  `NativeA14Renderer`, `StandardRenderer`) is built into the player for
+  that mode; a platform audio renderer is not part of the audio chain
+  in any mode.
 - The renderer reads ExoPlayer's sample stream only as a shadow: it
   consumes samples at the native engine's pace so ExoPlayer's period
   advance and track transitions happen at the true end of each item.
@@ -124,8 +128,9 @@ is a control seam, not an audio seam:
   Bit-Perfect mode: completed USB frames for Direct USB, AAudio
   frames-read for DAP, and the AudioTrack playback head for Native A14.
 - Queue, MediaItem identity, notification and MediaSession behavior are
-  the same in every mode, and the standard ExoPlayer path used by OFF is
-  unchanged.
+  the same in every mode. OFF uses the same control-seam pattern as the
+  Bit-Perfect modes, with `StandardRenderer` / `StandardPlaybackCoordinator`
+  pumping decoded PCM into a plain AudioTrack.
 
 ## 5. Direct USB data path
 
@@ -161,18 +166,19 @@ In short:
 
 | Audio type | OFF | Native A14 | Direct USB | DAP Mode |
 |---|---|---|---|---|
-| FLAC | Android platform Codec2 | Symphonia | Symphonia | Symphonia |
-| ALAC (M4A/MP4) | Android platform decoder when available | Symphonia | Symphonia | Symphonia |
-| WAV / PCM | Android platform decoder when available | Symphonia Wave + PCM | Symphonia Wave + PCM | Symphonia Wave + PCM |
-| AIFF / PCM | Android platform decoder when available | Symphonia AIFF + PCM | Symphonia AIFF + PCM | Symphonia AIFF + PCM |
-| MP3 | Android platform Codec2 | Symphonia | Symphonia | Symphonia |
-| AAC-LC (M4A/MP4) | Android platform Codec2 | Symphonia | Symphonia | Symphonia |
-| Vorbis / OGG | Android platform decoder when available | Symphonia | Symphonia | Symphonia |
-| Other formats | Android decoder appropriate to the source/device | Only an explicitly supported Symphonia codec/container combination | Only an explicitly supported Symphonia codec/container combination | Only an explicitly supported Symphonia codec/container combination |
+| FLAC | Symphonia | Symphonia | Symphonia | Symphonia |
+| ALAC (M4A/MP4) | Symphonia | Symphonia | Symphonia | Symphonia |
+| WAV / PCM | Symphonia Wave + PCM | Symphonia Wave + PCM | Symphonia Wave + PCM | Symphonia Wave + PCM |
+| AIFF / PCM | Symphonia AIFF + PCM | Symphonia AIFF + PCM | Symphonia AIFF + PCM | Symphonia AIFF + PCM |
+| MP3 | Symphonia | Symphonia | Symphonia | Symphonia |
+| AAC-LC (M4A/MP4) | Symphonia | Symphonia | Symphonia | Symphonia |
+| Vorbis / OGG | Symphonia | Symphonia | Symphonia | Symphonia |
+| Other formats | Only an explicitly supported Symphonia codec/container combination; unsupported formats fail explicitly in every mode | Only an explicitly supported Symphonia codec/container combination | Only an explicitly supported Symphonia codec/container combination | Only an explicitly supported Symphonia codec/container combination |
 
-In the Bit-Perfect modes there is no silent fallback to Android Codec2:
-a format Symphonia cannot decode fails visibly in that mode and remains
-playable in OFF. Lossy decoding is delivered without additional Rovia DSP
+In every mode there is no silent fallback to a platform decoder: a
+format Symphonia cannot decode fails visibly in that mode and is not
+playable until a backend that supports it is registered; OFF is not a
+fallback. Lossy decoding is delivered without additional Rovia DSP
 or resampling, but it is not bit-identical to the PCM that existed before
 lossy encoding, and is described as direct decoded-PCM output.
 
@@ -190,7 +196,9 @@ needed features are enabled:
   Vorbis (`vorbis`), MPEG audio MP1/MP2/MP3 (`mpa`), ADPCM (`adpcm`).
 
 Symphonia 0.6.1 has no decoders for DSD, WavPack, APE audio, WMA, Opus or
-HE-AAC; those formats are unsupported in the Bit-Perfect modes. WAV is a
+HE-AAC; those formats are unsupported in every mode (HE-AAC was
+sacrificed deliberately on 2026-11-21 for the multi-platform Symphonia
+plan). WAV is a
 container, not a codec; M4A/MP4 is also a container and may carry ALAC or
 AAC-LC — the decoder is chosen from the stream's codec parameters, not the
 file extension. Symphonia is distributed under MPL-2.0.
@@ -224,10 +232,10 @@ fade or time/pitch modification takes place in a Bit-Perfect path.
 | Compose settings/player UI | Four radio choices, controls, state display | Decoder execution, USB transfers, descriptor lifetimes |
 | Playback coordinator (service) | Mode state, app-facing item identity, commands, backend transitions | A parallel playlist or competing playback clock |
 | Media3 MediaSession | App/system media controls and the player contract | The libusb worker implementation |
-| ExoPlayer | Standard playback for OFF; queue/timeline/session owner in all modes | Bit-Perfect decoding/output at the same time as a Rust engine |
+| ExoPlayer | Queue/timeline/session owner in all modes; decodes nothing | Bit-Perfect decoding/output at the same time as a Rust engine |
 | Kotlin source bridge | URI resolution, descriptor acquisition, metadata/identity, command mapping, lifecycle | Symphonia decoding or PCM packetization |
 | UniFFI | The typed Kotlin–Rust API boundary | Playback policy or hidden global state |
-| Symphonia engine (Rust) | Probe, demux, stream selection, decode, decoded-frame metadata and source timestamps for every Bit-Perfect mode; output-backend-independent | Android UI/Media3 framework types |
+| Symphonia engine (Rust) | Probe, demux, stream selection, decode, decoded-frame metadata and source timestamps for every mode; output-backend-independent | Android UI/Media3 framework types |
 | Rust PCM stage | Sample-preserving frame representation, exact adapters, queue production, position accounting | Silent sample mutation or unbounded buffering |
 | Rust USB session | libusb session, UAC descriptors, interfaces, clocks, feedback, asynchronous transfers, shutdown | Android permission prompts or player UI |
 | Native A14 backend | Symphonia pull source, application AudioTrack, mixer behavior request and route verification | Direct USB device ownership |
@@ -261,8 +269,10 @@ was run on them.
 ## 11. The external player
 
 Beside the regular playback service, a second `MediaSessionService`
-powers the External Player for files opened through Open With. It is a
-plain standard-path ExoPlayer with its own session: it never touches the
+powers the External Player for files opened through Open With. It is an
+ExoPlayer with its own session, using the same standard (OFF) path —
+`StandardRenderer` / `StandardPlaybackCoordinator`, decoded by Symphonia
+like OFF: it never touches the
 database, the folder filter or the output-mode machinery, and the only
 interaction between the two stacks is an explicit pause/resume handshake
 — the regular player pauses when external playback starts and resumes

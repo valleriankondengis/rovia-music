@@ -122,6 +122,14 @@ rovia/
 │   │       │               │       └── WrappedScreen.kt
 │   │       │               ├── playback/
 │   │       │               │   ├── PlaybackDecoderStore.kt
+│   │       │               │   ├── decoder/
+│   │       │               │   │   ├── DecoderBackend.kt
+│   │       │               │   │   ├── DecoderRegistry.kt
+│   │       │               │   │   └── SymphoniaDecoderBackend.kt
+│   │       │               │   ├── standard/
+│   │       │               │   │   ├── StandardMediaClock.kt
+│   │       │               │   │   ├── StandardPlaybackCoordinator.kt
+│   │       │               │   │   └── StandardRenderer.kt
 │   │       │               │   ├── bitperfect/
 │   │       │               │   │   ├── AudioOutputMode.kt
 │   │       │               │   │   ├── UsbDetachModeReverter.kt
@@ -287,12 +295,15 @@ rovia/
 │   │   ├── README.md
 │   │   ├── database-mechanism.md
 │   │   └── features.md
+│   ├── decoder/
+│   │   └── DECODER_MODULE.md
 │   ├── verification/
 │   │   ├── DIAGNOSTICS.md
 │   │   ├── README.md
 │   │   ├── Result_Android_AudioFlinger.md
-│   │   ├── result_c2_android_flac_decoder.md
-│   │   └── VALIDATION_MATRIX.md
+│   │   ├── VALIDATION_MATRIX.md
+│   │   └── archive/
+│   │       └── result_c2_android_flac_decoder.md
 │   ├── ARCHITECTURE.md
 │   ├── FEATURES.md
 │   ├── README.md
@@ -306,6 +317,7 @@ rovia/
 ├── rust/
 │   ├── decoder/
 │   │   ├── src/
+│   │   │   ├── backend.rs
 │   │   │   ├── engine.rs
 │   │   │   ├── error.rs
 │   │   │   ├── format.rs
@@ -401,7 +413,8 @@ docs/
     ├── README.md
     ├── Result_Android_AudioFlinger.md
     ├── VALIDATION_MATRIX.md
-    └── result_c2_android_flac_decoder.md
+    └── archive/
+        └── result_c2_android_flac_decoder.md
 ```
 
 ## 3. Main application package responsibilities
@@ -433,7 +446,7 @@ docs/
 
 | Path | Responsibility |
 |---|---|
-| `rust/decoder/src/engine.rs` | Symphonia demux/decode engine: seekable source, one packet per decode step, accurate seek, EOS handling. Independent of the USB backend. |
+| `rust/decoder/src/engine.rs` | Symphonia demux/decode engine (`DecoderEngine`, the `symphonia-rust` implementation): seekable source, one packet per decode step, accurate seek, EOS handling. Independent of the USB backend. |
 | `rust/decoder/src/format.rs` | Decoded sample-format model shared by the decoder and the PCM adapter. |
 | `rust/decoder/src/info.rs` | Source information and decoded-block contracts. |
 | `rust/decoder/src/error.rs` | Typed decoder errors (unsupported, I/O, decode). |
@@ -470,7 +483,15 @@ docs/
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/dap/DapRenderer.kt` | Media3 control renderer for DAP: no PCM and no AudioSink; coordinates the Rust session and reports readiness, end of stream and errors. |
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/dap/DapMediaClock.kt` | The single Media3 media clock for DAP, backed by the native completed-frame position. |
 | `app/src/main/kotlin/com/rovia/music/playback/bitperfect/UsbDetachModeReverter.kt` | USB detach broadcast handler that reverts Direct USB / Native A14 selections to OFF and disconnects the Direct session; registered by the playback service and the Settings audio screen. |
-| `app/src/main/kotlin/com/rovia/music/playback/PlaybackDecoderStore.kt` | Process-wide holder for the platform decoder name reported by the player (standard path), shown in the pipeline sheet. |
+| `app/src/main/kotlin/com/rovia/music/playback/PlaybackDecoderStore.kt` | Process-wide holder for the decoded source info (decoder id, codec, rate, bits) and the last decoder failure, shown in the pipeline sheet. |
+| `app/src/main/kotlin/com/rovia/music/playback/decoder/DecoderBackend.kt` | Decoder backend interface (`DecoderBackend`, `DecodedSourceInfo`, `DecoderSupport`, `DecoderFailure`) — the only contract playback code talks to for decoding. |
+| `app/src/main/kotlin/com/rovia/music/playback/decoder/SymphoniaDecoderBackend.kt` | The Symphonia backend, id `symphonia-rust`, wrapping UniFFI `NativePcmSource`; supported/unsupported codec table lives here. |
+| `app/src/main/kotlin/com/rovia/music/playback/decoder/DecoderRegistry.kt` | The single registration point for decoder backends; `defaultBackend()` returns a fresh backend instance per coordinator. |
+| `app/src/main/kotlin/com/rovia/music/playback/standard/StandardPlaybackCoordinator.kt` | OFF-mode coordinator: registry backend decode pumped into a plain AudioTrack (system mixer). |
+| `app/src/main/kotlin/com/rovia/music/playback/standard/StandardRenderer.kt` | OFF-mode control/clock renderer, mirroring the bit-perfect renderers. |
+| `app/src/main/kotlin/com/rovia/music/playback/standard/StandardMediaClock.kt` | OFF-mode MediaClock over the standard coordinator. |
+| `rust/decoder/src/backend.rs` | Rust `DecoderBackend` trait, `SymphoniaBackend`, `BackendRegistry` (id `symphonia-rust`) and registry unit tests. |
+| `docs/decoder/DECODER_MODULE.md` | Decoder module architecture: how to add or replace a backend, backend id naming rule, multi-platform note. |
 | `rust/direct-usb/src/dap.rs` | Crate-internal AAudio FFI layer: exclusive-first stream open with negotiated-format verification, timed writes and frame counters. |
 | `rust/direct-usb/src/dap_session.rs` | DAP session: the shared playback engine (Symphonia decode, exact adapter, bounded producer) over the AAudio sink, exposed to Kotlin as the UniFFI `DapSession` object. |
 | `rust/direct-usb/src/pcm_source.rs` | Native A14 pull source: Symphonia decode plus the exact adapter at the track width, exposed to Kotlin as the UniFFI `NativePcmSource` object with block reads and seeks. |

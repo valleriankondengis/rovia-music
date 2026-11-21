@@ -79,7 +79,7 @@ until source, decoder, PCM contract and USB output are all compatible:
     decoder, a prebuffered queue and a configured endpoint.
 
 A failure at any step tears down everything already acquired, in reverse
-ownership order. There is no silent fallback to Android Codec2, the phone
+ownership order. There is no silent fallback to a platform decoder, the phone
 speaker or another output route while Direct USB is selected.
 
 ## 4. Source decoding
@@ -278,8 +278,9 @@ playback starts. The full mechanism is described in
 
 The app keeps one MediaItem queue and one MediaSession. `DirectUsbRenderer`
 is a lifecycle/clock adapter, not a PCM renderer or sink: it selects the
-native session for Direct USB items, keeps the standard
-`MediaCodecAudioRenderer` out of those items, forwards player commands to
+native session for Direct USB items, keeps any platform audio renderer
+out of those items (there is none left in Rovia — `RoviaRenderersFactory`
+never builds one), forwards player commands to
 the Rust session and exposes the native completed-output clock to Media3.
 How the renderer paces its shadow sample stream, and how mode switches are
 transactional, is described in

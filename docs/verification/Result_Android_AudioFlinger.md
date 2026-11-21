@@ -1,13 +1,21 @@
+> HISTORICAL MEASUREMENT (2026-11-21 note) — this report measures the
+> OLD platform decoder path (`c2.android.flac.decoder` / Codec2) and the
+> Android AudioFlinger output route on the test device. That decoder was
+> removed from all playback paths on 2026-11-21; every mode now decodes
+> with Symphonia (id `symphonia-rust`). The findings below are kept as
+> the evidence for that removal, not as a description of any current
+> playback path.
+
 # Android standard-path output measurements
 
 What this report records: normal music playback through Android's
 standard audio path (AudioTrack / Media3 -> AudioFlinger -> audio HAL ->
 USB audio) on the test device, and how that route treats sample rate and
-bit depth. It is a measurement of the standard path — the path Rovia's
-OFF mode uses — and it is one of the two measurements behind the decision
-to decode the Bit-Perfect modes with Symphonia in Rust: the standard
-route provably changes both the sample rate and the bit depth of the
-audio passing through it.
+bit depth. It is a measurement of the standard path — the path Rovia's OFF mode
+used before the Symphonia-only change of 2026-11-21 — and it is one of
+the two measurements behind the decision to decode with Symphonia in
+Rust in every mode: the standard route provably changes both the sample
+rate and the bit depth of the audio passing through it.
 
 # Findings: Android AudioFlinger, Audio Policy, and USB Audio Output
 

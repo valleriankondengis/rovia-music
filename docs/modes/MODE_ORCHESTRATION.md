@@ -15,12 +15,12 @@ The four-choice selector is implemented in the Settings audio screen and persist
 
 | Mode | Decoder | Output backend |
 |---|---|---|
-| OFF | Android Codec2/platform decoder per source format | Standard Media3 output |
+| OFF | Symphonia in Rust (id `symphonia-rust`) | Standard Android output (system mixer) |
 | Native A14 | Symphonia in Rust | Android framework preferred mixer attributes / supporting HAL, fed by an application-owned AudioTrack |
 | Direct USB | Symphonia in Rust for supported lossless and lossy codecs | Rust PCM engine and libusb/UAC transport |
 | DAP Mode | Symphonia in Rust | AAudio backend owned from Rust |
 
-Every Bit-Perfect mode decodes with Symphonia in Rust; Codec2 serves OFF only. The Symphonia Direct USB source/decoder/PCM producer/transport flow is specified in [../direct-usb/DIRECT_USB_PIPELINE.md](../direct-usb/DIRECT_USB_PIPELINE.md). DAP reuses the same playback engine over an AAudio sink, and Native A14 pulls decoded blocks from the same decoder core into its own AudioTrack.
+Every mode decodes with Symphonia in Rust (id `symphonia-rust`); OFF pumps the same decoded PCM into a plain AudioTrack. The Symphonia Direct USB source/decoder/PCM producer/transport flow is specified in [../direct-usb/DIRECT_USB_PIPELINE.md](../direct-usb/DIRECT_USB_PIPELINE.md). DAP reuses the same playback engine over an AAudio sink, and Native A14 pulls decoded blocks from the same decoder core into its own AudioTrack.
 
 ## 3. State machine
 
@@ -48,7 +48,7 @@ OFF is represented as the default state; the radio selector may select it direct
 
 - Exactly one audio-producing engine is active.
 - Before a mode change, stop new source production and release the prior route according to its owner.
-- A Bit-Perfect mode must stop the Android audio decoder/renderer for the active item before Symphonia begins; Codec2 and Symphonia never decode the same active item concurrently.
+- A mode change must stop the previous route's renderer for the active item before the new backend begins; exactly one backend decodes the active item at a time (there is no platform decoder left to stop — this rule now covers the previous Symphonia backend).
 - A Bit-Perfect mode must release its Rust source/engine/session resources before another backend starts.
 - A failed backend remains failed; do not silently fall back to OFF.
 - UI distinguishes selected, preparing, active, unsupported and failed.
@@ -64,7 +64,7 @@ OFF is represented as the default state; the radio selector may select it direct
 
 ## 5. Media3 contract
 
-Preserve one app-facing queue, item identity and MediaSession. OFF uses ExoPlayer's standard Android-decoded path. Every Bit-Perfect mode uses its Rust source/decoder/output path, coordinated through a version-verified Media3 boundary without a custom AudioSink: one control/clock renderer and one coordinator per mode, with the native output clock exposed through `Renderer.getMediaClock()`. Media3 remains the app-facing playback/session orchestrator in all modes.
+Preserve one app-facing queue, item identity and MediaSession. OFF uses the standard coordinator path: Symphonia decode pumped into a plain AudioTrack. Every Bit-Perfect mode uses its Rust source/decoder/output path, coordinated through a version-verified Media3 boundary without a custom AudioSink: one control/clock renderer and one coordinator per mode, with the native output clock exposed through `Renderer.getMediaClock()`. Media3 remains the app-facing playback/session orchestrator in all modes.
 
 ## 6. Hardware media buttons
 

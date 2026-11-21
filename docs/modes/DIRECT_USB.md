@@ -34,8 +34,9 @@ uses Symphonia Wave + PCM, not Android MediaExtractor.
 
 ## Behavior
 
-- No Android Codec2 decoder runs for the same item, and there is no
-  custom Media3 AudioSink or ForwardingAudioSink in this path.
+- No platform decoder runs for the same item — there is none left in
+  any mode — and there is no custom Media3 AudioSink or
+  ForwardingAudioSink in this path.
 - PCM never crosses UniFFI; the boundary carries commands and state.
 - Decoded samples, channels, sample rate, frame order and time base are
   preserved; buffering is bounded and the producer and transport are
@@ -43,8 +44,8 @@ uses Symphonia Wave + PCM, not Android MediaExtractor.
 - Physical position derives from successfully completed source frames.
 - Source and USB descriptors are independently owned and closed.
 - Unsupported codec/profile, route, clock, source or transfer errors
-  fail visibly; there is no silent fallback to Codec2 or phone-speaker
-  output.
+  fail visibly; there is no silent fallback to a platform decoder or
+  phone-speaker output.
 - For lossy sources the delivery is direct decoded PCM; it is not
   claimed to be bit-identical with pre-encode PCM.
 - Volume is the DAC's hardware volume (see

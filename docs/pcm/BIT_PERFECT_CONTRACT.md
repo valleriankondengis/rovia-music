@@ -33,7 +33,8 @@ described in its own document under [modes/](../modes/README.md).
 
 ## 4. OFF
 
-OFF retains Android Codec2/platform decoding by design. It is the
+OFF retains Symphonia decoding (id `symphonia-rust`) by design, but
+its decoded PCM goes through the Android system mixer, so it is the
 non-Bit-Perfect mode and is not bound by this contract; its measured
 behavior on the test device is recorded in
 [verification/](../verification/README.md).

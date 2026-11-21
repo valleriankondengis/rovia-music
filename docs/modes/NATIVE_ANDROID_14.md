@@ -4,16 +4,18 @@
 
 Use Android's native bit-perfect mixer behavior through the platform
 audio framework and a supporting Audio HAL, with decoding done by
-Symphonia in Rust instead of the Android platform decoders. Because the
+Symphonia in Rust — the only decoder in every mode since the
+Symphonia-only change of 2026-11-21. Because the
 source's true format is known exactly from Symphonia, the mixer attribute
 selected for a track must match that format exactly.
 
 ## Decoder
 
 Symphonia in Rust decodes every format this mode plays, lossless and
-lossy alike. Android Codec2/platform decoders are not used in this mode.
-A format Symphonia cannot decode fails explicitly here; it still plays
-in OFF through the platform decoders.
+lossy alike. No platform decoder is used in any mode. A format
+Symphonia cannot decode fails explicitly here, and it fails in OFF too
+— OFF decodes with the same Symphonia backend, only through the system
+mixer.
 
 ## How it works
 

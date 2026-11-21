@@ -4,7 +4,7 @@ This section defines how Rovia represents decoded PCM and preserves sample value
 
 ## Decoder ownership by mode
 
-- OFF: Android Codec2/platform decoder.
+- OFF: Symphonia decoder in Rust (id `symphonia-rust`); decoded PCM goes to a plain AudioTrack and the system mixer.
 - Native A14: Symphonia decoder in Rust; the output follows the Android Native Bit-Perfect framework/HAL route.
 - Direct USB: Symphonia decoder in Rust for enabled and verified supported lossless and lossy codecs. WAV/RIFF is assigned to Symphonia Wave + PCM.
 - DAP: Symphonia decoder in Rust through the shared playback engine over an AAudio sink.

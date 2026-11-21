@@ -2,17 +2,43 @@
 
 ## 1. Scope
 
-Symphonia is the decoder engine for every Bit-Perfect mode. It decodes
-every enabled lossless and lossy codec/container combination; WAV/RIFF is
-handled by Symphonia's Wave demuxer with its PCM decoder, and Android
-`MediaExtractor` plays no part in the Bit-Perfect paths.
+Symphonia is the decoder engine for every mode — Bit-Perfect modes
+and standard (OFF) playback alike, since the Symphonia-only change of
+2026-11-21. It decodes every enabled lossless and lossy
+codec/container combination; WAV/RIFF is handled by Symphonia's Wave
+demuxer with its PCM decoder, and Android `MediaExtractor` plays no
+part in any playback path. The backend's canonical id is
+`symphonia-rust` (see [../decoder/DECODER_MODULE.md](../decoder/DECODER_MODULE.md)
+for the `<decoder>-<language/tech>` naming rule).
 
 The decoder core is independent of USB, UAC descriptors, libusb, Android
 UI and Media3. Its output is a typed decoded-frame stream consumed by the
 Rust PCM adapter and, depending on the mode, the bounded queue (Direct USB
-and DAP) or the block pull source (Native A14). Decoder and transport work
+and DAP), the block pull source (Native A14), or the standard AudioTrack
+pump (OFF mode, via `NativePcmSource`). Decoder and transport work
 run on separate threads; no PCM block passes through Kotlin in Direct USB
 or DAP mode.
+
+## 1a. Backend trait + registry (2026-11-21)
+
+The decoder is a replaceable backend, not a hardcoded library. On the
+Rust side, `rust/decoder/src/backend.rs` defines the `DecoderBackend`
+trait (`open_path`, `decode_next`, `seek`, `info`) and the
+`BackendRegistry`, which resolves a codec name to a backend id and
+creates backends by id. `SymphoniaBackend` is the trait implementation
+wrapping the existing `DecoderEngine`; the crate stays `rovia-decoder`
+and `DecoderEngine` keeps its name. On the Kotlin side, the mirror is
+`playback/decoder/DecoderBackend.kt` (interface +
+`DecodedSourceInfo`) and `DecoderRegistry.kt` (the single registration
+point). Playback code never names Symphonia directly except the
+registry default and the backend file itself.
+
+To add a decoder: implement the trait (Rust) and/or the interface
+(Kotlin), register it in the registry, optionally make it the
+default. To replace Symphonia entirely: register a different default
+(e.g. `ffmpeg-c`) and delete the Symphonia backend. No coordinator,
+service or UI file changes. Full instructions:
+[../decoder/DECODER_MODULE.md](../decoder/DECODER_MODULE.md).
 
 The engine lives in `rust/decoder` and is used by the playback engine in
 the `rovia-uniffi` crate, which is also where the exact PCM adapter and
@@ -72,10 +98,14 @@ WAV is a container; M4A/MP4 may contain ALAC or AAC-LC. The stream codec
 parameters decide, not the extension.
 
 Symphonia 0.6.1 provides no decoder for DSD, WavPack, APE audio, WMA, Opus
-or HE-AAC/HE-AACv2, so those formats fail explicitly in the Bit-Perfect
-modes (an APE file's container can be probed, but its audio cannot be
-decoded). There is no fallback to Android Codec2 inside a Bit-Perfect
-mode; the same formats still play in OFF.
+or HE-AAC/HE-AACv2, so those formats fail explicitly in every mode (an
+APE file's container can be probed, but its audio cannot be decoded).
+There is no fallback to a platform decoder in any mode, and an
+unsupported item is never silently skipped — playback stops on it and
+the reason is published for the UI to show. HE-AAC was sacrificed
+deliberately on 2026-11-21 for the multi-platform Symphonia plan; a
+future backend registered as e.g. `ffmpeg-c` can add it without
+migrating the project.
 
 ## 4. Decoded-frame contract
 

@@ -19,9 +19,10 @@ version change is a deliberate step, not a routine bump.
   threshold), which the pacing is designed around.
 - `MediaSession.setPlayer(...)` for swapping the player on a mode change
   without losing the session.
-- `AnalyticsListener.onAudioDecoderInitialized(...)`, which provides the
-  platform decoder name shown in the player's audio pipeline view for the
-  OFF path.
+- The decoder info shown in the player's audio pipeline view comes
+  from `PlaybackDecoderStore` (fed by the decoder backend at open),
+  never from a platform-decoder analytics hook — that hook was removed
+  with the Symphonia-only change of 2026-11-21.
 
 ## When upgrading
 

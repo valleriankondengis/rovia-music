@@ -14,6 +14,7 @@ backend works, and why the Bit-Perfect modes decode with Symphonia.
 ## Technical areas
 
 - [Media3 and ExoPlayer](media3/README.md) — the player/session framework and the decoder policy.
+- [Decoder module](decoder/DECODER_MODULE.md) — the replaceable decoder backend (Symphonia, id `symphonia-rust`) and how to add or replace a decoder.
 - [Direct USB native playback](direct-usb/README.md) — the Rust USB backend end to end.
 - [PCM integrity](pcm/README.md) — how decoded samples are preserved.
 - [Output modes](modes/README.md) — OFF, Native A14, Direct USB and DAP.
@@ -23,15 +24,19 @@ backend works, and why the Bit-Perfect modes decode with Symphonia.
 
 ## Decoder policy at a glance
 
-Every Bit-Perfect mode — Direct USB, Native A14 and DAP — decodes with
-Symphonia in Rust, for lossless and lossy codecs alike, so the decoder never
-changes when a queue moves between lossless and lossy tracks. OFF, the
-non-Bit-Perfect mode, uses the Android Codec2/platform decoder selected for
-the source format; `c2.android.flac.decoder` is the FLAC component of that
-path. The reason for the split is measured, not assumed: on the test device
-the standard Android path truncates 24-bit sources to 16-bit PCM before the
-output (see [Verification](verification/README.md)), which is exactly what
-the Bit-Perfect modes exist to avoid.
+Every mode — OFF, Direct USB, Native A14 and DAP — decodes with
+Symphonia in Rust (backend id `symphonia-rust`), for lossless and lossy
+codecs alike, so the decoder never changes when a queue moves between
+lossless and lossy tracks or when the output mode changes. OFF, the
+non-Bit-Perfect mode, sends the same decoded PCM through the Android
+system mixer instead of a verified bit-perfect route. The reason the
+platform decoder was removed entirely (2026-11-21) is measured, not
+assumed: on the test device the old platform path truncated 24-bit
+sources to 16-bit PCM before the output (see
+[Verification](verification/README.md), archived measurement), which is
+exactly what the Bit-Perfect modes exist to avoid. HE-AAC was sacrificed
+in the same change — Symphonia has no SBR decoder — and a future backend
+can add it via the decoder registry.
 
 ## Direct USB architecture rule
 

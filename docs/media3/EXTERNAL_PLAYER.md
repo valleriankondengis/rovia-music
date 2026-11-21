@@ -30,10 +30,11 @@ a queue or a session.
 
 ## Isolation guarantees
 
-The external service is a plain ExoPlayer on the standard system path —
-platform decoders, automatic audio focus handling, the standard media
-notification — with no reference to the database, the catalog, the
-statistics recorder or the folder filter:
+The external service is an ExoPlayer on the standard path — Symphonia
+decoding (id `symphonia-rust`, the same standard coordinator as OFF),
+automatic audio focus handling, the standard media notification — with
+no reference to the database, the catalog, the statistics recorder or
+the folder filter:
 
 - Nothing is written anywhere: no catalog row, no playback session, no
   track event, no history entry. History, Top Songs and Wrapped only

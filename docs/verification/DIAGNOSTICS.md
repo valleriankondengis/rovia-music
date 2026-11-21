@@ -13,7 +13,7 @@ The diagnostics tooling itself was development-only and is not part of
 the app. The reports are kept because their findings are the design
 input for the Bit-Perfect modes:
 
-- [result_c2_android_flac_decoder.md](result_c2_android_flac_decoder.md):
+- [result_c2_android_flac_decoder.md](archive/result_c2_android_flac_decoder.md) (archived 2026-11-21 — the platform decoder it measures was removed from all modes):
   FLAC sources are 24-bit and the renderer input is PCM 24-bit, but what
   reaches the AudioSink and AudioTrack is 16-bit PCM, at both 48 kHz and
   96 kHz — the standard Android route truncates 24-bit audio on this

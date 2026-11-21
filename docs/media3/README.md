@@ -3,7 +3,8 @@
 Media3 and ExoPlayer are Rovia's playback and session framework in every
 mode: queue, timeline, MediaSession, notification and app-facing playback
 state all come from ExoPlayer. The modes differ in who decodes and where
-the PCM goes — OFF decodes with Android Codec2/platform decoders, and
+the PCM goes — OFF decodes with Symphonia (id `symphonia-rust`) like
+every mode, and
 every Bit-Perfect mode decodes with Symphonia in Rust and coordinates its
 native engine through a control renderer, without AudioSink interception.
 
@@ -24,7 +25,7 @@ mode.
 
 ## Decoder policy in short
 
-- OFF: Android Codec2/platform decoder.
+- OFF: Symphonia in Rust (id `symphonia-rust`); decoded PCM goes to a plain AudioTrack and the system mixer.
 - Native A14: Symphonia in Rust; output through the Android Native
   Bit-Perfect framework/HAL route from an application-owned AudioTrack.
 - Direct USB: Symphonia in Rust; output through the Rust/libusb UAC

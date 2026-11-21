@@ -22,7 +22,7 @@ A PCM value has multiple independent properties. Do not collapse them into a sin
 
 ## 2. Decoder source by mode
 
-- OFF: Android Codec2/platform decoder selected for the source format.
+- OFF: Symphonia native Rust decoder (id `symphonia-rust`); only the output route is the standard Android audio system.
 - Native A14: Symphonia native Rust decoder; only the output route follows the Android Native Bit-Perfect framework/HAL path.
 - Direct USB: Symphonia native Rust decoder for all explicitly enabled and verified supported lossless and lossy streams. WAV uses Symphonia Wave/RIFF plus PCM decoding, not Android MediaExtractor.
 - DAP: Symphonia native Rust decoder through the shared playback engine over an AAudio sink.

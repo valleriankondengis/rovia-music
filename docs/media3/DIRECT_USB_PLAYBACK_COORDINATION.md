@@ -17,8 +17,8 @@ pattern, with per-mode coordinators, is used by DAP and Native A14.
 - **Rust transport:** libusb/UAC transfer lifecycle and hardware progress.
 
 There is one active audio-producing engine and one app-facing
-queue/session. The standard Android decoder/renderer route never
-processes a Direct USB item.
+queue/session. No other route processes a Direct USB item — there is
+no platform decoder/renderer route left in any mode.
 
 ## 2. The renderer: a control and clock adapter
 
@@ -28,7 +28,7 @@ renderer or sink:
 
 - it announces support for every audio format, because format support is
   decided by the Rust engine at source open — an unsupported format fails
-  explicitly there instead of silently selecting a platform decoder;
+  explicitly there instead of silently selecting another decoder;
 - its `getMediaClock()` returns the coordinator's clock, so ExoPlayer's
   single playback clock is the native completed-frame clock;
 - readiness and end-of-stream come from the coordinator's native state,

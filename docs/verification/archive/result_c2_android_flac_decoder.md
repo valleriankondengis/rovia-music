@@ -1,3 +1,5 @@
+> ARCHIVED 2026-11-21 — superseded by the Symphonia-only decoder policy; kept as the historical reason the platform decoder was removed, not as a current component. Before 2026-11-21 the OFF path decoded with the Android platform decoder (`c2.android.flac.decoder` for FLAC); since the Symphonia-only change every mode, OFF included, decodes with the registered decoder backend (Symphonia, id "symphonia-rust"). Do not use this report as evidence about any current playback path.
+
 # What this report records
 
 Measurements of the Android platform FLAC decoder, `c2.android.flac.decoder`,

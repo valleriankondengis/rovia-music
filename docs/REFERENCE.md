@@ -2,7 +2,12 @@
 
 This index lists the official platform, framework, protocol and dependency sources Rovia's implementation is based on.
 
-## Android platform and Codec2
+## Android platform (historical Codec2 references)
+
+> Historical only (2026-11-21): the platform decoder (Codec2) was
+> removed from all playback paths. These references are kept for the
+> archived measurement and for the Android audio APIs Rovia still uses
+> (mixer attributes, USB host); they are not current decoder components.
 
 | Topic | Source | Use in Rovia |
 |---|---|---|
@@ -10,9 +15,9 @@ This index lists the official platform, framework, protocol and dependency sourc
 | Mixer attributes API | [Android `AudioMixerAttributes`](https://developer.android.com/reference/android/media/AudioMixerAttributes) | `MIXER_BEHAVIOR_BIT_PERFECT` |
 | Audio manager API | [Android `AudioManager`](https://developer.android.com/reference/android/media/AudioManager) | Preferred mixer attributes and route queries |
 | Android USB host | [Android USB host guide](https://developer.android.com/develop/connectivity/usb/host) | USB permissions and connection APIs |
-| Codec2 overview | [AOSP Codec 2.0](https://source.android.com/docs/core/media/codec2) | Android platform codec framework |
-| MediaCodec API | [Android `MediaCodec`](https://developer.android.com/reference/android/media/MediaCodec) | Platform decoder identity and output format |
-| FLAC Codec2 component | [AOSP `C2SoftFlacDec.cpp`](https://android.googlesource.com/platform/frameworks/av/+/refs/heads/main/media/codec2/components/flac/C2SoftFlacDec.cpp) | FLAC-specific platform component; verify target-device source/build |
+| Codec2 overview | [AOSP Codec 2.0](https://source.android.com/docs/core/media/codec2) | Historical platform codec framework (removed 2026-11-21) |
+| MediaCodec API | [Android `MediaCodec`](https://developer.android.com/reference/android/media/MediaCodec) | Historical platform decoder identity (removed 2026-11-21) |
+| FLAC Codec2 component | [AOSP `C2SoftFlacDec.cpp`](https://android.googlesource.com/platform/frameworks/av/+/refs/heads/main/media/codec2/components/flac/C2SoftFlacDec.cpp) | Historical FLAC-specific platform component; verify target-device source/build |
 
 ## AndroidX Media3 and ExoPlayer
 
@@ -29,7 +34,7 @@ This index lists the official platform, framework, protocol and dependency sourc
 | DefaultRenderersFactory API | [AndroidX `DefaultRenderersFactory`](https://developer.android.com/reference/androidx/media3/exoplayer/DefaultRenderersFactory) | Standard renderer behavior |
 | Media3 source | [AndroidX Media repository](https://github.com/androidx/media) | Inspect exact tag/commit matching resolved artifacts |
 
-Rovia Direct USB must not use `AudioSink` or `ForwardingAudioSink` as the Symphonia/USB integration boundary. The references above are for Media3 player/session/renderer coordination and standard Android-decoded modes.
+Rovia Direct USB must not use `AudioSink` or `ForwardingAudioSink` as the Symphonia/USB integration boundary. The references above are for Media3 player/session/renderer coordination only; no mode decodes with the platform.
 
 ## Symphonia
 
