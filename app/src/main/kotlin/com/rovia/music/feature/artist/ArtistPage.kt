@@ -71,6 +71,7 @@ import com.rovia.music.data.mediastore.LocalAudioTrack
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
+import com.rovia.music.ui.theme.ArtworkContentTheme
 import com.rovia.music.ui.theme.BackdropContentTheme
 import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
@@ -210,221 +211,229 @@ fun ArtistPage(
     val reservedBottomSpace = navigationBarBottomInset + 80.dp + 16.dp +
         if (currentTrackId != null) 80.dp else 0.dp
 
+    var artworkSeedColor by remember { mutableStateOf<Color?>(null) }
+
     BackdropContentTheme {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val heroHeight = (maxWidth / 0.95f)
-                .coerceAtMost(maxHeight * 0.6f)
+        ArtworkContentTheme(
+            seedColor = artworkSeedColor,
+            darkTheme = true,
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val heroHeight = (maxWidth / 0.95f)
+                    .coerceAtMost(maxHeight * 0.6f)
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                key(heroArtworkUri) {
-                    ArtworkBackdrop(
-                        artworkUri = heroArtworkUri,
-                        foregroundArtworkHeight = 0.dp,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = reservedBottomSpace),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    item(key = "artist-hero") {
-                        ArtistHeroHeader(
-                            artistName = resolvedArtistName,
+                Box(modifier = Modifier.fillMaxSize()) {
+                    key(heroArtworkUri) {
+                        ArtworkBackdrop(
                             artworkUri = heroArtworkUri,
-                            heroHeight = heroHeight,
-                            trackCount = artistTracks.size,
-                            entityLiked = entityLiked,
-                            onToggleEntityLike = onToggleEntityLike,
-                            onPlay = {
-                                if (artistTracks.isNotEmpty()) {
-                                    playbackController.playQueue(
-                                        tracks = artistTracks,
-                                        startIndex = 0,
-                                        origin = PlaybackOrigin(
-                                            type = PlaybackOriginType.ARTIST,
-                                            entityKey = resolvedArtistName,
-                                            title = resolvedArtistName,
-                                            artworkSourceUri = heroArtworkUri
-                                        )
-                                    )
-                                }
-                            },
-                            onShufflePlay = {
-                                if (artistTracks.isNotEmpty()) {
-                                    playbackController.playQueue(
-                                        tracks = artistTracks,
-                                        startIndex = 0,
-                                        origin = PlaybackOrigin(
-                                            type = PlaybackOriginType.ARTIST,
-                                            entityKey = resolvedArtistName,
-                                            title = resolvedArtistName,
-                                            artworkSourceUri = heroArtworkUri
-                                        ),
-                                        shuffle = true
-                                    )
-                                }
-                            }
+                            foregroundArtworkHeight = 0.dp,
+                            modifier = Modifier.fillMaxSize(),
+                            onSeedColor = { artworkSeedColor = it }
                         )
                     }
 
-                    if (recentRelease != null) {
-                        item(key = "artist-recent-release") {
-                            ArtistRecentReleaseCard(
-                                release = recentRelease,
-                                onClick = {
-                                    when (recentRelease.type) {
-                                        AlbumReleaseType.SINGLE,
-                                        AlbumReleaseType.EP ->
-                                            onOpenSingle(recentRelease.key)
-                                        else -> onOpenAlbum(recentRelease.key)
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = reservedBottomSpace),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        item(key = "artist-hero") {
+                            ArtistHeroHeader(
+                                artistName = resolvedArtistName,
+                                artworkUri = heroArtworkUri,
+                                heroHeight = heroHeight,
+                                trackCount = artistTracks.size,
+                                entityLiked = entityLiked,
+                                onToggleEntityLike = onToggleEntityLike,
+                                onPlay = {
+                                    if (artistTracks.isNotEmpty()) {
+                                        playbackController.playQueue(
+                                            tracks = artistTracks,
+                                            startIndex = 0,
+                                            origin = PlaybackOrigin(
+                                                type = PlaybackOriginType.ARTIST,
+                                                entityKey = resolvedArtistName,
+                                                title = resolvedArtistName,
+                                                artworkSourceUri = heroArtworkUri
+                                            )
+                                        )
+                                    }
+                                },
+                                onShufflePlay = {
+                                    if (artistTracks.isNotEmpty()) {
+                                        playbackController.playQueue(
+                                            tracks = artistTracks,
+                                            startIndex = 0,
+                                            origin = PlaybackOrigin(
+                                                type = PlaybackOriginType.ARTIST,
+                                                entityKey = resolvedArtistName,
+                                                title = resolvedArtistName,
+                                                artworkSourceUri = heroArtworkUri
+                                            ),
+                                            shuffle = true
+                                        )
                                     }
                                 }
                             )
                         }
-                    }
 
-                    if (topTracks.isNotEmpty()) {
-                        item(key = "artist-top-songs") {
-                            ArtistCarouselSection(
-                                title = stringResource(R.string.artist_top_songs)
-                            ) {
-                                Column {
-                                    topTracks.forEachIndexed { index, track ->
-                                        ArtistTopSongRow(
-                                            track = track,
-                                            isCurrent = currentTrackId != null &&
-                                                track.id.toString() == currentTrackId,
-                                            onClick = {
-                                                playbackController.playQueue(
-                                                    tracks = topTracks,
-                                                    startIndex = index,
-                                                    origin = PlaybackOrigin(
-                                                        type = PlaybackOriginType.ARTIST,
-                                                        entityKey = resolvedArtistName,
-                                                        title = resolvedArtistName,
-                                                        artworkSourceUri = heroArtworkUri
+                        if (recentRelease != null) {
+                            item(key = "artist-recent-release") {
+                                ArtistRecentReleaseCard(
+                                    release = recentRelease,
+                                    onClick = {
+                                        when (recentRelease.type) {
+                                            AlbumReleaseType.SINGLE,
+                                            AlbumReleaseType.EP ->
+                                                onOpenSingle(recentRelease.key)
+                                            else -> onOpenAlbum(recentRelease.key)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        if (topTracks.isNotEmpty()) {
+                            item(key = "artist-top-songs") {
+                                ArtistCarouselSection(
+                                    title = stringResource(R.string.artist_top_songs)
+                                ) {
+                                    Column {
+                                        topTracks.forEachIndexed { index, track ->
+                                            ArtistTopSongRow(
+                                                track = track,
+                                                isCurrent = currentTrackId != null &&
+                                                    track.id.toString() == currentTrackId,
+                                                onClick = {
+                                                    playbackController.playQueue(
+                                                        tracks = topTracks,
+                                                        startIndex = index,
+                                                        origin = PlaybackOrigin(
+                                                            type = PlaybackOriginType.ARTIST,
+                                                            entityKey = resolvedArtistName,
+                                                            title = resolvedArtistName,
+                                                            artworkSourceUri = heroArtworkUri
+                                                        )
                                                     )
-                                                )
-                                            }
-                                        )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (singlesAndEps.isNotEmpty()) {
+                            item(key = "artist-singles-and-eps") {
+                                ArtistCarouselSection(
+                                    title = stringResource(songsAndEpsTitleRes)
+                                ) {
+                                    LazyRow(
+                                        state = singlesAndEpsListState,
+                                        contentPadding = PaddingValues(horizontal = 18.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                    ) {
+                                        items(
+                                            items = singlesAndEps,
+                                            key = { "release:${it.key}" }
+                                        ) { release ->
+                                            ArtistReleaseCarouselItem(
+                                                release = release,
+                                                isCurrent = currentTrackId != null &&
+                                                    release.tracks.any {
+                                                        it.id.toString() == currentTrackId
+                                                    },
+                                                onClick = { onOpenSingle(release.key) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (albums.isNotEmpty()) {
+                            item(key = "artist-albums") {
+                                ArtistCarouselSection(
+                                    title = stringResource(R.string.library_category_albums)
+                                ) {
+                                    LazyRow(
+                                        state = albumsListState,
+                                        contentPadding = PaddingValues(horizontal = 18.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                    ) {
+                                        items(
+                                            items = albums,
+                                            key = { "album:${it.key}" }
+                                        ) { release ->
+                                            ArtistReleaseCarouselItem(
+                                                release = release,
+                                                isCurrent = currentTrackId != null &&
+                                                    release.tracks.any {
+                                                        it.id.toString() == currentTrackId
+                                                    },
+                                                onClick = { onOpenAlbum(release.key) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (genres.isNotEmpty()) {
+                            item(key = "artist-genres") {
+                                ArtistCarouselSection(
+                                    title = stringResource(R.string.library_category_genres)
+                                ) {
+                                    LazyRow(
+                                        state = genresListState,
+                                        contentPadding = PaddingValues(horizontal = 18.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                    ) {
+                                        items(
+                                            items = genres,
+                                            key = { "genre:${it.key}" }
+                                        ) { genre ->
+                                            ArtistGenreCarouselItem(
+                                                genre = genre,
+                                                onClick = { onOpenGenre(genre.key) }
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    if (singlesAndEps.isNotEmpty()) {
-                        item(key = "artist-singles-and-eps") {
-                            ArtistCarouselSection(
-                                title = stringResource(songsAndEpsTitleRes)
+                    TopAppBar(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .statusBarsPadding(),
+                        title = {},
+                        navigationIcon = {
+                            FilledIconButton(
+                                onClick = onBack,
+                                shapes = IconButtonDefaults.shapes(),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
                             ) {
-                                LazyRow(
-                                    state = singlesAndEpsListState,
-                                    contentPadding = PaddingValues(horizontal = 18.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
-                                ) {
-                                    items(
-                                        items = singlesAndEps,
-                                        key = { "release:${it.key}" }
-                                    ) { release ->
-                                        ArtistReleaseCarouselItem(
-                                            release = release,
-                                            isCurrent = currentTrackId != null &&
-                                                release.tracks.any {
-                                                    it.id.toString() == currentTrackId
-                                                },
-                                            onClick = { onOpenSingle(release.key) }
-                                        )
-                                    }
-                                }
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_arrow_back),
+                                    contentDescription = stringResource(R.string.player_back)
+                                )
                             }
-                        }
-                    }
-
-                    if (albums.isNotEmpty()) {
-                        item(key = "artist-albums") {
-                            ArtistCarouselSection(
-                                title = stringResource(R.string.library_category_albums)
-                            ) {
-                                LazyRow(
-                                    state = albumsListState,
-                                    contentPadding = PaddingValues(horizontal = 18.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
-                                ) {
-                                    items(
-                                        items = albums,
-                                        key = { "album:${it.key}" }
-                                    ) { release ->
-                                        ArtistReleaseCarouselItem(
-                                            release = release,
-                                            isCurrent = currentTrackId != null &&
-                                                release.tracks.any {
-                                                    it.id.toString() == currentTrackId
-                                                },
-                                            onClick = { onOpenAlbum(release.key) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (genres.isNotEmpty()) {
-                        item(key = "artist-genres") {
-                            ArtistCarouselSection(
-                                title = stringResource(R.string.library_category_genres)
-                            ) {
-                                LazyRow(
-                                    state = genresListState,
-                                    contentPadding = PaddingValues(horizontal = 18.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
-                                ) {
-                                    items(
-                                        items = genres,
-                                        key = { "genre:${it.key}" }
-                                    ) { genre ->
-                                        ArtistGenreCarouselItem(
-                                            genre = genre,
-                                            onClick = { onOpenGenre(genre.key) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        },
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    )
                 }
-
-                TopAppBar(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .statusBarsPadding(),
-                    title = {},
-                    navigationIcon = {
-                        FilledIconButton(
-                            onClick = onBack,
-                            shapes = IconButtonDefaults.shapes(),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_arrow_back),
-                                contentDescription = stringResource(R.string.player_back)
-                            )
-                        }
-                    },
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                )
             }
         }
     }
@@ -562,7 +571,7 @@ private fun ArtistCarouselSection(
             modifier = Modifier.padding(horizontal = 18.dp),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = Color.White
         )
         content()
     }
@@ -668,7 +677,7 @@ private fun ArtistCarouselItem(
             color = if (isCurrent) {
                 MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.onSurface
+                Color.White
             },
             maxLines = 1,
             minLines = 1,
@@ -678,7 +687,7 @@ private fun ArtistCarouselItem(
         Text(
             text = supportingText,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Color.White.copy(alpha = 0.7f),
             maxLines = 1,
             minLines = 1,
             softWrap = false,
@@ -1004,7 +1013,7 @@ private fun ArtistTopSongRow(
                 color = if (isCurrent) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurface
+                    Color.White
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1012,7 +1021,7 @@ private fun ArtistTopSongRow(
             Text(
                 text = track.artist.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.7f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

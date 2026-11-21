@@ -1,9 +1,11 @@
 package com.rovia.music
 
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
@@ -53,6 +55,7 @@ import androidx.media3.common.Player
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -248,6 +251,17 @@ fun Navigation(appContainer: AppContainer) {
             SheetValue.Expanded,
         ),
     )
+
+    val sheetProgress by animateFloatAsState(
+        targetValue = if (showPlayerSheet) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 350,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "player-sheet-progress",
+    )
+
+    val miniPlayerLiftPx = with(density) { 40.dp.toPx() }
 
     val navigationBarBottomInset = WindowInsets.navigationBars
         .asPaddingValues()
@@ -1443,7 +1457,7 @@ fun Navigation(appContainer: AppContainer) {
 
         }
 
-        if (!showPlayerSheet && !navigationState.isSettingsFlowActive &&
+        if (sheetProgress < 1f && !navigationState.isSettingsFlowActive &&
             !navigationState.isWrappedActive
         ) {
             MiniPlayer(
@@ -1456,7 +1470,14 @@ fun Navigation(appContainer: AppContainer) {
                     .padding(
                         bottom = FloatingToolbarOverlayHeight +
                             navigationBarBottomInset,
-                    ),
+                    )
+                    .graphicsLayer {
+                        alpha = 1f - sheetProgress
+                        translationY = -sheetProgress * miniPlayerLiftPx
+                        val scale = 1f + sheetProgress * 0.06f
+                        scaleX = scale
+                        scaleY = scale
+                    },
             )
         }
 

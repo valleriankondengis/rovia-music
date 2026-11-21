@@ -80,7 +80,7 @@ fun WavySeekBar(
     enabled: Boolean = true,
     isPlaying: Boolean = true,
     activeTrackColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    inactiveTrackColor: Color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+    inactiveTrackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     thumbColor: Color = MaterialTheme.colorScheme.primaryContainer,
     strokeWidth: Dp = 5.dp,
     thumbRadius: Dp = 8.dp,

@@ -40,7 +40,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -217,9 +216,9 @@ fun HomeScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .padding(top = contentTopPadding),
             contentPadding = PaddingValues(
-                top = contentTopPadding,
                 bottom = contentBottomPadding
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -318,8 +317,8 @@ fun HomeScreen(
                 .statusBarsPadding(),
             windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent
+                containerColor = MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = MaterialTheme.colorScheme.surface
             ),
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
@@ -572,7 +571,6 @@ private fun WrappedHomeCard(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
-                        .copy(alpha = 0.8f)
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -48,6 +49,7 @@ fun ArtworkBackdrop(
     artworkUri: String?,
     foregroundArtworkHeight: Dp,
     modifier: Modifier = Modifier,
+    onSeedColor: ((Color?) -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val materialSurface = MaterialTheme.colorScheme.surface
@@ -77,7 +79,7 @@ fun ArtworkBackdrop(
         }
     }
 
-    val artworkBackgroundColor by produceState<Color?>(
+    val artworkSample by produceState<ArtworkSample?>(
         initialValue = null,
         key1 = artworkBitmap,
         key2 = isDarkTheme,
@@ -85,10 +87,16 @@ fun ArtworkBackdrop(
         val bitmap = artworkBitmap?.takeUnless(Bitmap::isRecycled)
         value = bitmap?.let {
             withContext(Dispatchers.Default) {
-                artworkSurfaceColor(it, isDarkTheme)
+                sampleArtworkColors(it, isDarkTheme)
             }
         }
     }
+
+    LaunchedEffect(artworkSample) {
+        onSeedColor?.invoke(artworkSample?.seedColor)
+    }
+
+    val artworkBackgroundColor = artworkSample?.backdropColor
 
     val targetBackgroundColor = artworkBackgroundColor ?: materialSurface
     val backgroundColor by animateColorAsState(
@@ -140,29 +148,6 @@ fun ArtworkBackdrop(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0f to backgroundColor.copy(
-                                alpha = if (isDarkTheme) 0.16f else 0.10f,
-                            ),
-                            0.36f to backgroundColor.copy(
-                                alpha = if (isDarkTheme) 0.22f else 0.18f,
-                            ),
-                            0.66f to backgroundColor.copy(
-                                alpha = if (isDarkTheme) 0.40f else 0.34f,
-                            ),
-                            1f to backgroundColor.copy(
-                                alpha = if (isDarkTheme) 0.64f else 0.50f,
-                            ),
-                        ),
-                    ),
-                ),
-        )
-
         if (artworkBitmap != null && imageHeight > 0.dp) {
             Box(
                 modifier = Modifier
@@ -204,22 +189,7 @@ fun ArtworkBackdrop(
             }
         }
 
-        val topScrim = Color.Black.copy(
-            alpha = if (isDarkTheme) 0.28f else 0.10f,
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to topScrim,
-                        0.14f to Color.Transparent,
-                        1f to Color.Transparent,
-                    ),
-                ),
-        )
-    }
+        }
 }
 
 private fun createBackdropArtwork(source: Bitmap): Bitmap? {
@@ -251,17 +221,28 @@ private fun createBackdropArtwork(source: Bitmap): Bitmap? {
     }.getOrNull()
 }
 
-private fun artworkSurfaceColor(
+private data class ArtworkSample(
+    val backdropColor: Color,
+    val seedColor: Color,
+)
+
+private fun sampleArtworkColors(
     bitmap: Bitmap,
     isDarkTheme: Boolean,
-): Color {
+): ArtworkSample {
     if (bitmap.width <= 0 || bitmap.height <= 0) {
-        return fallbackArtworkColor(isDarkTheme)
+        return ArtworkSample(
+            backdropColor = fallbackArtworkColor(isDarkTheme),
+            seedColor = fallbackArtworkSeedColor(),
+        )
     }
 
     val samplingBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
         bitmap.copy(Bitmap.Config.ARGB_8888, false)
-            ?: return fallbackArtworkColor(isDarkTheme)
+            ?: return ArtworkSample(
+                backdropColor = fallbackArtworkColor(isDarkTheme),
+                seedColor = fallbackArtworkSeedColor(),
+            )
     } else {
         bitmap
     }
@@ -334,9 +315,16 @@ private fun artworkSurfaceColor(
             0.97f
         }
 
-        return Color(
-            AndroidColor.HSVToColor(
-                floatArrayOf(hue, saturation, brightness),
+        return ArtworkSample(
+            backdropColor = Color(
+                AndroidColor.HSVToColor(
+                    floatArrayOf(hue, saturation, brightness),
+                ),
+            ),
+            seedColor = Color(
+                AndroidColor.HSVToColor(
+                    floatArrayOf(hue, averageSaturation, ARTWORK_SEED_VALUE),
+                ),
             ),
         )
     } finally {
@@ -349,6 +337,13 @@ private fun artworkSurfaceColor(
     }
 }
 
+private fun fallbackArtworkSeedColor(): Color =
+    Color(
+        AndroidColor.HSVToColor(
+            floatArrayOf(258f, 0.18f, ARTWORK_SEED_VALUE),
+        ),
+    )
+
 private fun fallbackArtworkColor(
     isDarkTheme: Boolean,
 ): Color = if (isDarkTheme) {
@@ -358,4 +353,5 @@ private fun fallbackArtworkColor(
 }
 
 private const val BACKDROP_SOURCE_MAX_DIMENSION = 144
+private const val ARTWORK_SEED_VALUE = 0.7f
 private const val BACKDROP_RENDER_SCALE = 4f

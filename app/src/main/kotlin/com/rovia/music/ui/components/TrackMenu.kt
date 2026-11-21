@@ -76,9 +76,9 @@ fun ColumnScope.TrackMenuItem(
             textColor = colorScheme.onSurface,
             leadingIconColor = colorScheme.onSurface,
             trailingIconColor = colorScheme.onSurface,
-            disabledTextColor = colorScheme.onSurface.copy(alpha = 0.38f),
-            disabledLeadingIconColor = colorScheme.onSurface.copy(alpha = 0.38f),
-            disabledTrailingIconColor = colorScheme.onSurface.copy(alpha = 0.38f),
+            disabledTextColor = colorScheme.onSurfaceVariant,
+            disabledLeadingIconColor = colorScheme.onSurfaceVariant,
+            disabledTrailingIconColor = colorScheme.onSurfaceVariant,
         ),
     )
 }
@@ -108,9 +108,7 @@ fun TrackMenu(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                    alpha = 0.38f,
-                ),
+                disabledContentColor = MaterialTheme.colorScheme.outline,
             ),
         ) {
             Icon(

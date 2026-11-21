@@ -2,6 +2,7 @@ package com.rovia.music.ui.components
 
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -31,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.ui.theme.BackdropContentTheme
 
 @Composable
 fun MiniPlayer(
@@ -75,6 +79,10 @@ fun MiniPlayer(
         mutableStateOf(controller?.currentMediaItem != null)
     }
 
+    var hasNext by remember(controller) {
+        mutableStateOf(controller?.hasNextMediaItem() == true)
+    }
+
     val latestOnOpenPlayer = rememberUpdatedState(onOpenPlayer)
     val density = LocalDensity.current
 
@@ -87,6 +95,7 @@ fun MiniPlayer(
             currentArtworkUri = null
             showPauseIcon = false
             hasMedia = false
+            hasNext = false
 
             onDispose {}
         } else {
@@ -107,6 +116,8 @@ fun MiniPlayer(
                         activePlayer.playbackState != Player.STATE_ENDED
 
                 hasMedia = activePlayer.currentMediaItem != null
+
+                hasNext = activePlayer.hasNextMediaItem()
             }
 
             val listener = object : Player.Listener {
@@ -163,6 +174,8 @@ fun MiniPlayer(
                         onDragEnd = {
                             if (totalVerticalDrag < -dragThreshold) {
                                 latestOnOpenPlayer.value()
+                            } else if (totalVerticalDrag > dragThreshold) {
+                                playbackController.stopPlayback()
                             }
 
                             totalVerticalDrag = 0f
@@ -177,87 +190,114 @@ fun MiniPlayer(
                     )
                 },
             shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            color = Color.Transparent,
+            contentColor = Color.White,
             tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = 12.dp,
-                    vertical = 8.dp,
-                ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AlbumArtwork(
-                    artworkUri = currentArtworkUri,
-                    fallbackText = displayTitle,
-                    contentDescription = displayTitle,
-                    modifier = Modifier.size(48.dp),
-                    size = 48.dp,
-                    shape = MaterialTheme.shapes.medium,
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = displayTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            BackdropContentTheme {
+                Box {
+                    ArtworkBackdrop(
+                        artworkUri = currentArtworkUri,
+                        foregroundArtworkHeight = 0.dp,
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(MaterialTheme.shapes.extraLarge),
                     )
 
-                    Text(
-                        text = displayArtist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 8.dp,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AlbumArtwork(
+                            artworkUri = currentArtworkUri,
+                            fallbackText = displayTitle,
+                            contentDescription = displayTitle,
+                            modifier = Modifier.size(48.dp),
+                            size = 48.dp,
+                            shape = MaterialTheme.shapes.medium,
+                        )
 
-                IconButton(
-                    enabled = hasMedia,
-                    onClick = {
-                        controller?.let { activeController ->
-                            if (
-                                activeController.playWhenReady &&
-                                activeController.playbackState !=
-                                Player.STATE_ENDED
-                            ) {
-                                activeController.pause()
-                            } else {
-                                if (
-                                    activeController.playbackState ==
-                                    Player.STATE_ENDED
-                                ) {
-                                    activeController.seekToDefaultPosition()
-                                }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = displayTitle,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
 
-                                activeController.play()
-                            }
+                            Text(
+                                text = displayArtist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
-                    },
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (showPauseIcon) {
-                                R.drawable.ic_pause
-                            } else {
-                                R.drawable.ic_play
+
+                        IconButton(
+                            enabled = hasMedia,
+                            onClick = {
+                                controller?.let { activeController ->
+                                    if (
+                                        activeController.playWhenReady &&
+                                        activeController.playbackState !=
+                                        Player.STATE_ENDED
+                                    ) {
+                                        activeController.pause()
+                                    } else {
+                                        if (
+                                            activeController.playbackState ==
+                                            Player.STATE_ENDED
+                                        ) {
+                                            activeController.seekToDefaultPosition()
+                                        }
+
+                                        activeController.play()
+                                    }
+                                }
                             },
-                        ),
-                        contentDescription = stringResource(
-                            if (showPauseIcon) {
-                                R.string.player_pause
-                            } else {
-                                R.string.player_play
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    if (showPauseIcon) {
+                                        R.drawable.ic_pause
+                                    } else {
+                                        R.drawable.ic_play
+                                    },
+                                ),
+                                contentDescription = stringResource(
+                                    if (showPauseIcon) {
+                                        R.string.player_pause
+                                    } else {
+                                        R.string.player_play
+                                    },
+                                ),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+
+                        IconButton(
+                            enabled = hasMedia && hasNext,
+                            onClick = {
+                                controller?.seekToNextMediaItem()
                             },
-                        ),
-                        modifier = Modifier.size(24.dp),
-                    )
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_skip_next),
+                                contentDescription = stringResource(R.string.player_next),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rovia.music.R
+import com.rovia.music.ui.theme.ArtworkContentTheme
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -32,6 +33,7 @@ fun LyricMenuButton(
     onOffsetClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    seedColor: Color? = null,
 ) {
     var expanded by remember {
         mutableStateOf(false)
@@ -41,30 +43,29 @@ fun LyricMenuButton(
     Box(
         modifier = modifier,
     ) {
-        FilledIconButton(
-            onClick = { expanded = true },
-            enabled = enabled,
-            modifier = Modifier.size(40.dp),
-            shapes = IconButtonDefaults.shapes(),
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                disabledContainerColor =
-                    MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContentColor =
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = 0.38f,
-                    ),
-            ),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = stringResource(R.string.lyric_menu),
-                modifier = Modifier.size(24.dp),
-            )
-        }
+        ArtworkContentTheme(seedColor = seedColor) {
+            FilledIconButton(
+                onClick = { expanded = true },
+                enabled = enabled,
+                modifier = Modifier.size(40.dp),
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledContainerColor =
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                    disabledContentColor =
+                        MaterialTheme.colorScheme.outline,
+                ),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert),
+                    contentDescription = stringResource(R.string.lyric_menu),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
 
-        DropdownMenu(
+            DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             containerColor = Color.Transparent,
@@ -105,6 +106,7 @@ fun LyricMenuButton(
                     )
                 }
             }
+        }
         }
     }
 }

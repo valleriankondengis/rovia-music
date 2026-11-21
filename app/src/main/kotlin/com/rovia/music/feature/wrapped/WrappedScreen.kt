@@ -34,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -73,6 +75,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.rovia.music.ui.components.ArtworkBackdrop
+import com.rovia.music.ui.theme.ArtworkContentTheme
 import kotlinx.serialization.Serializable
 import androidx.compose.foundation.Image
 
@@ -236,216 +239,227 @@ private fun WrappedStory(
     }
     val shareTitle = stringResource(R.string.wrapped_share_title)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithContent {
-                    graphicsLayer.record {
-                        this@drawWithContent.drawContent()
-                    }
-                    drawLayer(graphicsLayer)
-                },
-        ) {
-            ArtworkBackdrop(
-                artworkUri = backdropArtworkUri,
-                foregroundArtworkHeight = 0.dp,
-                modifier = Modifier.fillMaxSize(),
-            )
+    var artworkSeedColor by remember { mutableStateOf<Color?>(null) }
 
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            val availableHeight = maxHeight - 176.dp
-            val canvasModifier = if (maxWidth * 16f / 9f <= availableHeight) {
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(9f / 16f)
-            } else {
-                Modifier
-                    .height(availableHeight)
-                    .aspectRatio(9f / 16f)
-            }
-            Box(modifier = canvasModifier) {
-                Card(
+    ArtworkContentTheme(seedColor = artworkSeedColor) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        graphicsLayer.record {
+                            this@drawWithContent.drawContent()
+                        }
+                        drawLayer(graphicsLayer)
+                    },
+            ) {
+                ArtworkBackdrop(
+                    artworkUri = backdropArtworkUri,
+                    foregroundArtworkHeight = 0.dp,
                     modifier = Modifier.fillMaxSize(),
-                    colors = CardDefaults.cardColors(
-                        containerColor =
-                            MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                ) {
-                    when (currentKind) {
-                        SLIDE_INTRO -> WrappedIntroSlide(data)
-                        SLIDE_ARTISTS -> WrappedArtistsSlide(data)
-                        SLIDE_TRACKS -> WrappedTracksSlide(data)
-                        SLIDE_ALBUMS -> WrappedAlbumsSlide(data)
-                        else -> WrappedSummarySlide(data)
-                    }
-                }
+                    onSeedColor = { artworkSeedColor = it },
+                )
 
-                Row(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember {
-                                    MutableInteractionSource()
-                                },
-                                indication = null,
-                            ) {
-                                if (slideIndex > 0) slideIndex -= 1
-                            },
-                    )
-                    Spacer(modifier = Modifier.weight(2f))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember {
-                                    MutableInteractionSource()
-                                },
-                                indication = null,
-                            ) {
-                                if (slideIndex < slideKinds.lastIndex) {
-                                    slideIndex += 1
-                                }
-                            },
-                    )
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val availableHeight = maxHeight - 176.dp
+                val canvasModifier = if (maxWidth * 16f / 9f <= availableHeight) {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(9f / 16f)
+                } else {
+                    Modifier
+                        .height(availableHeight)
+                        .aspectRatio(9f / 16f)
                 }
-            }
-        }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp),
-        ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            slideKinds.indices.forEach { index ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(3.dp)
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .background(
-                            when {
-                                index < slideIndex ->
-                                    MaterialTheme.colorScheme.onSurface
-                                index == slideIndex ->
-                                    MaterialTheme.colorScheme.primary
-                                else ->
-                                    MaterialTheme.colorScheme.onSurface
-                                        .copy(alpha = 0.2f)
-                            }
+                Box(modifier = canvasModifier) {
+                    Card(
+                        modifier = Modifier.fillMaxSize(),
+                        colors = CardDefaults.cardColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surfaceContainer
                         ),
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.wrapped_title, data.recapPhrase),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.wrapped_slide_of,
-                        slideIndex + 1,
-                        slideKinds.size,
-                        stringResource(wrappedSlideTitleRes(currentKind)),
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onBack) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = stringResource(R.string.wrapped_close),
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val saved = saveCurrentCard(
-                            context = context,
-                            graphicsLayer = graphicsLayer,
-                            tag = data.fileTag,
-                            slide = slideIndex + 1,
-                        )
-
-                        if (saved) {
-                            saveCompleted = true
-                            delay(1800)
-                            saveCompleted = false
+                    ) {
+                        when (currentKind) {
+                            SLIDE_INTRO -> WrappedIntroSlide(data)
+                            SLIDE_ARTISTS -> WrappedArtistsSlide(data)
+                            SLIDE_TRACKS -> WrappedTracksSlide(data)
+                            SLIDE_ALBUMS -> WrappedAlbumsSlide(data)
+                            else -> WrappedSummarySlide(data)
                         }
                     }
-                },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = stringResource(
-                        if (saveCompleted) {
-                            R.string.wrapped_saved
-                        } else {
-                            R.string.wrapped_save
-                        },
-                    ),
-                )
-            }
-            Button(
-                onClick = {
-                    scope.launch {
-                        shareCurrentCard(
-                            context = context,
-                            graphicsLayer = graphicsLayer,
-                            tag = data.fileTag,
-                            slide = slideIndex + 1,
-                            chooserTitle = shareTitle,
+
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember {
+                                        MutableInteractionSource()
+                                    },
+                                    indication = null,
+                                ) {
+                                    if (slideIndex > 0) slideIndex -= 1
+                                },
+                        )
+                        Spacer(modifier = Modifier.weight(2f))
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember {
+                                        MutableInteractionSource()
+                                    },
+                                    indication = null,
+                                ) {
+                                    if (slideIndex < slideKinds.lastIndex) {
+                                        slideIndex += 1
+                                    }
+                                },
                         )
                     }
-                },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = stringResource(R.string.wrapped_share))
+                }
             }
-        }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp),
+            ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                slideKinds.indices.forEach { index ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(3.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(
+                                when {
+                                    index < slideIndex ->
+                                        MaterialTheme.colorScheme.onSurface
+                                    index == slideIndex ->
+                                        MaterialTheme.colorScheme.primary
+                                    else ->
+                                        MaterialTheme.colorScheme.onSurface
+                                            .copy(alpha = 0.2f)
+                                }
+                            ),
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.wrapped_title, data.recapPhrase),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.wrapped_slide_of,
+                            slideIndex + 1,
+                            slideKinds.size,
+                            stringResource(wrappedSlideTitleRes(currentKind)),
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                }
+                IconButton(
+                    onClick = onBack,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = stringResource(R.string.wrapped_close),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val saved = saveCurrentCard(
+                                context = context,
+                                graphicsLayer = graphicsLayer,
+                                tag = data.fileTag,
+                                slide = slideIndex + 1,
+                            )
+
+                            if (saved) {
+                                saveCompleted = true
+                                delay(1800)
+                                saveCompleted = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (saveCompleted) {
+                                R.string.wrapped_saved
+                            } else {
+                                R.string.wrapped_save
+                            },
+                        ),
+                    )
+                }
+                Button(
+                    onClick = {
+                        scope.launch {
+                            shareCurrentCard(
+                                context = context,
+                                graphicsLayer = graphicsLayer,
+                                tag = data.fileTag,
+                                slide = slideIndex + 1,
+                                chooserTitle = shareTitle,
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = stringResource(R.string.wrapped_share))
+                }
+            }
+            }
         }
     }
 }

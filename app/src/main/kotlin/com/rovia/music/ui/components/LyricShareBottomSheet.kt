@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.rovia.music.R
+import com.rovia.music.ui.theme.ArtworkContentTheme
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -101,6 +102,8 @@ fun LyricShareBottomSheet(
         mutableStateOf(false)
     }
 
+    var artworkSeedColor by remember { mutableStateOf<Color?>(null) }
+
     val artworkBitmap by produceState<Bitmap?>(
         initialValue = null,
         key1 = request.artworkUri,
@@ -113,92 +116,95 @@ fun LyricShareBottomSheet(
         )
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp)
-                .padding(bottom = 24.dp),
+    ArtworkContentTheme(seedColor = artworkSeedColor) {
+        ModalBottomSheet(
+            onDismissRequest = onDismissRequest,
+            sheetState = sheetState,
         ) {
-            Text(
-                text = stringResource(R.string.lyric_menu_share),
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .drawWithContent {
-                        graphicsLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        drawLayer(graphicsLayer)
-                    },
+                    .padding(horizontal = 18.dp)
+                    .padding(bottom = 24.dp),
             ) {
-                LyricShareCard(
-                    request = request,
-                    artworkBitmap = artworkBitmap,
+                Text(
+                    text = stringResource(R.string.lyric_menu_share),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        if (busy) return@OutlinedButton
-                        busy = true
-                        scope.launch {
-                            val bitmap = captureLyricShareBitmap(graphicsLayer)
-                            val saved = saveLyricShareCard(context, bitmap)
-                            busy = false
-
-                            if (saved) {
-                                saveCompleted = true
-                                delay(1800)
-                                saveCompleted = false
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawWithContent {
+                            graphicsLayer.record {
+                                this@drawWithContent.drawContent()
                             }
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
+                            drawLayer(graphicsLayer)
+                        },
                 ) {
-                    Text(
-                        text = stringResource(
-                            if (saveCompleted) {
-                                R.string.wrapped_saved
-                            } else {
-                                R.string.wrapped_save
-                            },
-                        ),
+                    LyricShareCard(
+                        request = request,
+                        artworkBitmap = artworkBitmap,
+                        onSeedColor = { artworkSeedColor = it },
                     )
                 }
 
-                Button(
-                    onClick = {
-                        if (busy) return@Button
-                        busy = true
-                        scope.launch {
-                            val bitmap = captureLyricShareBitmap(graphicsLayer)
-                            shareLyricShareCard(context, bitmap, shareTitle)
-                            busy = false
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(text = stringResource(R.string.wrapped_share))
+                    OutlinedButton(
+                        onClick = {
+                            if (busy) return@OutlinedButton
+                            busy = true
+                            scope.launch {
+                                val bitmap = captureLyricShareBitmap(graphicsLayer)
+                                val saved = saveLyricShareCard(context, bitmap)
+                                busy = false
+
+                                if (saved) {
+                                    saveCompleted = true
+                                    delay(1800)
+                                    saveCompleted = false
+                                }
+                            }
+                        },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (saveCompleted) {
+                                    R.string.wrapped_saved
+                                } else {
+                                    R.string.wrapped_save
+                                },
+                            ),
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (busy) return@Button
+                            busy = true
+                            scope.launch {
+                                val bitmap = captureLyricShareBitmap(graphicsLayer)
+                                shareLyricShareCard(context, bitmap, shareTitle)
+                                busy = false
+                            }
+                        },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(R.string.wrapped_share))
+                    }
                 }
             }
         }
@@ -209,6 +215,7 @@ fun LyricShareBottomSheet(
 private fun LyricShareCard(
     request: LyricShareRequest,
     artworkBitmap: Bitmap?,
+    onSeedColor: ((Color?) -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
@@ -219,6 +226,7 @@ private fun LyricShareCard(
             artworkUri = request.artworkUri,
             foregroundArtworkHeight = 0.dp,
             modifier = Modifier.matchParentSize(),
+            onSeedColor = onSeedColor,
         )
 
         Column(

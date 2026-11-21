@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import com.rovia.music.ui.components.ArtworkBitmapLoader
 import com.rovia.music.ui.components.LyricMenuButton
 import com.rovia.music.ui.components.LyricOffsetBottomSheet
 import com.rovia.music.ui.components.LyricShareBottomSheet
+import com.rovia.music.ui.theme.ArtworkContentTheme
 import com.rovia.music.ui.components.LyricShareRequest
 import com.rovia.music.ui.components.LyricViewer
 import com.rovia.music.ui.components.SyncedLyrics
@@ -83,6 +85,10 @@ fun PlayerLyricScreen(
         )
     }
 
+    var artworkSeedColor by remember {
+        mutableStateOf<Color?>(null)
+    }
+
     var lyrics by remember(mediaItem) {
         mutableStateOf<SyncedLyrics?>(null)
     }
@@ -99,11 +105,11 @@ fun PlayerLyricScreen(
         ?.takeIf(String::isNotBlank)
         ?: stringResource(R.string.player_unknown_artist)
 
-    var lyricOffsetMs by remember(mediaItem) {
+    var lyricOffsetMs by rememberSaveable(mediaItem?.mediaId) {
         mutableIntStateOf(0)
     }
 
-    var showOffsetSheet by remember {
+    var showOffsetSheet by rememberSaveable {
         mutableStateOf(false)
     }
 
@@ -135,6 +141,7 @@ fun PlayerLyricScreen(
             artworkUri = artworkUri,
             foregroundArtworkHeight = 0.dp,
             modifier = Modifier.fillMaxSize(),
+            onSeedColor = { artworkSeedColor = it },
         )
 
         Column(
@@ -205,6 +212,7 @@ fun PlayerLyricScreen(
                     LyricMenuButton(
                         onShareClick = { sharePicker.beginPicking() },
                         onOffsetClick = { showOffsetSheet = true },
+                        seedColor = artworkSeedColor,
                     )
                 }
             }
@@ -281,24 +289,26 @@ fun PlayerLyricScreen(
         }
 
         if (sharePicker.picking) {
-            LyricSharePickBar(
-                state = sharePicker,
-                onShareClick = {
-                    sharePicker.buildRequest(
-                        title = displayTitle,
-                        artist = displayArtist,
-                        artworkUri = artworkUri,
-                        lines = lyrics?.lines.orEmpty(),
-                    )?.let { request ->
-                        shareRequest = request
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 18.dp)
-                    .padding(bottom = 18.dp),
-            )
+            ArtworkContentTheme(seedColor = artworkSeedColor) {
+                LyricSharePickBar(
+                    state = sharePicker,
+                    onShareClick = {
+                        sharePicker.buildRequest(
+                            title = displayTitle,
+                            artist = displayArtist,
+                            artworkUri = artworkUri,
+                            lines = lyrics?.lines.orEmpty(),
+                        )?.let { request ->
+                            shareRequest = request
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 18.dp)
+                        .padding(bottom = 18.dp),
+                )
+            }
         }
 
         if (showOffsetSheet) {
@@ -306,6 +316,7 @@ fun PlayerLyricScreen(
                 offsetMs = lyricOffsetMs,
                 onOffsetChange = { lyricOffsetMs = it },
                 onDismissRequest = { showOffsetSheet = false },
+                seedColor = artworkSeedColor,
             )
         }
 

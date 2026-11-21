@@ -24,12 +24,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -49,11 +52,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -66,12 +71,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.data.lyrics.EmbeddedLyricsReader
+import android.content.res.Configuration
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -85,6 +92,7 @@ import com.rovia.music.playback.bitperfect.UsbAudioOutputPresence
 import com.rovia.music.data.mediastore.MediaStoreAudioRepository
 import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.playback.controller.PlaybackController
+import com.rovia.music.ui.components.AlbumArtwork
 import com.rovia.music.ui.components.ArtworkBackdrop
 import com.rovia.music.ui.components.LyricLine
 import com.rovia.music.ui.components.LyricLinePreview
@@ -94,6 +102,7 @@ import com.rovia.music.ui.components.WavySeekBar
 import com.rovia.music.ui.components.TrackInfoBottomSheet
 import com.rovia.music.ui.components.AddToPlaylistDialog
 import com.rovia.music.ui.components.TrackMenu
+import com.rovia.music.ui.theme.ArtworkContentTheme
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -217,7 +226,7 @@ fun PlayerScreen(
         }
     }
 
-    var showPipelineSheet by remember {
+    var showPipelineSheet by rememberSaveable {
         mutableStateOf(false)
     }
     var currentTrackDetail by remember {
@@ -245,11 +254,6 @@ fun PlayerScreen(
 
     val outputModeStore = remember(context) { AudioOutputModeStoreProvider.get(context) }
     val outputMode by outputModeStore.mode.collectAsStateWithLifecycle()
-    // Format line source of truth: the decoder that actually opened this
-    // track (PlaybackDecoderStore), not the library metadata — the library
-    // no longer scans sample rate / bit depth from a platform retriever.
-    // Falls back to the track's own fields when the decoder has not
-    // reported yet (e.g. before prepare).
     val decoderInfo by PlaybackDecoderStore.decoderInfo.collectAsStateWithLifecycle()
     var dacName by remember {
         mutableStateOf(UsbAudioOutputPresence.usbAudioOutputDeviceName(context))
@@ -377,8 +381,10 @@ fun PlayerScreen(
         mutableStateOf(controller?.currentMediaItem != null)
     }
 
-    var showLyrics by remember { mutableStateOf(false) }
-    var showQueueSheet by remember { mutableStateOf(false) }
+    var showLyrics by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+
+    var artworkSeedColor by remember { mutableStateOf<Color?>(null) }
 
     var hasNext by remember(controller) {
         mutableStateOf(controller?.hasNextMediaItem() == true)
@@ -500,545 +506,602 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
     } else {
-        Box(modifier = Modifier.fillMaxSize()) {
-            ArtworkBackdrop(
-                artworkUri = currentArtworkUri,
-                foregroundArtworkHeight = artworkHeight,
-                modifier = Modifier.fillMaxSize(),
-            )
+        val isLandscape =
+            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(bottom = systemNavigationBarBottomInset + 30.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+        val controlsSection: @Composable (Dp) -> Unit = { sectionWidth ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
-
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
+                Column(
+                    modifier = Modifier.weight(1f),
                 ) {
-                    val contentWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
-                        .coerceAtLeast(1.dp)
-                        .coerceAtMost(560.dp)
-
-                    BoxWithConstraints(
+                    Text(
+                        text = when {
+                            controller == null -> stringResource(R.string.player_connecting)
+                            !hasMedia -> stringResource(R.string.player_no_track)
+                            else -> currentTitle
+                                ?.takeIf(String::isNotBlank)
+                                ?: stringResource(R.string.player_unknown_track)
+                        },
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .width(contentWidth)
-                            .fillMaxHeight()
-                            .padding(top = 8.dp, bottom = 18.dp),
-                    ) {
-                        val titleGap = 20.dp
-                        val titleBlockHeight = 60.dp
-                        val availableArtworkHeight = (
-                            maxHeight - titleGap - titleBlockHeight
-                        ).coerceAtLeast(54.dp)
-                        val artworkSize = minOf(maxWidth, availableArtworkHeight)
-                            .coerceAtLeast(54.dp)
-                        val groupTop = (
-                            maxHeight - artworkSize - titleGap - titleBlockHeight
-                        ).coerceAtLeast(0.dp) / 2
-                        val nextArtworkHeight = (
-                            statusBarTopInset +
-                                32.dp +
-                                8.dp +
-                                groupTop +
-                                artworkSize +
-                                titleGap / 2
-                            ).coerceAtLeast(0.dp)
+                            .fillMaxWidth()
+                            .basicMarquee(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                    )
 
-                        SideEffect {
-                            if (artworkHeight != nextArtworkHeight) {
-                                artworkHeight = nextArtworkHeight
-                            }
-                        }
+                    if (hasMedia) {
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                        Row(
-                            modifier = Modifier
-                                .offset(
-                                    y = groupTop + artworkSize + titleGap - 13.dp,
-                                )
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(
-                                    text = when {
-                                        controller == null -> stringResource(R.string.player_connecting)
-                                        !hasMedia -> stringResource(R.string.player_no_track)
-                                        else -> currentTitle
-                                            ?.takeIf(String::isNotBlank)
-                                            ?: stringResource(R.string.player_unknown_track)
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .basicMarquee(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Clip,
-                                )
-
-                                if (hasMedia) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    Text(
-                                        text = if (artistNames.isNotEmpty()) {
-                                            clickableArtistCredit
-                                        } else {
-                                            buildAnnotatedString {
-                                                append(stringResource(R.string.player_unknown_artist))
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .basicMarquee(),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Clip,
-                                    )
+                        Text(
+                            text = if (artistNames.isNotEmpty()) {
+                                clickableArtistCredit
+                            } else {
+                                buildAnnotatedString {
+                                    append(stringResource(R.string.player_unknown_artist))
                                 }
-                            }
-
-                            if (hasMedia) {
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                TrackMenu(
-                                    enabled = currentQueueTrack != null,
-                                    onTrackInfoClick = {
-                                        currentQueueTrack?.let { track ->
-                                            selectedTrackInfo = track
-                                            showTrackInfoSheet = true
-                                        }
-                                    },
-                                    track = currentQueueTrack,
-                                    isLiked = currentQueueTrack?.let { track ->
-                                        UserLibraryRepository.likedTrackKey(track) in likedTrackKeys
-                                    } ?: false,
-                                    onToggleLike = onToggleLike,
-                                    onAddToPlaylist = if (externalMode) {
-                                        null
-                                    } else {
-                                        { track -> playlistPickerTrack = track }
-                                    },
-                                )
-                            }
-                        }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .basicMarquee(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip,
+                        )
                     }
                 }
 
-                BoxWithConstraints(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    val controlsWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
-                        .coerceAtLeast(1.dp)
-                        .coerceAtMost(560.dp)
+                if (hasMedia) {
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .width(controlsWidth)
-                            .offset(y = -controlsVerticalOffset),
-                    ) {
-                        if (hasMedia) {
-                            // Fixed two-line slot: the lyric stays centered
-                            // when the text wraps.
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(PlayerLyricPreviewHeight),
-                            ) {
-                                PlayerLyricPreview(
-                                    target = currentLyricTarget,
-                                    positionMs = currentPosition,
-                                    isPlaying = isPlaying,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                    TrackMenu(
+                        enabled = currentQueueTrack != null,
+                        onTrackInfoClick = {
+                            currentQueueTrack?.let { track ->
+                                selectedTrackInfo = track
+                                showTrackInfoSheet = true
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-
-                        // Only the seekbar moves here; the lyric slot and
-                        // transport controls keep their own anchors.
-                        Column(
-                            modifier = Modifier.offset(y = -PlayerSeekbarVerticalAdjustment),
-                        ) {
-                            val sliderMaximum = durationMs
-                                .takeIf { it > 0L }
-                                ?.toFloat()
-                                ?: 1f
-                            val seekHaptics = LocalHapticFeedback.current
-                            val lastSeekHapticStep = remember {
-                                intArrayOf(-1)
-                            }
-
-                            WavySeekBar(
-                                value = {
-                                    (
-                                        (dragPosition ?: currentPosition.toFloat()) /
-                                            sliderMaximum
-                                    ).coerceIn(0f, 1f)
-                                },
-                                onValueChange = { fraction ->
-                                    dragPosition = fraction * sliderMaximum
-                                    val quantized = (fraction * 20f).toInt()
-                                    if (quantized != lastSeekHapticStep[0]) {
-                                        lastSeekHapticStep[0] = quantized
-                                        seekHaptics.performHapticFeedback(
-                                            HapticFeedbackType.TextHandleMove,
-                                        )
-                                    }
-                                },
-                                onValueCommit = { fraction ->
-                                    val target = (fraction * sliderMaximum).toLong()
-                                    controller?.seekTo(target)
-                                    currentPosition = target
-                                    dragPosition = null
-                                },
-                                enabled = controller != null && hasMedia && durationMs > 0L,
-                                isPlaying = isPlaying,
-                                semanticsLabel = stringResource(
-                                    R.string.player_playback_position,
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = formatTime(
-                                        (dragPosition?.toLong() ?: currentPosition)
-                                            .coerceAtLeast(0L),
-                                    ),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White,
-                                )
-
-                                Text(
-                                    text = formatTime(durationMs),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White,
-                                )
-                            }
-                        }
-
-                        sourceTrack?.let { track ->
-                            val routeLabel = stringResource(
-                                if (outputMode != AudioOutputMode.OFF) {
-                                    R.string.pipeline_bit_perfect
-                                } else {
-                                    R.string.pipeline_system_mixer
-                                },
-                            )
-                            val sourceParts = buildList {
-                                if (dacName != null) add("DAC")
-                                val decodedBits = decoderInfo?.bitsPerSample
-                                    ?.takeIf { it > 0 }
-                                    ?: track.bitsPerSample?.takeIf { it > 0 }
-                                decodedBits?.let { add("$it-bit") }
-                                val decodedRate = decoderInfo?.sampleRateHz
-                                    ?.takeIf { it > 0 }
-                                    ?: track.sampleRateHz?.takeIf { it > 0 }
-                                decodedRate?.let { add(formatSourceSampleRate(it)) }
-                                val decodedCodec = decoderInfo?.codec
-                                    ?.takeIf(String::isNotBlank)?.uppercase()
-                                (decodedCodec ?: formatSourceAudioType(track.mimeType))
-                                    ?.let(::add)
-                                add(routeLabel)
-                            }
-                            Text(
-                                text = sourceParts.joinToString(" • "),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.85f),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(
-                                        interactionSource = remember {
-                                            MutableInteractionSource()
-                                        },
-                                        indication = null,
-                                    ) { showPipelineSheet = true }
-                                    .padding(vertical = 4.dp),
-                            )
-                        }
-
-                        // Centers the source line between the seekbar and
-                        // the transport controls.
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // The content column owns the 18.dp side inset.
-                        val playbackButtonGroupWidth = controlsWidth
-                        val playbackColorScheme = MaterialTheme.colorScheme
-                        val idlePlaybackContainerColor =
-                            playbackColorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
-                        val idlePlaybackContentColor = playbackColorScheme.onSurface
-                        val activePlaybackContainerColor = playbackColorScheme.primaryContainer
-                        val activePlaybackContentColor = playbackColorScheme.onPrimaryContainer
-
-                        val previousInteractionSource = remember {
-                            MutableInteractionSource()
-                        }
-                        val playPauseInteractionSource = remember {
-                            MutableInteractionSource()
-                        }
-                        val nextInteractionSource = remember {
-                            MutableInteractionSource()
-                        }
-
-                        val togglePlayback = {
-                            controller?.let { activeController ->
-                                if (
-                                    activeController.playWhenReady &&
-                                    activeController.playbackState != Player.STATE_ENDED
-                                ) {
-                                    activeController.pause()
-                                } else {
-                                    if (activeController.playbackState == Player.STATE_ENDED) {
-                                        activeController.seekToDefaultPosition()
-                                    }
-                                    activeController.play()
-                                }
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(72.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ButtonGroup(
-                                expandedRatio = 0.4f,
-                                modifier = Modifier.width(playbackButtonGroupWidth),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                overflowIndicator = { menuState ->
-                                    ButtonGroupDefaults.OverflowIndicator(
-                                        menuState = menuState,
-                                    )
-                                },
-                            ) {
-                                customItem(
-                                    buttonGroupContent = {
-                                        FilledIconToggleButton(
-                                            checked = showPauseIcon,
-                                            onCheckedChange = {
-                                                togglePlayback().also {}
-                                            },
-                                            enabled = hasMedia,
-                                            interactionSource = playPauseInteractionSource,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(64.dp)
-                                                .animateWidth(
-                                                    interactionSource = playPauseInteractionSource,
-                                                    compressionLimit = 16.dp,
-                                                ),
-                                            colors = IconButtonDefaults.filledIconToggleButtonColors(
-                                                containerColor = idlePlaybackContainerColor,
-                                                contentColor = idlePlaybackContentColor,
-                                                checkedContainerColor = activePlaybackContainerColor,
-                                                checkedContentColor = activePlaybackContentColor,
-                                            ),
-                                            shapes = IconButtonDefaults.toggleableShapes(),
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(
-                                                    if (showPauseIcon) R.drawable.ic_pause else R.drawable.ic_play,
-                                                ),
-                                                contentDescription = stringResource(
-                                                    if (showPauseIcon) R.string.player_pause else R.string.player_play,
-                                                ),
-                                                modifier = Modifier.size(32.dp),
-                                            )
-                                        }
-                                    },
-                                    menuContent = {},
-                                )
-
-                                customItem(
-                                    buttonGroupContent = {
-                                        FilledIconButton(
-                                            enabled = hasMedia,
-                                            onClick = {
-                                                controller?.seekToPreviousMediaItem()
-                                            },
-                                            interactionSource = previousInteractionSource,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .animateWidth(
-                                                    interactionSource = previousInteractionSource,
-                                                    compressionLimit = 16.dp,
-                                                ),
-                                            colors = IconButtonDefaults.filledIconButtonColors(
-                                                containerColor = idlePlaybackContainerColor,
-                                                contentColor = idlePlaybackContentColor,
-                                            ),
-                                            shapes = IconButtonDefaults.shapes(),
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_skip_previous),
-                                                contentDescription = stringResource(R.string.player_previous),
-                                                modifier = Modifier.size(30.dp),
-                                            )
-                                        }
-                                    },
-                                    menuContent = {},
-                                )
-
-                                customItem(
-                                    buttonGroupContent = {
-                                        FilledIconButton(
-                                            enabled = hasMedia && hasNext,
-                                            onClick = {
-                                                controller?.seekToNextMediaItem()
-                                            },
-                                            interactionSource = nextInteractionSource,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .animateWidth(
-                                                    interactionSource = nextInteractionSource,
-                                                    compressionLimit = 16.dp,
-                                                ),
-                                            colors = IconButtonDefaults.filledIconButtonColors(
-                                                containerColor = idlePlaybackContainerColor,
-                                                contentColor = idlePlaybackContentColor,
-                                            ),
-                                            shapes = IconButtonDefaults.shapes(),
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_skip_next),
-                                                contentDescription = stringResource(R.string.player_next),
-                                                modifier = Modifier.size(30.dp),
-                                            )
-                                        }
-                                    },
-                                    menuContent = {},
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .offset(y = lyricsVerticalCompensation),
-                        ) {
-                            IconButton(
-                                onClick = { showLyrics = true },
-                                enabled = hasMedia,
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .size(48.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.White.copy(alpha = 0.38f),
-                                ),
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_lyrics),
-                                    contentDescription = stringResource(R.string.player_lyrics),
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-
-                            AudioOutputIndicator(
-                                enabled = hasMedia,
-                                externalMode = externalMode,
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .padding(horizontal = 56.dp),
-                            )
-
-                            IconButton(
-                                onClick = { showQueueSheet = true },
-                                enabled = hasMedia,
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .size(48.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.White.copy(alpha = 0.38f),
-                                ),
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_queue),
-                                    contentDescription = stringResource(R.string.player_queue),
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (showQueueSheet) {
-                QueueSheet(
-                    queueState = queueState,
-                    onDismissRequest = { showQueueSheet = false },
-                    onTrackSelected = { index ->
-                        playbackController.playQueueItem(index)
-                    },
-                    onRepeatClick = {
-                        playbackController.cycleRepeatMode()
-                    },
-                    onShuffleClick = {
-                        playbackController.toggleShuffleMode()
-                    },
-                    navigationBarInset = systemNavigationBarBottomInset,
-                )
-            }
-
-            if (showTrackInfoSheet) {
-                selectedTrackInfo?.let { track ->
-                    TrackInfoBottomSheet(
-                        track = track,
-                        onDismissRequest = {
-                            showTrackInfoSheet = false
-                            selectedTrackInfo = null
+                        },
+                        track = currentQueueTrack,
+                        isLiked = currentQueueTrack?.let { track ->
+                            UserLibraryRepository.likedTrackKey(track) in likedTrackKeys
+                        } ?: false,
+                        onToggleLike = onToggleLike,
+                        onAddToPlaylist = if (externalMode) {
+                            null
+                        } else {
+                            { track -> playlistPickerTrack = track }
                         },
                     )
                 }
             }
 
-            playlistPickerTrack?.let { track ->
-                AddToPlaylistDialog(
-                    playlists = playlists,
-                    onDismiss = { playlistPickerTrack = null },
-                    onSelectPlaylist = { playlistId ->
-                        playlistPickerTrack = null
-                        onAddToPlaylist?.invoke(playlistId, track)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (hasMedia) {
+                // Fixed two-line slot: the lyric stays centered
+                // when the text wraps.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(PlayerLyricPreviewHeight),
+                ) {
+                    PlayerLyricPreview(
+                        target = currentLyricTarget,
+                        positionMs = currentPosition,
+                        isPlaying = isPlaying,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Only the seekbar moves here; the lyric slot and
+            // transport controls keep their own anchors.
+            Column(
+                modifier = Modifier.offset(y = -PlayerSeekbarVerticalAdjustment),
+            ) {
+                val sliderMaximum = durationMs
+                    .takeIf { it > 0L }
+                    ?.toFloat()
+                    ?: 1f
+                val seekHaptics = LocalHapticFeedback.current
+                val lastSeekHapticStep = remember {
+                    intArrayOf(-1)
+                }
+
+                WavySeekBar(
+                    value = {
+                        (
+                            (dragPosition ?: currentPosition.toFloat()) /
+                                sliderMaximum
+                        ).coerceIn(0f, 1f)
                     },
-                    onCreatePlaylist = { name ->
-                        playlistPickerTrack = null
-                        onCreatePlaylist?.invoke(name, track)
+                    onValueChange = { fraction ->
+                        dragPosition = fraction * sliderMaximum
+                        val quantized = (fraction * 20f).toInt()
+                        if (quantized != lastSeekHapticStep[0]) {
+                            lastSeekHapticStep[0] = quantized
+                            seekHaptics.performHapticFeedback(
+                                HapticFeedbackType.TextHandleMove,
+                            )
+                        }
                     },
+                    onValueCommit = { fraction ->
+                        val target = (fraction * sliderMaximum).toLong()
+                        controller?.seekTo(target)
+                        currentPosition = target
+                        dragPosition = null
+                    },
+                    enabled = controller != null && hasMedia && durationMs > 0L,
+                    isPlaying = isPlaying,
+                    semanticsLabel = stringResource(
+                        R.string.player_playback_position,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = formatTime(
+                            (dragPosition?.toLong() ?: currentPosition)
+                                .coerceAtLeast(0L),
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+
+                    Text(
+                        text = formatTime(durationMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+            }
+
+            sourceTrack?.let { track ->
+                val routeLabel = stringResource(
+                    if (outputMode != AudioOutputMode.OFF) {
+                        R.string.pipeline_bit_perfect
+                    } else {
+                        R.string.pipeline_system_mixer
+                    },
+                )
+                val sourceParts = buildList {
+                    if (dacName != null) add("DAC")
+                    val decodedBits = decoderInfo?.bitsPerSample
+                        ?.takeIf { it > 0 }
+                        ?: track.bitsPerSample?.takeIf { it > 0 }
+                    decodedBits?.let { add("$it-bit") }
+                    val decodedRate = decoderInfo?.sampleRateHz
+                        ?.takeIf { it > 0 }
+                        ?: track.sampleRateHz?.takeIf { it > 0 }
+                    decodedRate?.let { add(formatSourceSampleRate(it)) }
+                    val decodedCodec = decoderInfo?.codec
+                        ?.takeIf(String::isNotBlank)?.uppercase()
+                    (decodedCodec ?: formatSourceAudioType(track.mimeType))
+                        ?.let(::add)
+                    add(routeLabel)
+                }
+                Text(
+                    text = sourceParts.joinToString(" • "),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember {
+                                MutableInteractionSource()
+                            },
+                            indication = null,
+                        ) { showPipelineSheet = true }
+                        .padding(vertical = 4.dp),
                 )
             }
 
-            if (showPipelineSheet) {
-                sourceTrack?.let { track ->
-                    AudioPipelineBottomSheet(
-                        track = track,
-                        outputMode = outputMode,
-                        dacName = dacName,
-                        onDismissRequest = { showPipelineSheet = false },
+            // Centers the source line between the seekbar and
+            // the transport controls.
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // The content column owns the 18.dp side inset.
+            val playbackButtonGroupWidth = sectionWidth
+            val playbackColorScheme = MaterialTheme.colorScheme
+            val idlePlaybackContainerColor =
+                playbackColorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
+            val idlePlaybackContentColor = playbackColorScheme.onSurface
+            val activePlaybackContainerColor = playbackColorScheme.primaryContainer
+            val activePlaybackContentColor = playbackColorScheme.onPrimaryContainer
+
+            val previousInteractionSource = remember {
+                MutableInteractionSource()
+            }
+            val playPauseInteractionSource = remember {
+                MutableInteractionSource()
+            }
+            val nextInteractionSource = remember {
+                MutableInteractionSource()
+            }
+
+            val togglePlayback = {
+                controller?.let { activeController ->
+                    if (
+                        activeController.playWhenReady &&
+                        activeController.playbackState != Player.STATE_ENDED
+                    ) {
+                        activeController.pause()
+                    } else {
+                        if (activeController.playbackState == Player.STATE_ENDED) {
+                            activeController.seekToDefaultPosition()
+                        }
+                        activeController.play()
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp)
+                    .offset(y = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ButtonGroup(
+                    expandedRatio = 0.4f,
+                    modifier = Modifier.width(playbackButtonGroupWidth),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    overflowIndicator = { menuState ->
+                        ButtonGroupDefaults.OverflowIndicator(
+                            menuState = menuState,
+                        )
+                    },
+                ) {
+                    customItem(
+                        buttonGroupContent = {
+                            FilledIconToggleButton(
+                                checked = showPauseIcon,
+                                onCheckedChange = {
+                                    togglePlayback().also {}
+                                },
+                                enabled = hasMedia,
+                                interactionSource = playPauseInteractionSource,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(64.dp)
+                                    .animateWidth(
+                                        interactionSource = playPauseInteractionSource,
+                                        compressionLimit = 16.dp,
+                                    ),
+                                colors = IconButtonDefaults.filledIconToggleButtonColors(
+                                    containerColor = idlePlaybackContainerColor,
+                                    contentColor = idlePlaybackContentColor,
+                                    checkedContainerColor = activePlaybackContainerColor,
+                                    checkedContentColor = activePlaybackContentColor,
+                                ),
+                                shapes = IconButtonDefaults.toggleableShapes(),
+                            ) {
+                                Icon(
+                                    painter = painterResource(
+                                        if (showPauseIcon) R.drawable.ic_pause else R.drawable.ic_play,
+                                    ),
+                                    contentDescription = stringResource(
+                                        if (showPauseIcon) R.string.player_pause else R.string.player_play,
+                                    ),
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            }
+                        },
+                        menuContent = {},
                     )
+
+                    customItem(
+                        buttonGroupContent = {
+                            FilledIconButton(
+                                enabled = hasMedia,
+                                onClick = {
+                                    controller?.seekToPreviousMediaItem()
+                                },
+                                interactionSource = previousInteractionSource,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .animateWidth(
+                                        interactionSource = previousInteractionSource,
+                                        compressionLimit = 16.dp,
+                                    ),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = idlePlaybackContainerColor,
+                                    contentColor = idlePlaybackContentColor,
+                                ),
+                                shapes = IconButtonDefaults.shapes(),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_skip_previous),
+                                    contentDescription = stringResource(R.string.player_previous),
+                                    modifier = Modifier.size(30.dp),
+                                )
+                            }
+                        },
+                        menuContent = {},
+                    )
+
+                    customItem(
+                        buttonGroupContent = {
+                            FilledIconButton(
+                                enabled = hasMedia && hasNext,
+                                onClick = {
+                                    controller?.seekToNextMediaItem()
+                                },
+                                interactionSource = nextInteractionSource,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .animateWidth(
+                                        interactionSource = nextInteractionSource,
+                                        compressionLimit = 16.dp,
+                                    ),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = idlePlaybackContainerColor,
+                                    contentColor = idlePlaybackContentColor,
+                                ),
+                                shapes = IconButtonDefaults.shapes(),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_skip_next),
+                                    contentDescription = stringResource(R.string.player_next),
+                                    modifier = Modifier.size(30.dp),
+                                )
+                            }
+                        },
+                        menuContent = {},
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .offset(y = lyricsVerticalCompensation),
+            ) {
+                IconButton(
+                    onClick = { showLyrics = true },
+                    enabled = hasMedia,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(48.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = Color.White,
+                        disabledContentColor = Color.White.copy(alpha = 0.38f),
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_lyrics),
+                        contentDescription = stringResource(R.string.player_lyrics),
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+
+                AudioOutputIndicator(
+                    enabled = hasMedia,
+                    externalMode = externalMode,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 56.dp),
+                )
+
+                IconButton(
+                    onClick = { showQueueSheet = true },
+                    enabled = hasMedia,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(48.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = Color.White,
+                        disabledContentColor = Color.White.copy(alpha = 0.38f),
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_queue),
+                        contentDescription = stringResource(R.string.player_queue),
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+        }
+
+        ArtworkContentTheme(seedColor = artworkSeedColor) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                ArtworkBackdrop(
+                    artworkUri = currentArtworkUri,
+                    foregroundArtworkHeight = if (isLandscape) 0.dp else artworkHeight,
+                    modifier = Modifier.fillMaxSize(),
+                    onSeedColor = { artworkSeedColor = it },
+                )
+
+                if (isLandscape) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                            .padding(horizontal = PlayerHorizontalContentInset),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .weight(1f),
+                        ) {
+                            val artworkSize = minOf(maxWidth, maxHeight)
+                                .coerceAtLeast(54.dp)
+                            AlbumArtwork(
+                                artworkUri = currentArtworkUri,
+                                fallbackText = currentTitle ?: "",
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(artworkSize),
+                                size = artworkSize,
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .weight(1f),
+                        ) {
+                            val sectionWidth = maxWidth.coerceAtMost(560.dp)
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .width(sectionWidth)
+                                    .fillMaxHeight()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                controlsSection(sectionWidth)
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .padding(bottom = systemNavigationBarBottomInset + 30.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+                            val contentWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
+                                .coerceAtLeast(1.dp)
+                                .coerceAtMost(560.dp)
+
+                            BoxWithConstraints(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .width(contentWidth)
+                                    .fillMaxHeight()
+                                    .padding(top = 8.dp, bottom = 18.dp),
+                            ) {
+                                val titleGap = 20.dp
+                                val availableArtworkHeight = maxHeight
+                                val artworkSize = minOf(maxWidth, availableArtworkHeight)
+                                    .coerceAtLeast(54.dp)
+                                val groupTop = (
+                                    maxHeight - artworkSize
+                                ).coerceAtLeast(0.dp) / 2
+                                val nextArtworkHeight = (
+                                    statusBarTopInset +
+                                        32.dp +
+                                        8.dp +
+                                        groupTop +
+                                        artworkSize +
+                                        titleGap / 2
+                                    ).coerceAtLeast(0.dp)
+
+                                SideEffect {
+                                    if (artworkHeight != nextArtworkHeight) {
+                                        artworkHeight = nextArtworkHeight
+                                    }
+                                }
+                            }
+                        }
+
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            val controlsWidth = (maxWidth - PlayerHorizontalContentInset - PlayerHorizontalContentInset)
+                                .coerceAtLeast(1.dp)
+                                .coerceAtMost(560.dp)
+
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .width(controlsWidth)
+                                    .offset(y = -controlsVerticalOffset),
+                            ) {
+                                controlsSection(controlsWidth)
+                            }
+                        }
+                    }
+                }
+
+                if (showQueueSheet) {
+                    QueueSheet(
+                        queueState = queueState,
+                        onDismissRequest = { showQueueSheet = false },
+                        onTrackSelected = { index ->
+                            playbackController.playQueueItem(index)
+                        },
+                        onRepeatClick = {
+                            playbackController.cycleRepeatMode()
+                        },
+                        onShuffleClick = {
+                            playbackController.toggleShuffleMode()
+                        },
+                        navigationBarInset = systemNavigationBarBottomInset,
+                    )
+                }
+
+                if (showTrackInfoSheet) {
+                    selectedTrackInfo?.let { track ->
+                        TrackInfoBottomSheet(
+                            track = track,
+                            onDismissRequest = {
+                                showTrackInfoSheet = false
+                                selectedTrackInfo = null
+                            },
+                        )
+                    }
+                }
+
+                playlistPickerTrack?.let { track ->
+                    AddToPlaylistDialog(
+                        playlists = playlists,
+                        onDismiss = { playlistPickerTrack = null },
+                        onSelectPlaylist = { playlistId ->
+                            playlistPickerTrack = null
+                            onAddToPlaylist?.invoke(playlistId, track)
+                        },
+                        onCreatePlaylist = { name ->
+                            playlistPickerTrack = null
+                            onCreatePlaylist?.invoke(name, track)
+                        },
+                    )
+                }
+
+                if (showPipelineSheet) {
+                    sourceTrack?.let { track ->
+                        AudioPipelineBottomSheet(
+                            track = track,
+                            outputMode = outputMode,
+                            dacName = dacName,
+                            onDismissRequest = { showPipelineSheet = false },
+                        )
+                    }
                 }
             }
         }

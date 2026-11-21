@@ -176,10 +176,9 @@ fun LibraryScreen(
 
     val categoryContentTopPadding = contentTopPadding
 
-    val folderBreadcrumbTopPadding = contentTopPadding
-
     val folderContentTopPadding =
-        folderBreadcrumbTopPadding +
+        statusBarTopInset +
+            TopAppBarDefaults.TopAppBarExpandedHeight +
             LibraryFolderHeaderHeight +
             LibraryBreadcrumbContentSpacing
 
@@ -485,53 +484,28 @@ fun LibraryScreen(
 
         }
 
-        if (hasAudioPermission && libraryState.isCatalogLoaded && !loadFailed) {
-            val headerTitle = if (
-                selectedCategory == LibraryCategory.FOLDERS
-            ) {
-                selectedFolderPath
-                    .substringAfterLast('/')
-                    .takeIf(String::isNotBlank)
-                    ?: stringResource(LibraryCategory.FOLDERS.labelResource)
-            } else {
-                null
-            }
-
-            val showCollectionHeader =
-                selectedCategory == LibraryCategory.FOLDERS
-
-            if (showCollectionHeader && headerTitle != null) {
-                FolderBreadcrumb(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = folderBreadcrumbTopPadding)
-                        .fillMaxWidth()
-                        .height(LibraryFolderHeaderHeight),
-                    selectedFolderPath = selectedFolderPath,
-                    onNavigateToFolder = { path ->
-                        selectedFolderPath = path
-                    },
-                )
-            }
-        }
-
-        Row(
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .background(MaterialTheme.colorScheme.surface)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(TopAppBarDefaults.TopAppBarExpandedHeight)
-                .padding(
-                    start = LibraryHorizontalContentPadding,
-                    end = LibraryHorizontalContentPadding - 4.dp,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .height(TopAppBarDefaults.TopAppBarExpandedHeight)
+                    .padding(
+                        end = LibraryHorizontalContentPadding - 4.dp,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+            Row(
+                modifier = Modifier
                     .weight(1f)
-                    .horizontalScroll(categoryScrollState),
+                    .horizontalScroll(categoryScrollState)
+                    .padding(start = LibraryHorizontalContentPadding),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val buttonGroupColorScheme = MaterialTheme.colorScheme.copy(
@@ -587,6 +561,24 @@ fun LibraryScreen(
                 Icon(
                     painter = painterResource(R.drawable.ic_settings),
                     contentDescription = stringResource(R.string.settings_title),
+                )
+            }
+            }
+
+            if (
+                hasAudioPermission &&
+                libraryState.isCatalogLoaded &&
+                !loadFailed &&
+                selectedCategory == LibraryCategory.FOLDERS
+            ) {
+                FolderBreadcrumb(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(LibraryFolderHeaderHeight),
+                    selectedFolderPath = selectedFolderPath,
+                    onNavigateToFolder = { path ->
+                        selectedFolderPath = path
+                    },
                 )
             }
         }
@@ -699,10 +691,9 @@ private fun LibraryEntityList(
     onItemClick: (String) -> Unit,
 ) {
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.padding(top = contentTopPadding),
         contentPadding = PaddingValues(
             start = 18.dp,
-            top = contentTopPadding,
             end = 18.dp,
             bottom = contentBottomPadding,
         ),
@@ -938,10 +929,9 @@ private fun LibraryPlaylistList(
     val totalCount = playlists.size + 1
 
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.padding(top = contentTopPadding),
         contentPadding = PaddingValues(
             start = 18.dp,
-            top = contentTopPadding,
             end = 18.dp,
             bottom = contentBottomPadding,
         ),
@@ -1047,10 +1037,9 @@ private fun LibraryLikedList(
 ) {
     val totalCount = 1 + likedEntities.size
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.padding(top = contentTopPadding),
         contentPadding = PaddingValues(
             start = 18.dp,
-            top = contentTopPadding,
             end = 18.dp,
             bottom = contentBottomPadding,
         ),

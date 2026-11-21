@@ -28,12 +28,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -47,6 +47,7 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,7 +60,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Constraints
@@ -85,7 +85,6 @@ private const val FOLDER_ROW_LAYOUT_ID = "folderRow"
 private val FolderDeleteActionWidth = 104.dp
 private val FolderListHorizontalPadding = 16.dp
 private val FolderListSegmentSpacing = 2.dp
-private val FolderListCornerRadius = 24.dp
 
 @Composable
 fun FolderFilterScreen(
@@ -164,7 +163,9 @@ fun FolderFilterScreen(
         modifier = modifier.fillMaxSize(),
     ) {
         TopAppBar(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding(),
             title = {
                 Text(
                     text = stringResource(R.string.folder_filter_title),
@@ -211,6 +212,11 @@ fun FolderFilterScreen(
                     )
                 }
             },
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = MaterialTheme.colorScheme.surface
+            ),
             contentPadding = PaddingValues(horizontal = 10.dp),
         )
 
@@ -237,9 +243,7 @@ fun FolderFilterScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = FolderListHorizontalPadding)
-                .clip(RoundedCornerShape(FolderListCornerRadius))
-                .background(Color.Transparent),
+                .padding(horizontal = FolderListHorizontalPadding),
             contentPadding = PaddingValues(
                 top = 8.dp,
                 bottom = listBottomPadding,
@@ -262,84 +266,35 @@ fun FolderFilterScreen(
                 }
             }
 
-            if (excludedFolders.isEmpty()) {
-                item(key = "folder_filter_empty") {
-                    SegmentedListItem(
-                        onClick = {},
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = false,
-                        shapes = ListItemDefaults.segmentedShapes(
-                            index = 0,
-                            count = 1,
-                        ),
-                        colors = ListItemDefaults.segmentedColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceBright,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceBright,
-                            disabledContentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                        contentPadding = PaddingValues(
-                            horizontal = 16.dp,
-                            vertical = 18.dp,
-                        ),
-                        leadingContent = {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        CircleShape,
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_folder),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        },
-                        content = {
-                            Text(
-                                text = stringResource(R.string.folder_filter_empty_exclusions),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        },
-                    )
-                }
-            } else {
-                itemsIndexed(
-                    items = excludedFolders,
-                    key = { _, folderPath -> folderPath },
-                ) { index, folderPath ->
-                    SwipeToDeleteFolderItem(
-                        folderPath = folderPath,
-                        folderName = folderPath.substringAfterLast('/'),
-                        index = index,
-                        itemCount = excludedFolders.size,
-                        enabled = !isSaving,
-                        onDelete = { deletedFolderPath ->
-                            isSaving = true
+            itemsIndexed(
+                items = excludedFolders,
+                key = { _, folderPath -> folderPath },
+            ) { index, folderPath ->
+                SwipeToDeleteFolderItem(
+                    folderPath = folderPath,
+                    folderName = folderPath.substringAfterLast('/'),
+                    index = index,
+                    itemCount = excludedFolders.size,
+                    enabled = !isSaving,
+                    onDelete = { deletedFolderPath ->
+                        isSaving = true
 
-                            try {
-                                folderFilterRepository.setExcludedFolders(
-                                    excludedFolderSet - deletedFolderPath,
-                                )
-                                saveFailed = false
-                                true
-                            } catch (exception: CancellationException) {
-                                throw exception
-                            } catch (exception: Exception) {
-                                saveFailed = true
-                                false
-                            } finally {
-                                isSaving = false
-                            }
-                        },
-                    )
-                }
+                        try {
+                            folderFilterRepository.setExcludedFolders(
+                                excludedFolderSet - deletedFolderPath,
+                            )
+                            saveFailed = false
+                            true
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            saveFailed = true
+                            false
+                        } finally {
+                            isSaving = false
+                        }
+                    },
+                )
             }
         }
     }
@@ -535,7 +490,12 @@ private fun SwipeToDeleteFolderItem(
                         .width(FolderDeleteActionWidth)
                         .fillMaxHeight()
                         .graphicsLayer {
-                            translationX = -dragDistancePx
+                            alpha = if (actionWidthPx > 0f) {
+                                (dragDistancePx / actionWidthPx)
+                                    .coerceIn(0f, 1f)
+                            } else {
+                                0f
+                            }
                         }
                         .clip(MaterialTheme.shapes.extraLarge)
                         .background(MaterialTheme.colorScheme.error)
@@ -554,14 +514,6 @@ private fun SwipeToDeleteFolderItem(
                         text = stringResource(R.string.folder_filter_delete),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = if (actionWidthPx > 0f) {
-                                (dragDistancePx / actionWidthPx)
-                                    .coerceIn(0f, 1f)
-                            } else {
-                                0f
-                            }
-                        },
                     )
                 }
 
@@ -655,7 +607,7 @@ private fun SwipeToDeleteFolderItem(
                     height = rowPlaceable.height,
                 ) {
                     actionPlaceable.place(
-                        x = itemWidth,
+                        x = itemWidth - actionWidth,
                         y = 0,
                     )
 

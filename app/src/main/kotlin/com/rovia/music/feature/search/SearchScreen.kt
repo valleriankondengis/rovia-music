@@ -332,6 +332,7 @@ fun SearchScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .background(MaterialTheme.colorScheme.surface)
                 .statusBarsPadding()
                 .fillMaxWidth()
                 .padding(horizontal = SearchBarHorizontalPadding)
@@ -497,8 +498,8 @@ private fun SearchResultsContent(
             )
 
             LazyColumn(
-                modifier = modifier,
-                contentPadding = contentInsetPadding,
+                modifier = modifier.padding(top = contentInsetPadding.calculateTopPadding()),
+                contentPadding = PaddingValues(bottom = contentInsetPadding.calculateBottomPadding()),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 if (results.songs.isNotEmpty()) {
@@ -916,8 +917,8 @@ private fun SearchHistoryContent(
     )
 
     LazyColumn(
-        modifier = modifier,
-        contentPadding = contentInsetPadding,
+        modifier = modifier.padding(top = contentInsetPadding.calculateTopPadding()),
+        contentPadding = PaddingValues(bottom = contentInsetPadding.calculateBottomPadding()),
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         item(key = "search-history-header") {

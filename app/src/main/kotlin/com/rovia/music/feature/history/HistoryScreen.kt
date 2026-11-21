@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -329,10 +328,10 @@ fun HistoryScreen(
                         displayItems.getOrNull(index)?.let(onActivityClick)
                     },
                     modifier = Modifier
-                        .fillMaxSize(),
+                        .fillMaxSize()
+                        .padding(top = contentTopPadding),
                     outerPadding = PaddingValues(horizontal = 0.dp, vertical = 1.dp),
                     contentInsetPadding = PaddingValues(
-                        top = contentTopPadding,
                         bottom = contentBottomPadding,
                     ),
                     horizontalPadding = 18.dp,
@@ -482,8 +481,8 @@ fun HistoryScreen(
             },
             windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
+                containerColor = MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = MaterialTheme.colorScheme.surface,
             ),
             contentPadding = PaddingValues(horizontal = 10.dp),
         )

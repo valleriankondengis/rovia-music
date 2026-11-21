@@ -18,6 +18,7 @@ androidxTestEspresso = "3.8.0-alpha03"
 coroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
 kotlincryptoSha2 = "0.8.0"
+googleMaterial = "1.13.0"
 junit = "4.13.2"
 jna = "5.19.1"
 
@@ -64,6 +65,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincryptoSha2" }
+google-material = { module = "com.google.android.material:material", version.ref = "googleMaterial" }
 
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
