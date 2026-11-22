@@ -111,6 +111,7 @@ import com.rovia.music.ui.components.rememberTrackInfoState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import com.rovia.music.data.mediastore.ArtistCreditParser
 import com.rovia.music.data.mediastore.LocalAudioTrack
@@ -235,6 +236,45 @@ private val FloatingToolbarOverlayHeight = 80.dp
 @Composable
 fun Navigation(appContainer: AppContainer) {
     val navigationState = rememberRoviaNavigationState()
+
+    val pendingShortcutAction by appContainer.pendingShortcutAction
+        .collectAsStateWithLifecycle()
+
+    LaunchedEffect(pendingShortcutAction) {
+        when (pendingShortcutAction) {
+            ShortcutActions.PLAY_RECENT -> {
+                val activities = appContainer.playbackHistoryRepository
+                    .observeLatest(20)
+                    .first()
+                val track = activities.firstNotNullOfOrNull { activity ->
+                    appContainer.playbackHistoryRepository
+                        .getPlayableTrackForActivity(activity.activityKey)
+                }
+                if (track != null) {
+                    appContainer.playbackController.mediaController.first { it != null }
+                    appContainer.playbackController.playQueue(
+                        tracks = listOf(track),
+                        startIndex = 0,
+                    )
+                }
+                appContainer.pendingShortcutAction.value = null
+            }
+
+            ShortcutActions.PLAY_SHUFFLE -> {
+                val catalog = appContainer.mediaStoreAudioRepository.catalogState
+                    .first { it.isLoaded || it.loadFailed }
+                if (catalog.tracks.isNotEmpty()) {
+                    appContainer.playbackController.mediaController.first { it != null }
+                    appContainer.playbackController.playQueue(
+                        tracks = catalog.tracks,
+                        startIndex = 0,
+                        shuffle = true,
+                    )
+                }
+                appContainer.pendingShortcutAction.value = null
+            }
+        }
+    }
 
     val motionScheme = MaterialTheme.motionScheme
     val density = LocalDensity.current

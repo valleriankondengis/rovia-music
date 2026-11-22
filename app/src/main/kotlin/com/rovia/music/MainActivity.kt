@@ -1,5 +1,6 @@
 package com.rovia.music
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.rovia.music.ui.permissions.RequestAudioPermissionOnFirstLaunch
 import com.rovia.music.ui.theme.RoviaTheme
+
+object ShortcutActions {
+    const val PLAY_RECENT = "com.rovia.music.action.PLAY_RECENT"
+    const val PLAY_SHUFFLE = "com.rovia.music.action.PLAY_SHUFFLE"
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -22,6 +28,7 @@ class MainActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
 
         appContainer = AppContainer(applicationContext)
+        handleShortcutIntent(intent)
 
         setContent {
             RoviaTheme {
@@ -35,6 +42,19 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcutIntent(intent)
+    }
+
+    private fun handleShortcutIntent(intent: Intent?) {
+        when (intent?.action) {
+            ShortcutActions.PLAY_RECENT, ShortcutActions.PLAY_SHUFFLE ->
+                appContainer.pendingShortcutAction.value = intent.action
         }
     }
 

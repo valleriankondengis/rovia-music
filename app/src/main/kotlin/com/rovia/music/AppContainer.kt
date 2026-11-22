@@ -15,12 +15,15 @@ import com.rovia.music.data.repository.RoomLibraryRepository
 import com.rovia.music.data.repository.SharedPreferencesFolderFilterRepository
 import com.rovia.music.playback.controller.PlaybackController
 import com.rovia.music.playback.statistics.PlaybackStatisticsRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class AppContainer(context: Context) {
 
     private val applicationContext = context.applicationContext
 
     val appName: String = "Rovia"
+
+    val pendingShortcutAction = MutableStateFlow<String?>(null)
 
     val database: RoviaDatabase by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         RoviaDatabaseFactory.create(applicationContext)

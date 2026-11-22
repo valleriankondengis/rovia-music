@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="play_recent"
+        android:enabled="true"
+        android:icon="@drawable/ic_history"
+        android:shortcutShortLabel="@string/shortcut_play_recent_short"
+        android:shortcutLongLabel="@string/shortcut_play_recent_long">
+        <intent
+            android:action="com.rovia.music.action.PLAY_RECENT"
+            android:targetPackage="com.rovia.music"
+            android:targetClass="com.rovia.music.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="play_shuffle"
+        android:enabled="true"
+        android:icon="@drawable/ic_shuffle"
+        android:shortcutShortLabel="@string/shortcut_play_shuffle_short"
+        android:shortcutLongLabel="@string/shortcut_play_shuffle_long">
+        <intent
+            android:action="com.rovia.music.action.PLAY_SHUFFLE"
+            android:targetPackage="com.rovia.music"
+            android:targetClass="com.rovia.music.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="open_app"
+        android:enabled="true"
+        android:icon="@drawable/ic_play"
+        android:shortcutShortLabel="@string/shortcut_open_app_short"
+        android:shortcutLongLabel="@string/shortcut_open_app_long">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.rovia.music"
+            android:targetClass="com.rovia.music.MainActivity" />
+    </shortcut>
+</shortcuts>
