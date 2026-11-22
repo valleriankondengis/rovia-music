@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -39,6 +40,7 @@ import com.rovia.music.playback.bitperfect.direct.DirectUsbController
 import com.rovia.music.playback.bitperfect.direct.DirectUsbControllerProvider
 import com.rovia.music.playback.bitperfect.direct.DirectUsbPlaybackCoordinator
 import com.rovia.music.playback.bitperfect.direct.DirectUsbRenderer
+import com.rovia.music.playback.SeekForwardingPlayer
 import com.rovia.music.playback.standard.StandardPlaybackCoordinator
 import com.rovia.music.playback.standard.StandardRenderer
 import com.rovia.music.playback.queue.PlaybackMetadataKeys
@@ -282,7 +284,7 @@ class PlaybackService : MediaSessionService() {
                 PendingIntent.FLAG_IMMUTABLE,
         )
 
-        mediaSession = MediaSession.Builder(this, exoPlayer)
+        mediaSession = MediaSession.Builder(this, sessionPlayer(exoPlayer))
             .setSessionActivity(sessionActivity)
             .build()
     }
@@ -334,6 +336,15 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
+    private fun sessionPlayer(delegate: ExoPlayer): Player {
+        return SeekForwardingPlayer(delegate) { mediaId, positionUs ->
+            directCoordinator?.onConfirmedSeek(mediaId, positionUs)
+            dapCoordinator?.onConfirmedSeek(mediaId, positionUs)
+            a14Coordinator?.onConfirmedSeek(mediaId, positionUs)
+            standardCoordinator?.onConfirmedSeek(mediaId, positionUs)
+        }
+    }
+
     private fun buildPlayer(mode: AudioOutputMode): ExoPlayer {
         val exclusiveRenderer = when (mode) {
             AudioOutputMode.DIRECT_USB -> directCoordinator?.let { coordinator ->
@@ -355,6 +366,11 @@ class PlaybackService : MediaSessionService() {
         )
         val playerBuilder = ExoPlayer.Builder(this)
             .setRenderersFactory(factory)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setStuckBufferingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingNotEndingTimeoutMs(Int.MAX_VALUE)
+            .setStuckSuppressedDetectionTimeoutMs(Int.MAX_VALUE)
             .setHandleAudioBecomingNoisy(true)
         val built = playerBuilder.build()
         built.setAudioAttributes(AudioAttributes.DEFAULT, true)
@@ -419,7 +435,7 @@ class PlaybackService : MediaSessionService() {
         player = newPlayer
         ExternalPlaybackCoordinator.registerMainPlayer(newPlayer)
         startListeningCheckpointLoop(newPlayer)
-        mediaSession?.setPlayer(newPlayer)
+        mediaSession?.setPlayer(sessionPlayer(newPlayer))
 
         if (items.isNotEmpty()) {
             newPlayer.setMediaItems(

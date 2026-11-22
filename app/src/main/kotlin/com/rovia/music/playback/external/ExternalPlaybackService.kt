@@ -13,6 +13,7 @@ import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.DefaultMediaNotificationProvider
 import com.rovia.music.ExternalPlayerActivity
 import com.rovia.music.R
+import com.rovia.music.playback.SeekForwardingPlayer
 import com.rovia.music.playback.service.RoviaRenderersFactory
 import com.rovia.music.playback.standard.StandardPlaybackCoordinator
 import com.rovia.music.playback.standard.StandardRenderer
@@ -65,11 +66,21 @@ class ExternalPlaybackService : MediaSessionService() {
                 RoviaRenderersFactory(this, StandardRenderer(coordinator)),
             )
             .setAudioAttributes(audioAttributes, true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setStuckBufferingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingNotEndingTimeoutMs(Int.MAX_VALUE)
+            .setStuckSuppressedDetectionTimeoutMs(Int.MAX_VALUE)
             .setHandleAudioBecomingNoisy(true)
             .build()
         player.addListener(playerListener)
 
-        mediaSession = MediaSession.Builder(this, player).build()
+        mediaSession = MediaSession.Builder(
+            this,
+            SeekForwardingPlayer(player) { mediaId, positionUs ->
+                standardCoordinator?.onConfirmedSeek(mediaId, positionUs)
+            },
+        ).build()
     }
 
     override fun onGetSession(controllerInfo: ControllerInfo): MediaSession? = mediaSession

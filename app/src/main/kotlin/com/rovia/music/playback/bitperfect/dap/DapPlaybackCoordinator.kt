@@ -218,13 +218,33 @@ internal class DapPlaybackCoordinator(
 
     fun onRendererPositionReset(positionUs: Long) {
         val sourcePositionUs = (positionUs - streamOffsetUs).coerceAtLeast(0L)
+        val streamGeneration = generation.get()
+        if (preparedGeneration == streamGeneration && preparedMediaId != null) {
+            return
+        }
         pendingStartSourceUs = sourcePositionUs
         anchorTo(sourcePositionUs, playing = anchorPlaying)
-        val streamGeneration = generation.get()
         scope.launch {
             commandMutex.withLock {
                 if (preparedGeneration != streamGeneration) return@withLock
                 runCatching { session().seekPlayback(sourcePositionUs.toULong()) }.onFailure {}
+                    .onFailure { failure ->
+                        setFailure(streamGeneration, failure.message ?: "DAP seek failed")
+                    }
+            }
+        }
+    }
+
+    fun onConfirmedSeek(mediaId: String, sourcePositionUs: Long) {
+        val streamGeneration = generation.get()
+        if (preparedMediaId != mediaId) return
+        pendingStartSourceUs = sourcePositionUs
+        anchorTo(sourcePositionUs, playing = anchorPlaying)
+        scope.launch {
+            commandMutex.withLock {
+                if (preparedGeneration != streamGeneration) return@withLock
+                if (preparedMediaId != mediaId) return@withLock
+                runCatching { session().seekPlayback(sourcePositionUs.toULong()) }
                     .onFailure { failure ->
                         setFailure(streamGeneration, failure.message ?: "DAP seek failed")
                     }
@@ -254,7 +274,9 @@ internal class DapPlaybackCoordinator(
     }
 
     fun clockPositionUs(): Long {
-        val sourcePositionUs = if (anchorPlaying) {
+        val sourcePositionUs = if (preparedGeneration != generation.get()) {
+            pendingStartSourceUs
+        } else if (anchorPlaying) {
             val elapsedUs = (SystemClock.elapsedRealtime() - anchorElapsedRealtimeMs)
                 .coerceAtLeast(0L) * 1_000L
             val estimated = anchorSourcePositionUs + elapsedUs
