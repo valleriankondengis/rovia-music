@@ -1,5 +1,7 @@
 package com.rovia.music.feature.player
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +45,7 @@ import androidx.media3.common.Player
 import com.rovia.music.R
 import com.rovia.music.playback.controller.PlaybackQueueState
 import com.rovia.music.ui.components.TrackList
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -86,6 +89,13 @@ internal fun QueueSheet(
         sheetState = sheetState,
         scrimColor = Color.Transparent,
     ) {
+        val sheetBackScope = rememberCoroutineScope()
+        PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+            progress.collect { }
+            sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                if (!sheetState.isVisible) onDismissRequest()
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()

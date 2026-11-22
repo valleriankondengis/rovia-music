@@ -1,5 +1,7 @@
 package com.rovia.music.ui.components
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +34,7 @@ import com.rovia.music.R
 import com.rovia.music.ui.theme.ArtworkContentTheme
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 const val LYRIC_OFFSET_MIN_MS = -5_000
 const val LYRIC_OFFSET_MAX_MS = 5_000
@@ -76,6 +79,13 @@ fun LyricOffsetBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetState = sheetState,
         ) {
+            val sheetBackScope = rememberCoroutineScope()
+            PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+                progress.collect { }
+                sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                    if (!sheetState.isVisible) onDismissRequest()
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

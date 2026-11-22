@@ -105,6 +105,7 @@
     <string name="wrapped_saved">Tersimpan</string>
     <string name="wrapped_share_title">Bagikan Wrapped kamu</string>
     <string name="lyric_menu">Opsi lirik</string>
+    <string name="playlist_menu">Opsi playlist</string>
     <string name="lyric_menu_share">Bagikan lirik</string>
     <string name="lyric_menu_offset">Offset lirik</string>
     <string name="lyric_pick_cancel">Batal</string>
@@ -191,6 +192,12 @@
     <string name="history_type_playlist">Playlist</string>
     <string name="history_type_likes">Lagu disukai</string>
     <string name="history_title">Riwayat</string>
+    <string name="shortcut_play_recent_short">Putar terakhir</string>
+    <string name="shortcut_play_recent_long">Putar lagu terakhir</string>
+    <string name="shortcut_play_shuffle_short">Putar acak</string>
+    <string name="shortcut_play_shuffle_long">Acak semua lagu</string>
+    <string name="shortcut_open_app_short">Buka aplikasi</string>
+    <string name="shortcut_open_app_long">Buka aplikasi</string>
     <string name="history_open">Buka riwayat pemutaran</string>
     <string name="history_empty">Aktivitas pemutaran akan muncul di sini.</string>
     <string name="history_load_error">Riwayat pemutaran tidak dapat dimuat.</string>
@@ -260,6 +267,7 @@
     <string name="pipeline_bit_perfect">Bit Perfect</string>
     <string name="pipeline_system_mixer">System Mixer</string>
     <string name="audio_output_wired_audio">Audio kabel</string>
+    <string name="audio_output_wired_headset">Headset berkabel</string>
     <string name="audio_output_dac_volume">Volume DAC</string>
     <string name="audio_output_dac_volume_unavailable">Volume DAC ini tidak dapat dikontrol oleh aplikasi. Gunakan kontrol volume pada DAC.</string>
     <string name="audio_output_dac_db">%1$.1f dB</string>
@@ -271,7 +279,6 @@
     <string name="pipeline_section_source">Sumber</string>
     <string name="pipeline_section_decoder">Decoder</string>
     <string name="pipeline_section_output">Output</string>
-    <string name="pipeline_section_dac">Output DAC</string>
     <string name="pipeline_size">Ukuran</string>
     <string name="pipeline_format">Format</string>
     <string name="pipeline_unknown">Tidak diketahui</string>
@@ -280,6 +287,7 @@
     <string name="pipeline_decoded_pcm">PCM hasil decode</string>
     <string name="pipeline_lossless">Lossless</string>
     <string name="pipeline_resample">Resample</string>
+    <string name="pipeline_resample_value">%1$s ke %2$s</string>
     <string name="pipeline_resample_active">Downsample ke 48 kHz</string>
     <string name="pipeline_resample_none">Rate asli, tanpa resample</string>
     <string name="pipeline_audiotrack">AudioTrack</string>

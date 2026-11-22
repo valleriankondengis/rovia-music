@@ -3,6 +3,8 @@ package com.rovia.music.ui.components
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.text.format.DateFormat as AndroidDateFormat
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +56,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlin.math.roundToLong
+import kotlinx.coroutines.launch
 
 private val TRACK_INFO_HORIZONTAL_PADDING = 18.dp
 private val TRACK_INFO_VERTICAL_SPACING = 2.dp
@@ -434,6 +437,13 @@ fun TrackInfoBottomSheet(
         sheetState = sheetState,
         scrimColor = Color.Transparent,
     ) {
+        val sheetBackScope = rememberCoroutineScope()
+        PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+            progress.collect { }
+            sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                if (!sheetState.isVisible) onDismissRequest()
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()

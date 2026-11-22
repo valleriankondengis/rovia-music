@@ -1,5 +1,7 @@
 package com.rovia.music.ui.components
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +38,7 @@ import com.rovia.music.playback.decoder.DecoderRegistry
 import com.rovia.music.playback.PipelineInfo
 import com.rovia.music.playback.bitperfect.AudioOutputMode
 import kotlin.math.roundToLong
+import kotlinx.coroutines.launch
 
 private val PIPELINE_HORIZONTAL_PADDING = 18.dp
 private val PIPELINE_VERTICAL_SPACING = 2.dp
@@ -177,16 +180,6 @@ fun AudioPipelineBottomSheet(
         },
     )
 
-    val outputSection = PipelineSection(
-        title = stringResource(R.string.pipeline_section_output),
-        stages = buildOutputStages(
-            outputMode = outputMode,
-            pipeline = pipeline,
-            decodedBits = decodedBits,
-            decodedChannels = decodedChannels,
-        ),
-    )
-
     val receivedValue = when (outputMode) {
         AudioOutputMode.OFF -> {
             val rate = pipeline?.offOutputSampleRateHz
@@ -224,9 +217,14 @@ fun AudioPipelineBottomSheet(
         }
     }
 
-    val dacSection = PipelineSection(
-        title = stringResource(R.string.pipeline_section_dac),
-        stages = listOf(
+    val outputSection = PipelineSection(
+        title = stringResource(R.string.pipeline_section_output),
+        stages = buildOutputStages(
+            outputMode = outputMode,
+            pipeline = pipeline,
+            decodedBits = decodedBits,
+            decodedChannels = decodedChannels,
+        ) + listOf(
             PipelineStage(
                 label = stringResource(R.string.pipeline_received),
                 value = if (bitPerfect) receivedValue
@@ -246,7 +244,8 @@ fun AudioPipelineBottomSheet(
         ),
     )
 
-    val sections = listOf(sourceSection, decoderSection, outputSection, dacSection)
+
+    val sections = listOf(sourceSection, decoderSection, outputSection)
 
     ModalBottomSheet(
         modifier = Modifier.fillMaxHeight(),
@@ -254,6 +253,13 @@ fun AudioPipelineBottomSheet(
         sheetState = sheetState,
         scrimColor = Color.Transparent,
     ) {
+        val sheetBackScope = rememberCoroutineScope()
+        PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+            progress.collect { }
+            sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                if (!sheetState.isVisible) onDismissRequest()
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -350,7 +356,11 @@ private fun buildOutputStages(
                         val from = p.offDownsampledFromHz
                         val to = p.offOutputSampleRateHz
                         if (from != null && to != null) {
-                            "${formatPipelineSampleRate(from)} → ${formatPipelineSampleRate(to)} (PcmDownsampler)"
+                            stringResource(
+                                R.string.pipeline_resample_value,
+                                formatPipelineSampleRate(from),
+                                formatPipelineSampleRate(to),
+                            )
                         } else {
                             stringResource(R.string.pipeline_resample_active)
                         }

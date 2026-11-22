@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -61,6 +63,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -932,12 +935,22 @@ fun PlayerScreen(
                 )
 
                 if (isLandscape) {
+                    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+                    val layoutDirection = LocalLayoutDirection.current
+                    val landscapeHorizontalInset = PlayerHorizontalContentInset + maxOf(
+                        safeDrawingPadding.calculateLeftPadding(layoutDirection),
+                        safeDrawingPadding.calculateRightPadding(layoutDirection),
+                    )
+
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .statusBarsPadding()
-                            .navigationBarsPadding()
-                            .padding(horizontal = PlayerHorizontalContentInset),
+                            .padding(
+                                start = landscapeHorizontalInset,
+                                end = landscapeHorizontalInset,
+                                top = safeDrawingPadding.calculateTopPadding(),
+                                bottom = safeDrawingPadding.calculateBottomPadding(),
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         BoxWithConstraints(
@@ -966,17 +979,30 @@ fun PlayerScreen(
                                 .weight(1f),
                         ) {
                             val sectionWidth = maxWidth.coerceAtMost(560.dp)
+                            val viewportHeight = maxHeight
                             Column(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
                                     .width(sectionWidth)
                                     .fillMaxHeight()
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                    .verticalScroll(rememberScrollState()),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
                             ) {
-                                controlsSection(sectionWidth)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = viewportHeight)
+                                        .padding(
+                                            start = 4.dp,
+                                            end = 4.dp,
+                                            top = 8.dp,
+                                            bottom = 8.dp + lyricsVerticalCompensation,
+                                        ),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                ) {
+                                    controlsSection(sectionWidth)
+                                }
                             }
                         }
                     }

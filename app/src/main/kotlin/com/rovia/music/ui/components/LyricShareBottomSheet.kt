@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.provider.MediaStore
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -121,6 +122,13 @@ fun LyricShareBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetState = sheetState,
         ) {
+            val sheetBackScope = rememberCoroutineScope()
+            PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+                progress.collect { }
+                sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                    if (!sheetState.isVisible) onDismissRequest()
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

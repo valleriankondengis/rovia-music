@@ -22,8 +22,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -60,6 +58,7 @@ import com.rovia.music.playback.queue.PlaybackOrigin
 import com.rovia.music.playback.queue.PlaybackOriginType
 import com.rovia.music.ui.theme.ArtworkContentTheme
 import com.rovia.music.ui.theme.BackdropContentTheme
+import com.rovia.music.ui.components.PlaylistMenuButton
 import com.rovia.music.ui.components.AddToPlaylistDialog
 import com.rovia.music.ui.components.PlaylistArtwork
 import com.rovia.music.ui.components.PlaylistNameDialog
@@ -113,7 +112,6 @@ fun PlaylistScreen(
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var headerMenuExpanded by remember { mutableStateOf(false) }
     var pickerTrack by remember { mutableStateOf<LocalAudioTrack?>(null) }
 
     val statusBarTopInset = WindowInsets.statusBars
@@ -408,53 +406,11 @@ fun PlaylistScreen(
                         },
                         actions = {
                             if (detail != null) {
-                                Box {
-                                    FilledIconButton(
-                                        onClick = { headerMenuExpanded = true },
-                                        shapes = IconButtonDefaults.shapes(),
-                                        colors = IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            contentColor = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_more_vert),
-                                            contentDescription = stringResource(R.string.track_menu_open)
-                                        )
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = headerMenuExpanded,
-                                        onDismissRequest = { headerMenuExpanded = false },
-                                        shape = MaterialTheme.shapes.large,
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = stringResource(R.string.playlist_rename),
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                )
-                                            },
-                                            onClick = {
-                                                headerMenuExpanded = false
-                                                showRenameDialog = true
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = stringResource(R.string.playlist_delete),
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                )
-                                            },
-                                            onClick = {
-                                                headerMenuExpanded = false
-                                                showDeleteDialog = true
-                                            },
-                                        )
-                                    }
-                                }
+                                PlaylistMenuButton(
+                                    onRenameClick = { showRenameDialog = true },
+                                    onDeleteClick = { showDeleteDialog = true },
+                                    seedColor = playlistSeedColor,
+                                )
                             }
                         },
                         windowInsets = WindowInsets(0, 0, 0, 0),

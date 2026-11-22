@@ -105,6 +105,7 @@
     <string name="wrapped_saved">Saved</string>
     <string name="wrapped_share_title">Share your Wrapped</string>
     <string name="lyric_menu">Lyrics options</string>
+    <string name="playlist_menu">Playlist options</string>
     <string name="lyric_menu_share">Share lyrics</string>
     <string name="lyric_menu_offset">Lyrics offset</string>
     <string name="lyric_pick_cancel">Cancel</string>
@@ -191,6 +192,12 @@
     <string name="history_type_playlist">Playlist</string>
     <string name="history_type_likes">Liked songs</string>
     <string name="history_title">History</string>
+    <string name="shortcut_play_recent_short">Play recent</string>
+    <string name="shortcut_play_recent_long">Play recent song</string>
+    <string name="shortcut_play_shuffle_short">Play shuffle</string>
+    <string name="shortcut_play_shuffle_long">Shuffle all songs</string>
+    <string name="shortcut_open_app_short">Open app</string>
+    <string name="shortcut_open_app_long">Open app</string>
     <string name="history_open">Open listening history</string>
     <string name="history_empty">Your listening history will appear here.</string>
     <string name="history_load_error">Listening history could not be loaded.</string>
@@ -260,6 +267,7 @@
     <string name="pipeline_bit_perfect">Bit Perfect</string>
     <string name="pipeline_system_mixer">System Mixer</string>
     <string name="audio_output_wired_audio">Wired audio</string>
+    <string name="audio_output_wired_headset">Wired headset</string>
     <string name="audio_output_dac_volume">DAC volume</string>
     <string name="audio_output_dac_volume_unavailable">This DAC\'s volume cannot be controlled by the app. Use the volume control on the DAC itself.</string>
     <string name="audio_output_dac_db">%1$.1f dB</string>
@@ -271,7 +279,6 @@
     <string name="pipeline_section_source">Source</string>
     <string name="pipeline_section_decoder">Decoder</string>
     <string name="pipeline_section_output">Output</string>
-    <string name="pipeline_section_dac">DAC output</string>
     <string name="pipeline_size">Size</string>
     <string name="pipeline_format">Format</string>
     <string name="pipeline_unknown">Unknown</string>
@@ -280,6 +287,7 @@
     <string name="pipeline_decoded_pcm">Decoded PCM</string>
     <string name="pipeline_lossless">Lossless</string>
     <string name="pipeline_resample">Resample</string>
+    <string name="pipeline_resample_value">%1$s to %2$s</string>
     <string name="pipeline_resample_active">Downsampled to 48 kHz</string>
     <string name="pipeline_resample_none">Native rate, no resample</string>
     <string name="pipeline_audiotrack">AudioTrack</string>

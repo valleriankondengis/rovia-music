@@ -7,6 +7,7 @@ import android.hardware.usb.UsbManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
@@ -80,6 +81,8 @@ private val AUDIO_OUTPUT_BUTTON_MAX_WIDTH = 280.dp
 private data class AudioOutputSnapshot(
     val usbDacName: String?,
     val usbDacUacLabel: String?,
+    val isUsbHeadsetConnected: Boolean,
+    val usbHeadsetName: String?,
     val isBluetoothConnected: Boolean,
     val bluetoothDeviceName: String?,
     val isWiredConnected: Boolean,
@@ -134,8 +137,14 @@ internal fun AudioOutputIndicator(
     val dacVolumeUnavailableMessage = stringResource(R.string.audio_output_dac_volume_unavailable)
 
     val wiredAudioLabel = stringResource(R.string.audio_output_wired_audio)
+    val wiredHeadsetLabel = stringResource(R.string.audio_output_wired_headset)
     val outputLabel = outputState.usbDacName
-        ?: if (outputState.isBluetoothConnected) {
+        ?: if (outputState.isUsbHeadsetConnected) {
+            outputState.usbHeadsetName
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?: wiredHeadsetLabel
+        } else if (outputState.isBluetoothConnected) {
             outputState.bluetoothDeviceName
                 ?.trim()
                 ?.takeIf(String::isNotEmpty)
@@ -149,7 +158,8 @@ internal fun AudioOutputIndicator(
             localDeviceLabel
         }
     val outputIcon = when {
-        outputState.usbDacName != null || outputState.isWiredConnected -> buttonUsbIcon
+        outputState.usbDacName != null || outputState.isUsbHeadsetConnected ||
+            outputState.isWiredConnected -> buttonUsbIcon
         outputState.isBluetoothConnected -> buttonBluetoothIcon
         else -> buttonLocalDeviceIcon
     }
@@ -250,7 +260,8 @@ internal fun AudioOutputIndicator(
         val sheetUsbIcon = painterResource(R.drawable.ic_usb)
         val sheetLocalDeviceIcon = painterResource(R.drawable.ic_smartphone)
         val sheetDeviceIcon = when {
-            outputState.usbDacName != null || outputState.isWiredConnected -> sheetUsbIcon
+            outputState.usbDacName != null || outputState.isUsbHeadsetConnected ||
+                outputState.isWiredConnected -> sheetUsbIcon
             outputState.isBluetoothConnected -> sheetBluetoothIcon
             else -> sheetLocalDeviceIcon
         }
@@ -266,6 +277,7 @@ internal fun AudioOutputIndicator(
                     outputState.usbDacUacLabel
                 }
             }
+            outputState.isUsbHeadsetConnected -> wiredHeadsetLabel
             outputState.isBluetoothConnected -> bluetoothAudioLabel
             outputState.isWiredConnected -> wiredAudioLabel
             else -> null
@@ -277,6 +289,13 @@ internal fun AudioOutputIndicator(
             sheetState = sheetState,
             scrimColor = Color.Transparent,
         ) {
+            val sheetBackScope = rememberCoroutineScope()
+            PredictiveBackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) { progress ->
+                progress.collect { }
+                sheetBackScope.launch { sheetState.hide() }.invokeOnCompletion {
+                    if (!sheetState.isVisible) isBottomSheetVisible = false
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -547,9 +566,15 @@ private fun readAudioOutputSnapshot(
     }
 
     val usbOutputs = outputDevices.filter { device ->
-        device.isSink &&
-            (device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
-                device.type == AudioDeviceInfo.TYPE_USB_HEADSET)
+        device.isSink && device.type == AudioDeviceInfo.TYPE_USB_DEVICE
+    }
+    val usbHeadsetOutputs = outputDevices.filter { device ->
+        device.isSink && device.type == AudioDeviceInfo.TYPE_USB_HEADSET
+    }
+    val usbHeadsetName = usbHeadsetOutputs.firstNotNullOfOrNull { device ->
+        runCatching {
+            device.productName?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        }.getOrNull()
     }
     val usbDacName = usbOutputs.firstNotNullOfOrNull { device ->
         runCatching {
@@ -582,6 +607,8 @@ private fun readAudioOutputSnapshot(
     return AudioOutputSnapshot(
         usbDacName = usbDacName,
         usbDacUacLabel = usbDacUacLabel,
+        isUsbHeadsetConnected = usbHeadsetOutputs.isNotEmpty(),
+        usbHeadsetName = usbHeadsetName,
         isBluetoothConnected = bluetoothOutputs.isNotEmpty(),
         bluetoothDeviceName = bluetoothName,
         isWiredConnected = wiredOutputs.isNotEmpty(),
