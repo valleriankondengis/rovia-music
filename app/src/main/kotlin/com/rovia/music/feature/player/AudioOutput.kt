@@ -101,6 +101,7 @@ internal fun AudioOutputIndicator(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     externalMode: Boolean = false,
+    onArtwork: Boolean = true,
 ) {
     val context = LocalContext.current.applicationContext
     val audioManager = remember(context) {
@@ -164,7 +165,11 @@ internal fun AudioOutputIndicator(
         else -> buttonLocalDeviceIcon
     }
     val buttonDescription = "$buttonContentDescription, $outputLabel"
-    val buttonContentColor = Color.White
+    val buttonContentColor = if (onArtwork) {
+        Color.White
+    } else {
+        colorScheme.onSurface
+    }
     val sheetIconColor = colorScheme.onSurfaceVariant
     val volumeAccentColor = colorScheme.primary
 

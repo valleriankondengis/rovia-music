@@ -66,6 +66,9 @@ internal class StandardPlaybackCoordinator(
     private var pendingStartSourceUs: Long = 0L
 
     @Volatile
+    private var seekTargetGeneration: Long = -1L
+
+    @Volatile
     private var preparedGeneration: Long = -1L
 
     @Volatile
@@ -307,19 +310,37 @@ internal class StandardPlaybackCoordinator(
                 if (startedGeneration != streamGeneration) return@withLock
                 startedGeneration = -1L
                 anchorPlaying = false
-                pauseAndReanchorLocked()
+                pauseAndReanchorLocked(streamGeneration)
             }
         }
     }
 
     fun onRendererPositionReset(positionUs: Long) {
         val sourcePositionUs = (positionUs - streamOffsetUs).coerceAtLeast(0L)
+        val streamGeneration = generation.get()
+        if (preparedGeneration == streamGeneration && track != null) {
+            return
+        }
         pendingStartSourceUs = sourcePositionUs
         anchorTo(sourcePositionUs, playing = anchorPlaying)
-        val streamGeneration = generation.get()
         scope.launch {
             commandMutex.withLock {
                 if (preparedGeneration != streamGeneration) return@withLock
+                reseekLocked(sourcePositionUs, streamGeneration)
+            }
+        }
+    }
+
+    fun onConfirmedSeek(mediaId: String, sourcePositionUs: Long) {
+        val streamGeneration = generation.get()
+        if (preparedMediaId != mediaId) return
+        pendingStartSourceUs = sourcePositionUs
+        anchorTo(sourcePositionUs, playing = anchorPlaying)
+        seekTargetGeneration = streamGeneration
+        scope.launch {
+            commandMutex.withLock {
+                if (preparedGeneration != streamGeneration) return@withLock
+                if (preparedMediaId != mediaId) return@withLock
                 reseekLocked(sourcePositionUs, streamGeneration)
             }
         }
@@ -347,7 +368,29 @@ internal class StandardPlaybackCoordinator(
     }
 
     fun clockPositionUs(): Long {
-        val sourcePositionUs = if (anchorPlaying) {
+        val activeTrack = track
+        val clockGeneration = generation.get()
+        val sourcePositionUs = if (seekTargetGeneration == clockGeneration) {
+            anchorSourcePositionUs
+        } else if (preparedGeneration != clockGeneration) {
+            pendingStartSourceUs
+        } else if (
+            activeTrack != null &&
+            startedGeneration == clockGeneration
+        ) {
+            val raw = runCatching {
+                activeTrack.playbackHeadPosition.toLong() and 0xFFFF_FFFFL
+            }.getOrNull()
+            if (raw == null) {
+                anchorSourcePositionUs
+            } else {
+                val wrapCorrection = if (raw < lastHeadRaw) (1L shl 32) else 0L
+                val head = headWrapBase + wrapCorrection + raw
+                val positionUs = framesToUs(positionBaseFrames + head)
+                val duration = durationUs
+                if (duration > 0L) minOf(positionUs, duration) else positionUs
+            }
+        } else if (anchorPlaying) {
             val elapsedUs = (SystemClock.elapsedRealtime() - anchorElapsedRealtimeMs)
                 .coerceAtLeast(0L) * 1_000L
             val estimated = anchorSourcePositionUs + elapsedUs
@@ -392,7 +435,13 @@ internal class StandardPlaybackCoordinator(
         }
     }
 
-    private fun pollOnce() {
+    private suspend fun pollOnce() {
+        commandMutex.withLock {
+            pollSegmentLocked()
+        }
+    }
+
+    private fun pollSegmentLocked() {
         val activeTrack = track ?: return
         if (preparedGeneration != generation.get()) return
         val head = headFrames()
@@ -577,6 +626,7 @@ internal class StandardPlaybackCoordinator(
             positionBaseFrames = usToFrames(startSourceUs)
             framesWritten = 0L
             sourceEos = false
+            outputEnded = false
             resetHeadCounters()
             if (startSourceUs > 0L) {
                 runCatching { backend.seek(startSourceUs.toULong()) }.onFailure {}
@@ -625,7 +675,7 @@ internal class StandardPlaybackCoordinator(
         pumpHandler.post(pumpRunnable)
     }
 
-    private fun pauseAndReanchorLocked() {
+    private fun pauseAndReanchorLocked(streamGeneration: Long) {
         pumpPlaying = false
         pumpHandler.removeCallbacks(pumpRunnable)
         val activeTrack = track ?: return
@@ -640,7 +690,9 @@ internal class StandardPlaybackCoordinator(
         pendingOffset = 0
         sourceEos = false
         resetHeadCounters()
-        anchorTo(framesToUs(positionFrames), playing = false)
+        if (generation.get() == streamGeneration) {
+            anchorTo(framesToUs(positionFrames), playing = false)
+        }
     }
 
     private fun reseekLocked(sourcePositionUs: Long, streamGeneration: Long) {
@@ -666,6 +718,9 @@ internal class StandardPlaybackCoordinator(
         if (wasPlaying && rendererStarted) {
             startedGeneration = -1L
             startLocked(streamGeneration)
+        }
+        if (seekTargetGeneration == streamGeneration) {
+            seekTargetGeneration = -1L
         }
     }
 

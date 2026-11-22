@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -50,21 +51,26 @@ fun ArtworkBackdrop(
     foregroundArtworkHeight: Dp,
     modifier: Modifier = Modifier,
     onSeedColor: ((Color?) -> Unit)? = null,
+    onArtworkResolved: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val materialSurface = MaterialTheme.colorScheme.surface
     val isDarkTheme = materialSurface.luminance() < 0.5f
+
+    val latestOnArtworkResolved = rememberUpdatedState(onArtworkResolved)
 
     val artworkBitmap by produceState<Bitmap?>(
         initialValue = null,
         key1 = artworkUri,
         key2 = context,
     ) {
-        value = ArtworkBitmapLoader.load(
+        val loaded = ArtworkBitmapLoader.load(
             context = context,
             artworkUri = artworkUri,
             maxDimension = 1024,
         )
+        value = loaded
+        latestOnArtworkResolved.value?.invoke(loaded != null && !loaded.isRecycled)
     }
 
     val backdropArtworkBitmap by produceState<Bitmap?>(

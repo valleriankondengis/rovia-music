@@ -88,6 +88,7 @@ fun HomeScreen(
     audioRepository: MediaStoreAudioRepository,
     playbackController: PlaybackController,
     onOpenRecentlyAdded: () -> Unit,
+    onOpenStreaming: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenWrapped: (WrappedPeriod) -> Unit,
@@ -280,6 +281,21 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    FilledIconButton(
+                        onClick = onOpenStreaming,
+                        shapes = IconButtonDefaults.shapes(),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_stream),
+                            contentDescription = stringResource(R.string.streaming_open)
+                        )
+                    }
+
                     FilledIconButton(
                         onClick = onOpenHistory,
                         shapes = IconButtonDefaults.shapes(),

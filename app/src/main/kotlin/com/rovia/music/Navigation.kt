@@ -87,6 +87,8 @@ import com.rovia.music.feature.genre.GenrePage
 import com.rovia.music.feature.single.SinglePage
 import com.rovia.music.feature.home.HomeRecentlyAddedScreen
 import com.rovia.music.feature.home.HomeScreen
+import com.rovia.music.feature.streaming.PlayerStreamingScreen
+import com.rovia.music.feature.streaming.StreamingScreen
 import com.rovia.music.feature.home.WrappedHomeCardData
 import com.rovia.music.feature.history.HistoryActivityType
 import com.rovia.music.feature.history.HistoryActivityUiModel
@@ -134,6 +136,9 @@ private data object HomeRecentlyAddedDestination : NavKey
 
 @Serializable
 private data object HistoryDestination : NavKey
+
+@Serializable
+private data object StreamingDestination : NavKey
 
 @Serializable
 private data class WrappedDestination(val period: WrappedPeriod) : NavKey
@@ -292,6 +297,18 @@ fun Navigation(appContainer: AppContainer) {
         ),
     )
 
+    var showStreamingPlayerSheet by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val streamingPlayerSheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(
+            SheetValue.Hidden,
+            SheetValue.Expanded,
+        ),
+    )
+
     val sheetProgress by animateFloatAsState(
         targetValue = if (showPlayerSheet) 1f else 0f,
         animationSpec = tween(
@@ -388,6 +405,12 @@ fun Navigation(appContainer: AppContainer) {
                         navigationState.navigateWithin(
                             owner = TopLevelSection.HOME,
                             destination = HomeRecentlyAddedDestination,
+                        )
+                    },
+                    onOpenStreaming = {
+                        navigationState.navigateWithin(
+                            owner = TopLevelSection.HOME,
+                            destination = StreamingDestination,
                         )
                     },
                     onOpenHistory = {
@@ -579,6 +602,28 @@ fun Navigation(appContainer: AppContainer) {
                     data = wrappedData,
                     onBack = {
                         navigationState.goBack(TopLevelSection.HOME)
+                    },
+                )
+            }
+        }
+
+        entry<StreamingDestination>(clazzContentKey = { key -> navigationContentKey(key) }) {
+            val mainQueueState by appContainer.playbackController.queueState
+                .collectAsStateWithLifecycle()
+            val streamingQueueState by appContainer.streamingController.queueState
+                .collectAsStateWithLifecycle()
+            val anyDockVisible = mainQueueState.currentIndex >= 0 ||
+                streamingQueueState.items.isNotEmpty()
+
+            NavigationDestinationSurface {
+                StreamingScreen(
+                    streamingController = appContainer.streamingController,
+                    miniPlayerVisible = anyDockVisible,
+                    onBack = {
+                        navigationState.goBack(TopLevelSection.HOME)
+                    },
+                    onOpenPlayer = {
+                        showStreamingPlayerSheet = true
                     },
                 )
             }
@@ -1497,28 +1542,54 @@ fun Navigation(appContainer: AppContainer) {
 
         }
 
+        val streamingDockQueueState by appContainer.streamingController.queueState
+            .collectAsStateWithLifecycle()
+        val streamingDockController by appContainer.streamingController
+            .mediaController
+            .collectAsStateWithLifecycle()
+        val mainDockController by appContainer.playbackController.mediaController
+            .collectAsStateWithLifecycle()
+        val streamingIsPlaying = rememberPlayerIsPlaying(streamingDockController)
+        val mainIsPlaying = rememberPlayerIsPlaying(mainDockController)
+        val showStreamingDock = streamingDockQueueState.items.isNotEmpty() &&
+            (streamingIsPlaying || !mainIsPlaying)
+
         if (sheetProgress < 1f && !navigationState.isSettingsFlowActive &&
             !navigationState.isWrappedActive
         ) {
-            MiniPlayer(
-                playbackController = appContainer.playbackController,
-                onOpenPlayer = {
-                    showPlayerSheet = true
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(
-                        bottom = FloatingToolbarOverlayHeight +
-                            navigationBarBottomInset,
-                    )
-                    .graphicsLayer {
-                        alpha = 1f - sheetProgress
-                        translationY = -sheetProgress * miniPlayerLiftPx
-                        val scale = 1f + sheetProgress * 0.06f
-                        scaleX = scale
-                        scaleY = scale
+            val dockModifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = FloatingToolbarOverlayHeight +
+                        navigationBarBottomInset,
+                )
+                .graphicsLayer {
+                    alpha = 1f - sheetProgress
+                    translationY = -sheetProgress * miniPlayerLiftPx
+                    val scale = 1f + sheetProgress * 0.06f
+                    scaleX = scale
+                    scaleY = scale
+                }
+
+            if (showStreamingDock) {
+                MiniPlayer(
+                    playbackController = appContainer.streamingController,
+                    onOpenPlayer = {
+                        showStreamingPlayerSheet = true
                     },
-            )
+                    modifier = dockModifier,
+                    showSkipNext = false,
+                    artworkBackdrop = false,
+                )
+            } else {
+                MiniPlayer(
+                    playbackController = appContainer.playbackController,
+                    onOpenPlayer = {
+                        showPlayerSheet = true
+                    },
+                    modifier = dockModifier,
+                )
+            }
         }
 
         val userLibraryRepository = appContainer.userLibraryRepository
@@ -1577,6 +1648,34 @@ fun Navigation(appContainer: AppContainer) {
                         )
                         navigationState.selectTopLevel(TopLevelSection.LIBRARY)
                         showPlayerSheet = false
+                    },
+                )
+            }
+        }
+
+        if (showStreamingPlayerSheet) {
+            ModalBottomSheet(
+                onDismissRequest = {
+                    showStreamingPlayerSheet = false
+                },
+                modifier = Modifier.fillMaxSize(),
+                sheetState = streamingPlayerSheetState,
+                sheetMaxWidth = Dp.Unspecified,
+                dragHandle = null,
+                contentWindowInsets = {
+                    WindowInsets(0, 0, 0, 0)
+                },
+            ) {
+                PlayerStreamingScreen(
+                    streamingController = appContainer.streamingController,
+                    onDismiss = {
+                        playerScope.launch {
+                            streamingPlayerSheetState.hide()
+                        }.invokeOnCompletion {
+                            if (!streamingPlayerSheetState.isVisible) {
+                                showStreamingPlayerSheet = false
+                            }
+                        }
                     },
                 )
             }
@@ -1738,6 +1837,29 @@ private fun rememberRoviaNavigationState(): RoviaNavigationState {
             topLevelSectionState = topLevelSectionState,
         )
     }
+}
+
+@Composable
+private fun rememberPlayerIsPlaying(player: Player?): Boolean {
+    var isPlaying by remember { mutableStateOf(false) }
+
+    DisposableEffect(player) {
+        if (player == null) {
+            isPlaying = false
+            onDispose { }
+        } else {
+            val listener = object : Player.Listener {
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                }
+            }
+            player.addListener(listener)
+            isPlaying = player.isPlaying
+            onDispose { player.removeListener(listener) }
+        }
+    }
+
+    return isPlaying
 }
 
 private class RoviaNavigationState(

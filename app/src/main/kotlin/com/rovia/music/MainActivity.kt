@@ -61,10 +61,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         appContainer.playbackController.connect()
+        appContainer.streamingController.connect()
     }
 
     override fun onStop() {
         appContainer.playbackController.disconnect()
+        appContainer.streamingController.disconnect()
         super.onStop()
     }
 

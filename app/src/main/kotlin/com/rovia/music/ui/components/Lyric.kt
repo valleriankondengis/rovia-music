@@ -972,6 +972,7 @@ fun LyricLinePreview(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
     animationStyle: LyricAnimationStyle = LyricAnimationStyle.Luminous,
+    onArtwork: Boolean = true,
 ) {
     val previewClock = remember(line) {
         mutableLongStateOf(positionMs.coerceAtLeast(0L))
@@ -1026,10 +1027,15 @@ fun LyricLinePreview(
         }
     }
 
-    val previewColorScheme = MaterialTheme.colorScheme.copy(
-        onSurface = Color.White,
-        onSurfaceVariant = Color.White,
-    )
+    val ambientColorScheme = MaterialTheme.colorScheme
+    val previewColorScheme = if (onArtwork) {
+        ambientColorScheme.copy(
+            onSurface = Color.White,
+            onSurfaceVariant = Color.White,
+        )
+    } else {
+        ambientColorScheme
+    }
 
     MaterialTheme(
         colorScheme = previewColorScheme,

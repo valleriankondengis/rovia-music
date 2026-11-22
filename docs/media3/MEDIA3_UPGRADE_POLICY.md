@@ -31,3 +31,36 @@ the release and migration notes for every intervening release, and check
 the contracts above against the new sources before building on them.
 `UnstableApi` in this version is not a `@RequiresOptIn` annotation, so
 opt-in markers have no effect on these APIs.
+
+## Stuck player detection
+
+Media3 1.12 ships a stuck player detector: while a player reports
+itself as playing, a reported position that stays exactly unchanged
+for the detection window (10 seconds for a playing player) stops
+playback with `ERROR_CODE_TIMEOUT`.
+
+Rovia's players are shells around the custom decoder. Their reported
+position is the playback coordinator's media clock, not samples the
+player itself renders, and around a seek or a track change the
+reported position legitimately holds still — at the seek target while
+the coordinator repositions the decoder, or at a segment start while
+the next segment installs — while the audio itself progresses
+normally. A frozen reported position is therefore not a stall signal
+for this architecture, and the detector's only effect is to kill
+healthy playback mid-track, which the service then surfaces as a
+skipped track.
+
+Both custom-decoder players (`PlaybackService` and
+`ExternalPlaybackService`) disable the detector by setting every
+stuck detection timeout to `Int.MAX_VALUE`, and set the wake mode to
+`C.WAKE_MODE_LOCAL` explicitly: with a stuck timeout disabled and no
+explicit wake mode, Media3 defaults the wake mode to
+`C.WAKE_MODE_NONE` instead of the local wake lock the players rely on.
+
+On a Media3 version change, restore the defaults (remove the four
+timeout setters and the explicit wake mode) and re-run this acceptance
+check before deciding whether the disabling is still needed: seek to
+near the end of a track, skip to the next track, and let it play —
+the next track must keep playing well past 10 seconds with its
+seekbar advancing from the start. Keep the disabling in place if the
+check fails.

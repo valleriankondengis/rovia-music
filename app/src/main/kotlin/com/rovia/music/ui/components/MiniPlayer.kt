@@ -41,6 +41,8 @@ fun MiniPlayer(
     playbackController: PlaybackController,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
+    showSkipNext: Boolean = true,
+    artworkBackdrop: Boolean = true,
 ) {
     val controller by playbackController.mediaController
         .collectAsStateWithLifecycle()
@@ -154,6 +156,30 @@ fun MiniPlayer(
             ?.takeIf(String::isNotBlank)
             ?: stringResource(R.string.player_unknown_artist)
 
+        val dockContainerColor = if (artworkBackdrop) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+
+        val dockContentColor = if (artworkBackdrop) {
+            Color.White
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+
+        val dockTitleColor = if (artworkBackdrop) {
+            Color.White
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+
+        val dockArtistColor = if (artworkBackdrop) {
+            Color.White.copy(alpha = 0.7f)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
         Surface(
             onClick = {
                 latestOnOpenPlayer.value()
@@ -190,114 +216,159 @@ fun MiniPlayer(
                     )
                 },
             shape = MaterialTheme.shapes.extraLarge,
-            color = Color.Transparent,
-            contentColor = Color.White,
+            color = dockContainerColor,
+            contentColor = dockContentColor,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
         ) {
-            BackdropContentTheme {
-                Box {
-                    ArtworkBackdrop(
-                        artworkUri = currentArtworkUri,
-                        foregroundArtworkHeight = 0.dp,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clip(MaterialTheme.shapes.extraLarge),
-                    )
-
-                    Row(
-                        modifier = Modifier.padding(
-                            horizontal = 12.dp,
-                            vertical = 8.dp,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AlbumArtwork(
-                            artworkUri = currentArtworkUri,
-                            fallbackText = displayTitle,
-                            contentDescription = displayTitle,
-                            modifier = Modifier.size(48.dp),
-                            size = 48.dp,
-                            shape = MaterialTheme.shapes.medium,
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = displayTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-
-                            Text(
-                                text = displayArtist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-
-                        IconButton(
-                            enabled = hasMedia,
-                            onClick = {
-                                controller?.let { activeController ->
-                                    if (
-                                        activeController.playWhenReady &&
-                                        activeController.playbackState !=
-                                        Player.STATE_ENDED
-                                    ) {
-                                        activeController.pause()
-                                    } else {
-                                        if (
-                                            activeController.playbackState ==
-                                            Player.STATE_ENDED
-                                        ) {
-                                            activeController.seekToDefaultPosition()
-                                        }
-
-                                        activeController.play()
-                                    }
+            val dockContent: @Composable () -> Unit = {
+                MiniPlayerDockContent(
+                    artworkUri = currentArtworkUri,
+                    artworkBackdrop = artworkBackdrop,
+                    title = displayTitle,
+                    artist = displayArtist,
+                    titleColor = dockTitleColor,
+                    artistColor = dockArtistColor,
+                    showPauseIcon = showPauseIcon,
+                    hasMedia = hasMedia,
+                    hasNext = hasNext,
+                    showSkipNext = showSkipNext,
+                    onPlayPauseClick = {
+                        controller?.let { activeController ->
+                            if (
+                                activeController.playWhenReady &&
+                                activeController.playbackState !=
+                                Player.STATE_ENDED
+                            ) {
+                                activeController.pause()
+                            } else {
+                                if (
+                                    activeController.playbackState ==
+                                    Player.STATE_ENDED
+                                ) {
+                                    activeController.seekToDefaultPosition()
                                 }
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(
-                                    if (showPauseIcon) {
-                                        R.drawable.ic_pause
-                                    } else {
-                                        R.drawable.ic_play
-                                    },
-                                ),
-                                contentDescription = stringResource(
-                                    if (showPauseIcon) {
-                                        R.string.player_pause
-                                    } else {
-                                        R.string.player_play
-                                    },
-                                ),
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
 
-                        IconButton(
-                            enabled = hasMedia && hasNext,
-                            onClick = {
-                                controller?.seekToNextMediaItem()
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_skip_next),
-                                contentDescription = stringResource(R.string.player_next),
-                                modifier = Modifier.size(24.dp),
-                            )
+                                activeController.play()
+                            }
                         }
-                    }
+                    },
+                    onNextClick = {
+                        controller?.seekToNextMediaItem()
+                    },
+                )
+            }
+
+            if (artworkBackdrop) {
+                BackdropContentTheme {
+                    dockContent()
+                }
+            } else {
+                dockContent()
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayerDockContent(
+    artworkUri: String?,
+    artworkBackdrop: Boolean,
+    title: String,
+    artist: String,
+    titleColor: Color,
+    artistColor: Color,
+    showPauseIcon: Boolean,
+    hasMedia: Boolean,
+    hasNext: Boolean,
+    showSkipNext: Boolean,
+    onPlayPauseClick: () -> Unit,
+    onNextClick: () -> Unit,
+) {
+    Box {
+        if (artworkBackdrop) {
+            ArtworkBackdrop(
+                artworkUri = artworkUri,
+                foregroundArtworkHeight = 0.dp,
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(MaterialTheme.shapes.extraLarge),
+            )
+        }
+
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 8.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumArtwork(
+                artworkUri = artworkUri,
+                fallbackText = title,
+                contentDescription = title,
+                modifier = Modifier.size(48.dp),
+                size = 48.dp,
+                shape = MaterialTheme.shapes.medium,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = titleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Text(
+                    text = artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = artistColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            IconButton(
+                enabled = hasMedia,
+                onClick = onPlayPauseClick,
+            ) {
+                Icon(
+                    painter = painterResource(
+                        if (showPauseIcon) {
+                            R.drawable.ic_pause
+                        } else {
+                            R.drawable.ic_play
+                        },
+                    ),
+                    contentDescription = stringResource(
+                        if (showPauseIcon) {
+                            R.string.player_pause
+                        } else {
+                            R.string.player_play
+                        },
+                    ),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+
+            if (showSkipNext) {
+                IconButton(
+                    enabled = hasMedia && hasNext,
+                    onClick = onNextClick,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_skip_next),
+                        contentDescription = stringResource(
+                            R.string.player_next,
+                        ),
+                        modifier = Modifier.size(24.dp),
+                    )
                 }
             }
         }
